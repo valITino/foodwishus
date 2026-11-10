@@ -67,5 +67,4 @@ export const de: Messages = {
   status: { wishlist: 'Auf der Wunschliste', planned: 'Geplant', served: 'Serviert', eaten: 'Gegessen', skipped: 'Übersprungen' },
   addSheet: { title: 'Was kommt dazu?', dish: 'Ein neues Gericht', dishHint: 'Eine Rezeptkarte', menu: 'Ein neues Menü', menuHint: 'Mehrere Gerichte in Reihenfolge' },
   demo: { banner: 'Demo-Küche. Hier ist nichts echt.', leave: 'Demo verlassen', enter: 'In eine Demo-Küche schauen' },
-  cockpitSoon: { title: 'Das Cockpit öffnet bald', body: 'Erst wird gegessen, dann gezählt.' },
 }

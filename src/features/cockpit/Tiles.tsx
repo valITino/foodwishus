@@ -75,7 +75,7 @@ export function Tiles({ kitchen, sel, w }: SectionProps) {
         />
         <DishTile id="most" label={c.most} dishId={k.mostEaten?.dishId ?? null} note={k.mostEaten ? w.c.shared.times(k.mostEaten.timesEaten) : ''} none={c.mostNone} kitchen={kitchen} w={w} />
 
-        <Tile id="skip" note={k.skipRate ? c.skipNote(k.skipRate.skipped, k.skipRate.skipped + k.skipRate.eaten) : c.skipNone}>
+        <Tile id="skip" note={k.skipRate ? c.skipNote(k.skipRate.skipped, k.skipRate.skipped + k.skipRate.eaten) : k.mealsEaten > 0 ? c.skipUntold : c.skipNone}>
           <Stat value={k.skipRate ? w.f.percent(k.skipRate.rate) : none} label={c.skip} />
         </Tile>
         <Tile id="days-to-eat" note={k.daysToEat ? c.daysToEatNote(k.daysToEat.n) : c.daysToEatNone}>

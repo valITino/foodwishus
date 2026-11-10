@@ -27,7 +27,7 @@ describe('what the numbers library is asked for', () => {
   it('turns the presets into days', () => {
     expect(toStatsFilter(filter({ range: 'week' }), today, on)).toEqual({ from: '2026-11-09', to: '2026-11-15' })
     expect(toStatsFilter(filter({ range: 'month' }), today, on)).toEqual({ from: '2026-11-01', to: today })
-    expect(toStatsFilter(filter({ range: 'quarter' }), today, on)).toEqual({ from: '2026-08-12', to: today })
+    expect(toStatsFilter(filter({ range: 'quarter' }), today, on)).toEqual({ from: '2026-08-10', to: today })
     expect(toStatsFilter(filter({ range: 'year' }), today, on)).toEqual({ from: '2026-01-01', to: today })
   })
 

@@ -49,7 +49,8 @@ const storedDish = (page: Page, name: string) =>
   }, name)
 
 const cards = (page: Page) => page.getByTestId('dish-card')
-const toast = (page: Page, text: string) => page.getByRole('status').getByText(text, { exact: true })
+// Two toasts with the same words can overlap for a moment: the newest one is the one meant.
+const toast = (page: Page, text: string) => page.getByRole('status').getByText(text, { exact: true }).last()
 const ingredientLines = (page: Page) => page.getByTestId('ingredients').getByRole('listitem')
 
 const ROSTI: DishSeed = {

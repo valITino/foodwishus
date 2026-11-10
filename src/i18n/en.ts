@@ -66,7 +66,6 @@ export const en = {
   status: { wishlist: 'On the wishlist', planned: 'Planned', served: 'Served', eaten: 'Eaten', skipped: 'Skipped' },
   addSheet: { title: 'What are we adding?', dish: 'A new dish', dishHint: 'One recipe card', menu: 'A new menu', menuHint: 'Several dishes in order' },
   demo: { banner: 'Demo kitchen. Nothing here is real.', leave: 'Leave the demo', enter: 'Peek into a demo kitchen' },
-  cockpitSoon: { title: 'The Cockpit opens soon', body: 'First we eat, then we count.' },
 }
 
 export type Messages = typeof en
