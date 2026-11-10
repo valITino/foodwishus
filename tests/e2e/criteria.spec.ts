@@ -67,11 +67,17 @@ test('add, rename, pick an icon, reorder, switch off and on: the review sheet fo
   })
 
   await test.step('reorder with the keyboard: space picks up, arrows move, space drops', async () => {
-    const grip = page.getByRole('button', { name: 'Move Crunch' })
-    await grip.focus()
+    // Every key is answered aloud. The next key waits for that answer: an arrow pressed
+    // before the row has arrived starts from the old place and the step is lost.
+    await page.getByRole('button', { name: 'Move Crunch' }).focus()
     await page.keyboard.press('Space')
-    for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowUp')
+    await expect(page.getByText('Picked up Crunch.')).toBeAttached()
+    for (const place of [6, 5, 4, 3, 2]) {
+      await page.keyboard.press('ArrowUp')
+      await expect(page.getByText(`Crunch is now number ${place} of 7.`)).toBeAttached()
+    }
     await page.keyboard.press('Space')
+    await expect(page.getByText('Crunch dropped at number 2.')).toBeAttached()
     await expect.poll(() => labels(page)).toEqual(['Taste', 'Crunch', 'Bite', 'Smell', 'Looks', 'Portion', 'Temperature'])
   })
 
@@ -82,8 +88,12 @@ test('add, rename, pick an icon, reorder, switch off and on: the review sheet fo
     await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
     await page.mouse.down()
     await page.mouse.move(from.x + from.width / 2, from.y - 40, { steps: 6 })
+    await expect(page.getByText('Picked up Temperature.').or(page.getByText(/^Temperature is now number/))).toBeAttached()
     await page.mouse.move(to.x + to.width / 2, to.y + 4, { steps: 12 })
+    // Let go only once the row has arrived, or it drops where it was a moment ago.
+    await expect(page.getByText('Temperature is now number 1 of 7.')).toBeAttached()
     await page.mouse.up()
+    await expect(page.getByText('Temperature dropped at number 1.')).toBeAttached()
     await expect.poll(() => labels(page)).toEqual(['Temperature', 'Taste', 'Crunch', 'Bite', 'Smell', 'Looks', 'Portion'])
   })
 
@@ -166,6 +176,18 @@ test('the criteria page in German', async ({ page }) => {
   await page.getByRole('button', { name: /^Kriterien für Bewertungen/ }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Kriterien für Bewertungen' })).toBeVisible()
   await expect(rows(page).first()).toContainText('Geschmack')
+
+  // Moving a row is read aloud in German too, and escape puts it back.
+  const before = await labels(page)
+  await page.getByRole('button', { name: 'Geschmack verschieben' }).focus()
+  await page.keyboard.press('Space')
+  await expect(page.getByText('Geschmack aufgenommen.')).toBeAttached()
+  await page.keyboard.press('ArrowDown')
+  await expect(page.getByText('Geschmack ist jetzt auf Platz 2 von 6.')).toBeAttached()
+  await page.keyboard.press('Escape')
+  await expect(page.getByText('Verschieben abgebrochen. Geschmack ist wieder am alten Platz.')).toBeAttached()
+  expect(await labels(page)).toEqual(before)
+
   await page.getByRole('switch', { name: 'Duft abfragen' }).click()
   await expect(rows(page).nth(2)).toContainText('Wird nicht abgefragt')
   await page.getByRole('button', { name: 'Kriterium hinzufügen' }).click()

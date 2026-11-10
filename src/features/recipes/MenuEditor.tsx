@@ -157,6 +157,8 @@ function MenuForm({ menu, dishes }: { menu: Menu | null; dishes: Dish[] }) {
   const m = c.menu
   useScrollTop()
   const byId = useMemo(() => new Map(dishes.map((dish) => [dish.id, dish])), [dishes])
+  const dishOf = (entry: Entry) => (entry.dishId ? byId.get(entry.dishId) : undefined)
+  const courseName = (entry: Entry) => dishOf(entry)?.name ?? entry.fresh?.name ?? c.parts.gone
   const [initial] = useState<MenuDraft>(() => draftFromMenu(menu, byId))
   const [draft, setDraft] = useState<MenuDraft>(initial)
   const [picking, setPicking] = useState(false)
@@ -246,10 +248,10 @@ function MenuForm({ menu, dishes }: { menu: Menu | null; dishes: Dish[] }) {
             {draft.entries.length === 0 ? (
               <p className="px-4 pt-4 text-sm text-ink-soft">{m.noCourses}</p>
             ) : (
-              <SortableList items={draft.entries} onMove={(from, to) => setEntries(moveItem(draft.entries, from, to))} className="py-1" rowClassName="flex items-center gap-1 border-b border-line pl-1 pr-1 last:border-b-0">
+              <SortableList items={draft.entries} name={courseName} onMove={(from, to) => setEntries(moveItem(draft.entries, from, to))} className="py-1" rowClassName="flex items-center gap-1 border-b border-line pl-1 pr-1 last:border-b-0">
                 {(entry, index, handle) => {
-                  const dish = entry.dishId ? byId.get(entry.dishId) : undefined
-                  const name = dish?.name ?? entry.fresh?.name ?? c.parts.gone
+                  const dish = dishOf(entry)
+                  const name = courseName(entry)
                   return (
                     <>
                       <DragHandle {...handle} label={m.moveCourse(name)} />

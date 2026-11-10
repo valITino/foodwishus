@@ -152,6 +152,7 @@ export function CriteriaPage() {
             <Card pad={false} className="overflow-hidden">
               <SortableList
                 items={criteria.map((criterion) => ({ key: criterion.id, criterion }))}
+                name={({ criterion }) => criterion.label}
                 onMove={(from, to) => act(moveCriterion(criteria[from].id, to))}
                 rowClassName="flex items-center gap-1 border-b border-line pl-1 pr-3 last:border-b-0"
               >

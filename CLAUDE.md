@@ -83,7 +83,9 @@ config and the screenshot tool read the same variable).
 - **Dates:** the kitchen lives in Europe/Zurich. Use `src/lib/dates.ts`.
 - **Wishlist order:** `byPriority` (plain string comparison of fractional indexes).
 - **Tests:** unit tests for logic, a Playwright spec for each user flow. Wait for visible
-  results, never for timers.
+  results, never for timers. That includes every single key: when reordering with the
+  keyboard, wait for the spoken answer ("… is now number 2 of 3.") before the next arrow.
+  CI presses faster than this workspace, and a key sent before the screen has caught up is lost.
 - **Verify by looking:** take screenshots in light and candlelight at 412 x 915 and fix
   what looks off before calling a screen done.
 - Commits end with the attribution lines used in `git log`.
