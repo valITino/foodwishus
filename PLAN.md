@@ -23,7 +23,8 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
 
 | Area | Verified by |
 | --- | --- |
-| Database rules (strangers locked out, two seats, restore, recovery, sealed reviews) | `supabase/tests/security_test.sql`, run against the real project: 27 checks pass |
+| Database rules (strangers locked out, two seats, PIN log-in and its lock, admin-only powers, pause, restore, master key, sealed reviews) | `supabase/tests/security_test.sql`, run against the real project on 10 Nov 2026: 55 checks pass |
+| The app calls only database functions that exist, with the right parameter names | `tests/unit/supabaseContract.test.ts` reads the signatures out of `supabase/migrations` |
 | Sync logic (offline queue, per-field merge, photos, lock-out, refused changes) | 19 unit tests against a pretend cloud that follows the same rules |
 | Two phones in real browsers, one offline, never online together | `tests/e2e/sync.spec.ts` (Android viewport) |
 | Design in light and candlelight | Screenshots at 412 x 915 from the production build |
