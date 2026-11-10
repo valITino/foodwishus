@@ -28,7 +28,8 @@ export const de: Messages = {
     sending: (n: number) => (n === 1 ? '1 Änderung wartet' : `${n} Änderungen warten`),
     offline: 'Offline. Auf diesem Handy gespeichert.',
     error: 'Sync hakt gerade',
-    lockedOut: 'Dieses Handy muss neu gekoppelt werden',
+    lockedOut: 'Dieses Gerät ist abgemeldet',
+    paused: 'Dein Platz ist pausiert',
   },
   empty: {
     wishlistTitle: 'Die Wunschliste ist leer',

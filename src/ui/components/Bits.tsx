@@ -169,9 +169,9 @@ export function SyncPill({ status }: { status: Pick<SyncStatus, 'state' | 'pendi
     icon = 'offline'
     text = t.sync.offline
     dot = 'bg-butter text-on-rose'
-  } else if (status.state === 'locked-out') {
+  } else if (status.state === 'locked-out' || status.state === 'paused') {
     icon = 'offline'
-    text = t.sync.lockedOut
+    text = status.state === 'paused' ? t.sync.paused : t.sync.lockedOut
     dot = 'bg-cherry text-white'
   } else if (status.state === 'error') {
     icon = 'offline'

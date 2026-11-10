@@ -29,7 +29,6 @@ import { recipeOf, say, TAGS, type Both, type DemoMenu, type DishKey } from './c
 import { makeRng, type Rng } from './random'
 import { DEMO_DISHES } from './recipes'
 import {
-  CHIPS,
   COMING_UP,
   CRITERIA,
   MENUS,
@@ -392,7 +391,7 @@ export function buildDemoRows({ kitchen, criteria, today, lang }: BuildInput): D
       portionsEaten,
       wouldEatAgain: visit.again ?? (overall >= 4 ? true : overall === 3 ? rng.chance(0.7) : false),
       comment,
-      chips: chipKeys.map((key) => text(CHIPS[key])),
+      chips: chipKeys,
       chefSelfRating,
       chefReaction,
       chefExtraReactions,

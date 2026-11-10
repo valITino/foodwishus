@@ -9,6 +9,7 @@
 //   - Cravings mostly predict the rating, with a few honest surprises.
 
 import type { ExtraReaction, Reaction, Score5 } from '../types'
+import type { ChipKey } from '../../content/chips'
 import type { Both, DemoMenu, DishKey } from './content'
 
 export type CriterionKey = 'taste' | 'texture' | 'smell' | 'looks' | 'portion' | 'temperature'
@@ -29,15 +30,8 @@ export const KITCHEN = {
   tasterStatus: ['Always Huuungryyyyy', 'Immer huuungriiig'],
 } as const satisfies Record<string, Both>
 
-export type ChipKey = 'moreSalt' | 'perfect' | 'tooSpicy' | 'keeper'
-
-/** The quick chips on the review sheet. */
-export const CHIPS: Record<ChipKey, Both> = {
-  moreSalt: ['More salt', 'Mehr Salz'],
-  perfect: ['Perfect', 'Perfekt'],
-  tooSpicy: ['Too spicy', 'Zu scharf'],
-  keeper: ['Recipe keeper', 'Rezept behalten'],
-}
+/** The quick chips Leo taps on the review sheet. Stored as keys (src/content/chips.ts). */
+export type { ChipKey } from '../../content/chips'
 
 export const MENUS: readonly DemoMenu[] = [
   {

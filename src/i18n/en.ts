@@ -28,7 +28,8 @@ export const en = {
     sending: (n: number) => (n === 1 ? '1 change waiting' : `${n} changes waiting`),
     offline: 'Offline. Saved on this phone.',
     error: 'Sync hit a snag',
-    lockedOut: 'This phone needs pairing again',
+    lockedOut: 'This device is logged out',
+    paused: 'Your seat is paused',
   },
   empty: {
     wishlistTitle: 'The wishlist is empty',
