@@ -458,10 +458,13 @@ export async function moveCriterion(id: ID, toIndex: number): Promise<void> {
   const to = Math.min(list.length - 1, Math.max(0, Math.round(toIndex)))
   const [moved] = list.splice(from, 1)
   list.splice(to, 0, moved)
-  // Number the whole list afresh, and send only the numbers that changed.
-  for (const [sortOrder, criterion] of list.entries()) {
-    if (criterion.sortOrder !== sortOrder) await store.patch('criteria', criterion.id, { sortOrder })
-  }
+  // Number the whole list afresh, send only the numbers that changed, and save them in
+  // one step: saved one by one, two rows share a number for a moment and swap on screen.
+  const renumbered = [...list.entries()].filter(([sortOrder, criterion]) => criterion.sortOrder !== sortOrder)
+  await store.patchAll(
+    'criteria',
+    renumbered.map(([sortOrder, criterion]) => ({ id: criterion.id, changes: { sortOrder } })),
+  )
 }
 
 /** How many reviews hold a score for this criterion. */

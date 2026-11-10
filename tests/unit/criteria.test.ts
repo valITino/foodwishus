@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ActionError, addCriterion, createDish, moveCriterion, proposeServing, removeCriterion, saveReview, setCriterionActive, updateCriterion } from '../../src/data/actions'
-import { db } from '../../src/data/app'
+import { db, store } from '../../src/data/app'
 import { META } from '../../src/data/db'
 import { byCriterionOrder } from '../../src/data/queries'
 import { criteriaProfile, eatenMeals } from '../../src/lib/stats'
@@ -86,6 +86,54 @@ describe('review criteria', () => {
     await moveCriterion((await named('Smell')).id, 3)
     expect(await db.outbox.count()).toBe(0)
     expect(await refusal(moveCriterion(newId(), 0))).toBe('criterion_missing')
+  })
+
+  it('saves a move in one step, so the list never shows a half-renumbered order', async () => {
+    // The defaults are made in the same instant, so a number that two rows share for a
+    // moment is settled by id. These ids make every such moment swap two rows.
+    await db.criteria.clear()
+    const at = nowIso()
+    await db.criteria.bulkPut(DEFAULTS.map((label, sortOrder) => ({ id: `00000000-0000-4000-8000-00000000000${9 - sortOrder}`, householdId, label, icon: 'spoon', active: true, sortOrder, createdAt: at, updatedAt: at, deletedAt: null })))
+
+    // What a screen would show after every single write.
+    const shown: Promise<string[]>[] = []
+    const hook = store.onWrite
+    store.onWrite = () => void shown.push(labels())
+    try {
+      await moveCriterion((await named('Temperature')).id, 1)
+    } finally {
+      store.onWrite = hook
+    }
+    expect(await Promise.all(shown)).toEqual([['Taste', 'Temperature', 'Texture', 'Smell', 'Looks', 'Portion']])
+  })
+
+  it('changes several rows together or none of them', async () => {
+    const [taste, texture] = await list()
+    await expect(
+      store.patchAll('criteria', [
+        { id: taste.id, changes: { label: 'Flavour' } },
+        { id: newId(), changes: { label: 'Nobody' } },
+      ]),
+    ).rejects.toThrow(/missing row/)
+    expect(await labels()).toEqual(DEFAULTS)
+    expect(await db.outbox.count()).toBe(0)
+
+    let writes = 0
+    const hook = store.onWrite
+    store.onWrite = () => void writes++
+    try {
+      await store.patchAll('criteria', [
+        { id: taste.id, changes: { label: 'Flavour' } },
+        { id: texture.id, changes: { label: 'Bite', sortOrder: undefined } },
+        { id: taste.id, changes: {} },
+      ])
+      await store.patchAll('criteria', [])
+    } finally {
+      store.onWrite = hook
+    }
+    expect((await labels()).slice(0, 2)).toEqual(['Flavour', 'Bite'])
+    expect(await queued()).toEqual(['patch criteria label', 'patch criteria label'])
+    expect(writes).toBe(1)
   })
 
   it('keeps a steady order when two phones handed out the same number', async () => {

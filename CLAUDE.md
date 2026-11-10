@@ -28,7 +28,9 @@ config and the screenshot tool read the same variable).
 - **Reading:** screens use hooks from `src/data/queries.ts` (and `useMe`, `usePhotoUrl` in
   `hooks.ts`). They return `undefined` while loading and update live.
 - **Writing:** screens call functions from `src/data/actions.ts`. Never write to Dexie
-  directly from a screen. Photos go through `src/data/photos.ts`.
+  directly from a screen. Photos go through `src/data/photos.ts`. Rows of one table that
+  change together (renumbering a list) are saved with `store.patchAll`, never in a loop of
+  `store.patch`: every single write repaints the screen, and half a renumbering shuffles it.
 - `src/data/sync.ts` pushes the outbox and pulls changes. Screens never talk to the backend,
   except logging in and the admin's tools, which go through `startKitchen` / `joinKitchen` /
   `logIn` / `logOut` and `backend` in `src/data/app.ts`.

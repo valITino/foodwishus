@@ -42,19 +42,38 @@ export class Store {
 
   /** Change some fields of an existing row. Only the changed fields travel to the cloud. */
   async patch<T extends Patchable>(table: T, id: ID, changes: Partial<TableRows[T]>): Promise<void> {
-    const clean = stripUndefined(changes as Record<string, unknown>)
-    delete clean.id
-    delete clean.householdId
-    delete clean.createdAt
-    delete clean.updatedAt
-    if (Object.keys(clean).length === 0) return
-    if (table === 'members' && id !== (await this.memberId())) throw new Error('You can only edit your own profile.')
+    await this.patchAll(table, [{ id, changes }])
+  }
+
+  /**
+   * Change several rows of one table in a single step. The screen sees all of them at
+   * once or none of them, never a half-done state in between (a list being renumbered
+   * would otherwise shuffle on screen while its rows are saved one by one).
+   */
+  async patchAll<T extends Patchable>(table: T, patches: { id: ID; changes: Partial<TableRows[T]> }[]): Promise<void> {
+    const wanted = patches
+      .map(({ id, changes }) => {
+        const clean = stripUndefined(changes as Record<string, unknown>)
+        delete clean.id
+        delete clean.householdId
+        delete clean.createdAt
+        delete clean.updatedAt
+        return { id, clean }
+      })
+      .filter(({ clean }) => Object.keys(clean).length > 0)
+    if (wanted.length === 0) return
+    if (table === 'members') {
+      const me = await this.memberId()
+      if (wanted.some(({ id }) => id !== me)) throw new Error('You can only edit your own profile.')
+    }
 
     await this.db.transaction('rw', this.db.table(table), this.db.outbox, async () => {
-      const current = await this.db.rows(table).get(id)
-      if (!current) throw new Error(`Cannot change a missing row: ${table}/${id}`)
-      await this.db.rows(table).put({ ...current, ...clean, updatedAt: nowIso() })
-      await this.enqueue({ table, rowId: id, kind: 'patch', data: clean })
+      for (const { id, clean } of wanted) {
+        const current = await this.db.rows(table).get(id)
+        if (!current) throw new Error(`Cannot change a missing row: ${table}/${id}`)
+        await this.db.rows(table).put({ ...current, ...clean, updatedAt: nowIso() })
+        await this.enqueue({ table, rowId: id, kind: 'patch', data: clean })
+      }
     })
     this.onWrite()
   }
