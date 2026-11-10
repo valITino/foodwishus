@@ -475,7 +475,14 @@ test('back to the kitchen: log in on a second device, settings follow, wrong PIN
     await expect(complaint(tablet)).toContainText('Logging out needs a connection')
     await tablet.context().setOffline(false)
 
-    await tablet.getByRole('button', { name: 'Log out', exact: true }).click()
+    // The connection is back, but in this very instant the app's last news can still be
+    // "offline". A tap right now must take a fresh look instead of believing old news.
+    await tablet.evaluate(() => {
+      const { sync } = (window as unknown as { __foodwishus: { sync: { status: { state: string } } } }).__foodwishus
+      sync.status = { ...sync.status, state: 'offline' }
+      const logOut = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Log out')
+      logOut?.click()
+    })
     await expect(tablet.getByTestId('welcome')).toBeVisible()
     // The device no longer knows whose it was.
     expect(await (await kit(tablet)).evaluate((k) => k.db.meta.count())).toBe(0)

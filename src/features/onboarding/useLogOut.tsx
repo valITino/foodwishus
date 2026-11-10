@@ -45,7 +45,10 @@ export function useLogOut(): LogOut {
   const start = async () => {
     setProblem(null)
     setWorking(true)
-    if (waiting() > 0) await sync.sync()
+    // Always take a fresh look at the cloud first. What the app last heard may be old:
+    // "offline" from a minute ago must not stop a log-out now that the connection is back.
+    // The same pass sends whatever is still waiting.
+    await sync.sync()
     if (sync.status.state === 'offline') {
       setWorking(false)
       return setProblem(c.logOut.needsConnection)
