@@ -3,10 +3,11 @@
 // the change for the cloud.
 
 import { generateKeyBetween } from 'fractional-indexing'
-import { db, store } from './app'
+import { backend, db, isDemo, store } from './app'
+import { exportKitchen, importBackup as importOpened, openBackup as openFile, type ExportOptions, type ExportResult, type ImportResult, type OpenedBackup } from './backupFile'
 import { savePhoto, type PreparedImage } from './photos'
-import { byPriority } from './queries'
-import { newId, nowIso, type Day, type Dish, type ID, type ISO, type Member, type Menu, type MenuCourse, type PhotoSource, type ProofPhoto, type Reaction, type Review, type Score5, type Serving, type Slot } from './types'
+import { byCriterionOrder, byPriority } from './queries'
+import { newId, nowIso, type Criterion, type Day, type Dish, type ID, type ISO, type Member, type Menu, type MenuCourse, type PhotoSource, type ProofPhoto, type Reaction, type Review, type Score5, type Serving, type Slot } from './types'
 
 async function me(): Promise<{ householdId: ID; memberId: ID }> {
   const [householdId, memberId] = await Promise.all([store.householdId(), store.memberId()])
@@ -191,7 +192,16 @@ export async function removeServing(id: ID): Promise<void> {
 
 /** Why an action said no. Screens turn the code into words. */
 export class ActionError extends Error {
-  readonly code: 'serving_missing' | 'proof_missing' | 'reaction_missing' | 'review_sealed' | 'review_missing'
+  readonly code:
+    | 'serving_missing'
+    | 'proof_missing'
+    | 'reaction_missing'
+    | 'review_sealed'
+    | 'review_missing'
+    | 'criterion_missing'
+    | 'criterion_unnamed'
+    | 'criterion_twice'
+    | 'criterion_used'
 
   constructor(code: ActionError['code']) {
     super(code)
@@ -374,4 +384,123 @@ export async function updateMyProfile(changes: ProfileChanges): Promise<void> {
 export async function renameKitchen(name: string): Promise<void> {
   const { householdId } = await me()
   await store.patch('households', householdId, { name: name.trim().slice(0, 80) })
+}
+
+// --------------------------------------------------------- review criteria --
+//
+// What the Taster rates with spoons on the review sheet. A criterion can be added,
+// renamed, given another icon, moved and switched off. Switched off means "no longer
+// asked": its old scores stay in the reviews and in the Cockpit. Only a criterion that
+// was never rated can be removed for good.
+
+export const CRITERION_LABEL_MAX = 40
+/** The icon a criterion gets when none is chosen. */
+export const CRITERION_DEFAULT_ICON = 'spoon'
+
+const labelKey = (label: string): string => label.trim().toLowerCase()
+
+async function criteriaInOrder(): Promise<Criterion[]> {
+  return (await db.criteria.toArray()).filter((criterion) => !criterion.deletedAt).sort(byCriterionOrder)
+}
+
+async function criterionOrThrow(id: ID): Promise<Criterion> {
+  const criterion = await db.criteria.get(id)
+  if (!criterion || criterion.deletedAt) throw new ActionError('criterion_missing')
+  return criterion
+}
+
+/** A tidy label, or an ActionError: criterion_unnamed when empty, criterion_twice when another one is called the same. */
+async function freeLabel(label: string, exceptId?: ID): Promise<string> {
+  const clean = label.trim().replace(/\s+/g, ' ').slice(0, CRITERION_LABEL_MAX)
+  if (!clean) throw new ActionError('criterion_unnamed')
+  if ((await criteriaInOrder()).some((other) => other.id !== exceptId && labelKey(other.label) === labelKey(clean))) throw new ActionError('criterion_twice')
+  return clean
+}
+
+export interface CriterionInput {
+  label: string
+  icon?: string
+}
+
+/** Add a criterion at the end of the list. It is asked from the next review on. */
+export async function addCriterion(input: CriterionInput): Promise<Criterion> {
+  const { householdId } = await me()
+  const label = await freeLabel(input.label)
+  const last = (await criteriaInOrder()).at(-1)
+  const criterion: Criterion = { ...fresh(householdId), label, icon: input.icon ?? CRITERION_DEFAULT_ICON, active: true, sortOrder: (last?.sortOrder ?? -1) + 1 }
+  await store.put('criteria', criterion)
+  return criterion
+}
+
+/** Rename a criterion or give it another icon. Old scores stay with it. */
+export async function updateCriterion(id: ID, changes: Partial<CriterionInput>): Promise<void> {
+  const criterion = await criterionOrThrow(id)
+  const patch: Partial<Criterion> = {}
+  if (changes.label !== undefined) {
+    const label = await freeLabel(changes.label, id)
+    if (label !== criterion.label) patch.label = label
+  }
+  if (changes.icon !== undefined && changes.icon !== criterion.icon) patch.icon = changes.icon
+  await store.patch('criteria', id, patch)
+}
+
+/** Switch a criterion off (no longer asked, history stays) or on again. */
+export async function setCriterionActive(id: ID, active: boolean): Promise<void> {
+  const criterion = await criterionOrThrow(id)
+  if (criterion.active !== active) await store.patch('criteria', id, { active })
+}
+
+/** Move a criterion to another place in the list (0 is the top). The review sheet asks in this order. */
+export async function moveCriterion(id: ID, toIndex: number): Promise<void> {
+  const list = await criteriaInOrder()
+  const from = list.findIndex((criterion) => criterion.id === id)
+  if (from < 0) throw new ActionError('criterion_missing')
+  const to = Math.min(list.length - 1, Math.max(0, Math.round(toIndex)))
+  const [moved] = list.splice(from, 1)
+  list.splice(to, 0, moved)
+  // Number the whole list afresh, and send only the numbers that changed.
+  for (const [sortOrder, criterion] of list.entries()) {
+    if (criterion.sortOrder !== sortOrder) await store.patch('criteria', criterion.id, { sortOrder })
+  }
+}
+
+/** How many reviews hold a score for this criterion. */
+async function timesRated(id: ID): Promise<number> {
+  return (await db.reviews.toArray()).filter((review) => !review.deletedAt && review.scores[id] !== undefined).length
+}
+
+/**
+ * Remove a criterion for good. Only one that was never rated can go; anything with
+ * history throws ActionError('criterion_used') and can be switched off instead.
+ */
+export async function removeCriterion(id: ID): Promise<void> {
+  await criterionOrThrow(id)
+  if ((await timesRated(id)) > 0) throw new ActionError('criterion_used')
+  await store.remove('criteria', id)
+}
+
+// ------------------------------------------------------------------ backup --
+//
+// One file with everything in the kitchen (backupFile.ts packs and reads it, backup.ts
+// holds the rules). People, PINs and devices are never part of it.
+
+export type { ExportResult, ImportResult, OpenedBackup } from './backupFile'
+export { BackupError } from './backup'
+
+/** Pack the kitchen into one zip to keep. Works offline; photos this device does not hold are then left small or out. */
+export async function exportBackup(options: ExportOptions): Promise<ExportResult> {
+  // The demo kitchen has no cloud to fetch from: everything it has is on this device.
+  return exportKitchen({ db, backend: isDemo ? null : backend }, options)
+}
+
+/** Read a backup file far enough to show what is in it and what importing it would do. Throws BackupError. */
+export async function openBackup(file: Blob): Promise<OpenedBackup> {
+  await me()
+  return openFile(db, file, reviewIdFor)
+}
+
+/** Import an opened backup into this kitchen: merge by id, never delete, never touch people. */
+export async function importBackup(opened: OpenedBackup, onProgress?: (done: number, total: number) => void): Promise<ImportResult> {
+  await me()
+  return importOpened(store, opened, reviewIdFor, onProgress)
 }

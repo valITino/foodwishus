@@ -9,6 +9,7 @@ import { usePref } from '../../data/prefs'
 import type { Criterion, Dish, ID, Reaction, Review, Score5 } from '../../data/types'
 import { useCopy, useLang, useT } from '../../i18n'
 import { Button, Chip, Sheet, SpoonMeter, TextArea, toast } from '../../ui/components'
+import { CriterionIcon } from '../../ui/deco/CriterionIcon'
 import { reviewCopy } from './copy'
 import { portionChoice, PORTIONS } from './logic'
 import { BigSpoons, FacePicker } from './parts'
@@ -124,7 +125,7 @@ export function ReviewSheet({ open, onClose, servingId, dishId, dishName, dish, 
             <p className="text-xs font-extrabold">{c.details.criteria}</p>
             <div className="mt-1 divide-y divide-line rounded-card border border-line bg-surface px-4 py-1">
               {active.map((criterion) => (
-                <SpoonMeter key={criterion.id} label={criterion.label} value={draft.scores[criterion.id] ?? null} onChange={(value) => score(criterion.id, value)} />
+                <SpoonMeter key={criterion.id} icon={<CriterionIcon name={criterion.icon} size={20} />} label={criterion.label} value={draft.scores[criterion.id] ?? null} onChange={(value) => score(criterion.id, value)} />
               ))}
             </div>
           </div>

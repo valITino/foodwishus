@@ -434,12 +434,18 @@ export function ratingsOverTime(meals: Meal[]): { day: Day; dishId: ID; servingI
   return platesOf(meals).flatMap((p) => (p.overall === null ? [] : [{ day: p.day, dishId: p.dishId, servingId: p.servingId, overall: p.overall, scores: p.review?.scores ?? {} }]))
 }
 
-/** Mean per active criterion, for all plates or one dish: the radar chart. */
+/**
+ * Mean per criterion, for all plates or one dish: the radar chart. A criterion shows
+ * when it is asked today, or when it is switched off but was rated in these meals
+ * (history stays). The list is the same with and without a dish, so shapes line up.
+ */
 export function criteriaProfile(meals: Meal[], criteria: Criterion[], dishId?: ID): { criterionId: ID; label: string; icon: string; value: Mean | null }[] {
-  const plates = platesOf(meals).filter((p) => !dishId || p.dishId === dishId)
+  const everyPlate = platesOf(meals)
+  const rated = new Set(everyPlate.flatMap((p) => Object.keys(p.review?.scores ?? {})))
+  const plates = everyPlate.filter((p) => !dishId || p.dishId === dishId)
   return alive(criteria)
-    .filter((c) => c.active)
-    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .filter((c) => c.active || rated.has(c.id))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt))
     .map((c) => ({
       criterionId: c.id,
       label: c.label,

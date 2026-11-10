@@ -6,6 +6,7 @@ import { setLang, useLang, useT } from '../../i18n'
 import type { Reaction } from '../../data/types'
 import { Avatar, AVATARS, Button, Card, Chip, EmptyState, Field, HeartMeter, Polaroid, ReactionBar, SpoonMeter, Stamp, Stat, StatusBubble, SteamLoader, Stepper, SyncPill, Tag, TextArea, Toggle } from '../../ui/components'
 import { Bow, Cherry, Cloche, Flower, Heart, Mascot, RollingPin, Sparkle, Sprig, Teacup, WashiTape, Whisk } from '../../ui/deco/Deco'
+import { CRITERION_ICONS, CriterionIcon } from '../../ui/deco/CriterionIcon'
 import { Icon } from '../../ui/deco/Icon'
 import { setTheme, useTheme } from '../../ui/theme'
 import { SamplePlate } from './SamplePlate'
@@ -192,10 +193,18 @@ export function Styleguide() {
               <ReactionBar value={reaction} onChange={setReaction} />
             </Card>
             <Card pad={false} className="px-4 py-2">
-              {Object.keys(scores).map((label) => (
-                <SpoonMeter key={label} label={label} value={scores[label]} onChange={(v) => setScores({ ...scores, [label]: v })} />
+              {Object.keys(scores).map((label, i) => (
+                <SpoonMeter key={label} icon={<CriterionIcon name={CRITERION_ICONS[i + 1]} size={20} />} label={label} value={scores[label]} onChange={(v) => setScores({ ...scores, [label]: v })} />
               ))}
             </Card>
+            {/* The icons a review criterion can have. They take the colour of the text around them. */}
+            <div className="flex flex-wrap gap-2">
+              {CRITERION_ICONS.map((name) => (
+                <span key={name} title={name} className="grid size-11 place-items-center rounded-full border-[1.5px] border-line-strong bg-surface">
+                  <CriterionIcon name={name} />
+                </span>
+              ))}
+            </div>
           </div>
         </Section>
 
@@ -267,6 +276,7 @@ export function Styleguide() {
               <SyncPill status={{ state: 'idle', pending: 0, uploads: 0 }} />
               <SyncPill status={{ state: 'idle', pending: 2, uploads: 1 }} />
               <SyncPill status={{ state: 'offline', pending: 3, uploads: 0 }} />
+              <SyncPill status={{ state: 'idle', pending: 0, uploads: 0, stuck: 2 }} />
             </div>
           </div>
         </Section>

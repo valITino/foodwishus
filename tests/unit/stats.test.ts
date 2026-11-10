@@ -508,15 +508,21 @@ describe('chart data', () => {
     ])
   })
 
-  it('criteria profile: active criteria in their order, for all dishes or one', () => {
+  it('criteria profile: in their order, for all dishes or one; a switched-off criterion stays while it has ratings', () => {
     expect(criteriaProfile(meals, criteria).map((c) => [c.label, c.value])).toEqual([
       ['Taste', { mean: 14 / 3, n: 3 }],
       ['Looks', { mean: 4, n: 2 }],
+      ['Retired', { mean: 1, n: 1 }],
     ])
+    // The same spokes for one dish, so two shapes can be laid over each other.
     expect(criteriaProfile(meals, criteria, 'zopf').map((c) => [c.label, c.value])).toEqual([
       ['Taste', { mean: 5, n: 1 }],
       ['Looks', null],
+      ['Retired', null],
     ])
+    // Switched off and never rated in these meals: gone from the chart.
+    const unrated = criteria.map((c) => (c.label === 'Looks' ? { ...c, active: false } : c))
+    expect(criteriaProfile(meals.filter((meal) => meal.plates.every((plate) => plate.review?.scores.looks === undefined)), unrated).map((c) => c.label)).not.toContain('Looks')
   })
 
   it('course and tag mix, most first', () => {

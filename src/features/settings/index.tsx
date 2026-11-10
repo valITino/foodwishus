@@ -6,17 +6,23 @@
 //   /settings/people/back-in   the one-time code that lets the partner back in
 //   /settings/invite           the invite again, while the second seat is free
 //   /settings/pin              PIN and devices: change PIN, log out other devices, log out
+//   /settings/criteria         what a review asks about: add, rename, icon, order, on and off
+//   /settings/backup           save everything as one file, bring a backup back
+//   /settings/sync             what is waiting or refused, and what to do about it
 //   /settings/welcome          right after opening a kitchen: you are the admin, then the invite
 
 import { MotionConfig } from 'motion/react'
 import type { Route } from '../../app/router'
 import { isDemo } from '../../data/app'
 import { useMe } from '../../data/hooks'
+import { BackupPage } from './BackupPage'
+import { CriteriaPage } from './CriteriaPage'
 import { BackInPage, FirstSteps, InvitePage } from './PairingPages'
 import { PeoplePage } from './PeoplePage'
 import { PinPage } from './PinPage'
 import { ProfileEdit } from './ProfileEdit'
 import { SettingsHome } from './SettingsHome'
+import { SyncPage } from './SyncPage'
 
 /** These talk to the cloud, and the demo kitchen has none. */
 const CLOUD_PAGES = ['/settings/invite', '/settings/people', '/settings/people/back-in', '/settings/pin', '/settings/welcome']
@@ -48,6 +54,15 @@ export function SettingsRoutes({ route }: { route: Route }) {
       break
     case '/settings/welcome':
       page = <FirstSteps />
+      break
+    case '/settings/criteria':
+      page = <CriteriaPage />
+      break
+    case '/settings/backup':
+      page = <BackupPage />
+      break
+    case '/settings/sync':
+      page = <SyncPage />
       break
     default:
       page = <SettingsHome />

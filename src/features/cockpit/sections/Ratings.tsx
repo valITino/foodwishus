@@ -26,7 +26,8 @@ export function RatingsChart({ kitchen, sel, w }: SectionProps) {
   const c = w.c.ratings
   const [added, setAdded] = useState<ID[]>([])
   const points = useMemo(() => ratingsOverTime(sel.meals), [sel.meals])
-  const criteria = useMemo(() => kitchen.criteria.filter((criterion) => criterion.active), [kitchen.criteria])
+  // A switched-off criterion is no longer asked, but its past ratings can still be looked at.
+  const criteria = useMemo(() => kitchen.criteria.filter((criterion) => criterion.active || points.some((point) => point.scores[criterion.id] !== undefined)), [kitchen.criteria, points])
 
   const view = useMemo(() => {
     if (points.length === 0) return null

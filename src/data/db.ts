@@ -100,4 +100,6 @@ export const META = {
   memberId: 'me.memberId',
   lastSyncAt: 'sync.lastSyncAt',
   lastError: 'sync.lastError',
+  /** ISO timestamp of the last backup saved from this device. */
+  lastBackupAt: 'backup.lastAt',
 } as const

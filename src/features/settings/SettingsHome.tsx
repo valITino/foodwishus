@@ -176,6 +176,8 @@ export function SettingsHome() {
                 <span className="shrink-0 text-xs font-extrabold text-rose-ink">{c.kitchen.rename}</span>
               </button>
               {!isDemo && <LinkRow title={c.kitchen.people} hint={member?.isAdmin ? c.kitchen.peopleHintAdmin : c.kitchen.peopleHint} onClick={() => navigate('/settings/people')} />}
+              <LinkRow title={c.kitchen.criteria} hint={c.kitchen.criteriaHint} onClick={() => navigate('/settings/criteria')} />
+              <LinkRow title={c.kitchen.backup} hint={c.kitchen.backupHint} onClick={() => navigate('/settings/backup')} />
             </Card>
             {isDemo && partner && <p className="px-1 text-xs text-ink-soft">{c.kitchen.demoNote}</p>}
           </div>

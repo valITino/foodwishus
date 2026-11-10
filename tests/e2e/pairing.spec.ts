@@ -693,31 +693,38 @@ test('settings: kitchen name, my settings, sync details, the demo kitchen from t
     await expect(calories).not.toBeChecked()
   })
 
-  await test.step('sync: state in words, sync now, and a report to copy', async () => {
+  await test.step('sync: state in words, and a page with numbers, sync now and a report to copy', async () => {
     const section = page.getByTestId('sync-section')
+    const details = page.getByTestId('sync-page')
     await settle(page)
     await expect(section.getByTestId('sync-words')).toHaveText('Everything is synced.')
-    await expect(section.getByTestId('sync-pending')).toHaveText('0')
-    await expect(section.getByTestId('sync-last')).toContainText('Today')
-    await section.getByRole('button', { name: 'Sync now' }).click()
+    await section.getByRole('button', { name: /^Sync details/ }).click()
+    await expect(details.getByTestId('sync-advice')).toContainText('Everything you changed is in the cloud.')
+    await expect(details.getByTestId('sync-pending')).toHaveText('0')
+    await expect(details.getByTestId('sync-last')).toContainText('Today')
+    await details.getByRole('button', { name: 'Sync now' }).click()
     await expect(toast(page, 'Synced')).toBeVisible()
 
-    await section.getByRole('button', { name: 'Copy details' }).click()
+    await details.getByRole('button', { name: 'Copy details' }).click()
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain('FoodwishUs sync report')
     const report = await page.evaluate(() => navigator.clipboard.readText())
     expect(report).toContain('State: idle')
     expect(report).toContain('Changes waiting: 0')
     expect(report).toContain('people: 1')
+    await page.getByRole('button', { name: 'Back' }).click()
 
-    // Offline: the change waits on this device and the section says so.
+    // Offline: the change waits on this device, and both places say so.
     await page.context().setOffline(true)
     await page.getByRole('button', { name: /Kitchen name/ }).click()
     await page.getByLabel('Kitchen name').fill('Offline kitchen')
     await page.getByRole('button', { name: 'Save name' }).click()
     await expect(section.getByTestId('sync-words')).toContainText('Offline')
-    await expect(section.getByTestId('sync-pending')).toHaveText('1')
+    await section.getByRole('button', { name: /^Sync details/ }).click()
+    await expect(details.getByTestId('sync-pending')).toHaveText('1')
+    await expect(details.getByTestId('sync-advice')).toContainText('no connection right now')
     await page.context().setOffline(false)
-    await expect(section.getByTestId('sync-pending')).toHaveText('0')
+    await expect(details.getByTestId('sync-pending')).toHaveText('0')
+    await page.getByRole('button', { name: 'Back' }).click()
     await expect(section.getByTestId('sync-words')).toHaveText('Everything is synced.')
   })
 

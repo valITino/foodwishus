@@ -49,21 +49,24 @@ interface ToggleProps {
   label: string
   checked: boolean
   onChange: (checked: boolean) => void
+  /** Only the switch: the label is read aloud but not shown. For rows that name the thing themselves. */
+  bare?: boolean
 }
 
-export function Toggle({ label, checked, onChange }: ToggleProps) {
+export function Toggle({ label, checked, onChange, bare = false }: ToggleProps) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={bare ? label : undefined}
       onClick={() => {
         buzz(8)
         onChange(!checked)
       }}
-      className="flex min-h-12 w-full items-center justify-between gap-4 text-left"
+      className={bare ? 'flex min-h-12 shrink-0 items-center' : 'flex min-h-12 w-full items-center justify-between gap-4 text-left'}
     >
-      <span className="text-sm font-bold">{label}</span>
+      {!bare && <span className="text-sm font-bold">{label}</span>}
       <span className={cx('flex h-8 w-14 shrink-0 items-center rounded-full p-1 transition-colors duration-200', checked ? 'justify-end bg-rose' : 'justify-start bg-line-strong')}>
         <motion.span layout transition={{ type: 'spring', stiffness: 600, damping: 30 }} className="grid size-6 place-items-center rounded-full bg-[#fffdf9] shadow-paper">
           {checked && (

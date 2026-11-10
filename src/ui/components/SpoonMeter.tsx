@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useT } from '../../i18n'
 import { buzz } from './cx'
 
@@ -5,14 +6,19 @@ interface Props {
   label: string
   value: number | null
   onChange?: (value: 1 | 2 | 3 | 4 | 5) => void
+  /** A small picture in front of the label, for example the criterion's icon. */
+  icon?: ReactNode
 }
 
 /** One review criterion, rated with one to five little spoons. */
-export function SpoonMeter({ label, value, onChange }: Props) {
+export function SpoonMeter({ label, value, onChange, icon }: Props) {
   const t = useT()
   return (
     <div className="flex min-h-11 items-center justify-between gap-3">
-      <span className="text-sm font-bold">{label}</span>
+      <span className="flex min-w-0 items-center gap-2 text-sm font-bold">
+        {icon && <span className="shrink-0 text-ink-soft">{icon}</span>}
+        <span className="min-w-0 break-words">{label}</span>
+      </span>
       <div role="radiogroup" aria-label={label} className="flex">
         {[1, 2, 3, 4, 5].map((n) => {
           const filled = value !== null && n <= value

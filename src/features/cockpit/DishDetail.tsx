@@ -210,7 +210,8 @@ export function DishDetail({ id }: { id: ID }) {
   const kcal = dish?.nutrition.kcalPerServing
   const eaten = mean(visits.flatMap((visit) => (visit.plate.kcal === null ? [] : [visit.plate.kcal])))
   const reactions = [1, 2, 3, 4, 5, 6].map((reaction) => visits.filter((visit) => visit.plate.reaction === reaction).length)
-  const criteria = kitchen.criteria.filter((criterion) => criterion.active && stats?.criteria[criterion.id])
+  // Switched-off criteria stay in a dish's numbers: what was rated was rated.
+  const criteria = kitchen.criteria.filter((criterion) => stats?.criteria[criterion.id])
 
   return (
     <Screen>
