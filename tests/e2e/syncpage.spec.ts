@@ -55,7 +55,7 @@ test('refused changes are listed in plain words, with "Try again" and "Discard"'
     })
     // Settings points at it.
     await leo.goto('/#/settings')
-    await expect(leo.getByTestId('sync-hint')).toHaveText('2 changes were refused and wait for you.')
+    await expect(leo.getByTestId('sync-words')).toHaveText('2 changes were refused and wait for you.')
     await leo.getByTestId('sync-section').getByRole('button', { name: /^Sync details/ }).click()
 
     await expect(advice(leo)).toContainText('The cloud said no to 2 changes.')

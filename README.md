@@ -116,8 +116,10 @@ everything else. Profiles, PINs and devices are never part of a backup.
 Importing only ever adds. What is already in your kitchen stays as it is, unless the file
 has a newer version. Things you deleted since the backup come back. Nothing is deleted,
 and everything that comes in is shared with your partner like any other change. Importing
-the same file twice does no harm. If you ever start a brand-new kitchen, this is how the
-old one moves in.
+the same file twice does no harm.
+
+If you ever start a brand-new kitchen, this is how the old one moves in. Invite your
+partner first and import afterwards: then every dish and every review finds its owner.
 
 ## When something is off
 

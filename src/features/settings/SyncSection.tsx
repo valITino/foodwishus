@@ -11,6 +11,8 @@ import { settingsCopy } from './copy'
 export function SyncSection() {
   const c = useCopy(settingsCopy)
   const status = useSyncStatus()
+  // Nothing is on its way, yet not everything arrived: "Everything is synced" would be a fib.
+  const refused = status.stuck > 0 && (status.state === 'idle' || status.state === 'syncing')
 
   return (
     <section aria-labelledby="sync-title">
@@ -25,15 +27,13 @@ export function SyncSection() {
             <div className="px-4 pb-3.5 pt-3.5">
               <SyncPill status={status} />
               <p className="mt-2.5 text-sm" data-testid="sync-words">
-                {c.sync.states[status.state]}
+                {refused ? c.sync.openHintRefused(status.stuck) : c.sync.states[status.state]}
               </p>
             </div>
             <button type="button" onClick={() => navigate('/settings/sync')} className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left active:bg-blush/40">
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-bold">{c.sync.open}</span>
-                <span className="mt-0.5 block text-xs leading-snug text-ink-soft" data-testid="sync-hint">
-                  {status.stuck > 0 ? c.sync.openHintRefused(status.stuck) : c.sync.openHint}
-                </span>
+                <span className="mt-0.5 block text-xs leading-snug text-ink-soft">{c.sync.openHint}</span>
               </span>
               <Icon name="next" size={20} className="shrink-0 text-ink-soft" />
             </button>

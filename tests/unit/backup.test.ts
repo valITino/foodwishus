@@ -332,6 +332,25 @@ describe('planning an import', () => {
     expect(moved.scores).toEqual({ [TASTE]: 5, [LOOKS]: 4 })
   })
 
+  it('says whose things would arrive without an owner, so the partner can be invited first', async () => {
+    const there = uuid(2)
+    // Everybody found a seat: nobody to warn about.
+    const both: KitchenNow = { householdId: there, settings: {}, members: [member(uuid(13), 'Mia', 'chef', there), member(uuid(14), 'Leo', 'taster', there)], rows: empty() }
+    expect((await plan(reread(made()), both)).strangers).toEqual([])
+    expect((await plan(reread(made()), sameKitchen())).strangers).toEqual([])
+
+    // Only the chef is here so far: Leo's review and photos would lose their name.
+    const alone: KitchenNow = { householdId: there, settings: {}, members: [member(uuid(13), 'Mia', 'chef', there)], rows: empty() }
+    const result = await plan(reread(made()), alone)
+    expect(result.strangers).toEqual(['Leo'])
+    expect((result.writes.find((write) => write.table === 'reviews')?.row as Review).reviewerId).toBeNull()
+    expect((result.writes.find((write) => write.row.id === ROSTI)?.row as Dish).createdBy).toBe(uuid(13))
+
+    // Nothing of theirs is written (it is all here already): no warning either.
+    const kept = { ...sameKitchen(), members: [member(MIA, 'Mia', 'chef')] }
+    expect((await plan(reread(made()), kept)).strangers).toEqual([])
+  })
+
   it('never creates people, however the file describes them', async () => {
     const now: KitchenNow = { householdId: uuid(2), settings: {}, members: [member(uuid(14), 'Somebody', 'chef', uuid(2))], rows: empty() }
     const result = await plan(reread(made()), now)

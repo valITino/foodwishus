@@ -59,6 +59,8 @@ const en = {
     otherKitchen: 'This backup comes from another kitchen. Everything in it is added to yours.',
     criteria: (n: number) => `${count(n, 'review criterion', 'review criteria')} from the file ${n === 1 ? 'is' : 'are'} added to yours. Tidy them up under Review criteria if that is too many.`,
     partner: 'Everything that is imported syncs to your partner.',
+    strangers: (names: string[]) =>
+      `${names.join(' and ')} ${names.length === 1 ? 'is' : 'are'} not in this kitchen. Their dishes, meals and reviews would come in without a name on them. Better: invite your partner first, then import.`,
     nothing: 'Everything in this file is already in your kitchen. There is nothing to import.',
     confirm: 'Import backup',
     cancel: 'Leave it',
@@ -130,6 +132,8 @@ const de: typeof en = {
     otherKitchen: 'Dieses Backup stammt aus einer anderen Küche. Alles darin kommt zu eurer dazu.',
     criteria: (n) => `${count(n, 'Kriterium', 'Kriterien')} aus der Datei ${n === 1 ? 'kommt' : 'kommen'} zu euren dazu. Falls das zu viele sind, räum unter «Kriterien für Bewertungen» auf.`,
     partner: 'Alles Importierte wird mit deinem Schatz synchronisiert.',
+    strangers: (names) =>
+      `${names.join(' und ')} ${names.length === 1 ? 'ist' : 'sind'} nicht in dieser Küche. Die Gerichte, Mahlzeiten und Bewertungen dazu kämen ohne Namen an. Besser: Lad zuerst deinen Schatz ein und importiere danach.`,
     nothing: 'Alles aus dieser Datei ist schon in eurer Küche. Es gibt nichts zu importieren.',
     confirm: 'Backup importieren',
     cancel: 'Lieber nicht',

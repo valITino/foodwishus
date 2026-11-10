@@ -558,6 +558,11 @@ export interface ImportPlan {
   leftOut: number
   /** The kitchen's own names for the reactions, taken over when this kitchen has none. */
   settings: HouseholdSettings | null
+  /**
+   * Names of people in the file who are nobody in this kitchen, and whose dishes, meals or
+   * reviews are about to be written without an owner. Empty when everybody found their seat.
+   */
+  strangers: string[]
 }
 
 export interface PlanOptions {
@@ -610,6 +615,11 @@ export async function planImport(backup: Backup, now: KitchenNow, options: PlanO
   const people = matchPeople(backup.people, now.members)
   /** Somebody who is not in the file's list (they left before it was made) is nobody here. */
   const person = (id: ID | null): ID | null => (id === null ? null : (people.get(id) ?? now.members.find((member) => member.id === id)?.id ?? null))
+  /** People from the file who lose their name on something that is written. */
+  const unseated = new Set<ID>()
+  const noteOwners = (reason: WriteReason | null, ...owners: (ID | null)[]): void => {
+    if (reason) for (const id of owners) if (id !== null && person(id) === null) unseated.add(id)
+  }
 
   const planned = Object.fromEntries(BACKUP_TABLES.map((table) => [table, []])) as unknown as { [T in BackupTable]: PlannedWrite[] }
   const counts = Object.fromEntries(BACKUP_TABLES.map((table) => [table, emptyCount()])) as Record<BackupTable, TableCount>
@@ -674,16 +684,19 @@ export async function planImport(backup: Backup, now: KitchenNow, options: PlanO
       coverPhotoId: row.coverPhotoId && photos.has(row.coverPhotoId) ? row.coverPhotoId : null,
       recipe: steps ? { ...row.recipe, steps } : row.recipe,
     }
-    if (settle('dishes', dish)) {
+    const written = settle('dishes', dish)
+    if (written) {
       if (dish.coverPhotoId) shown.add(dish.coverPhotoId)
       for (const step of dish.recipe.steps ?? []) if (step.photoId) shown.add(step.photoId)
     }
+    if (!row.deletedAt) noteOwners(written, row.createdBy)
     dishes.add(row.id)
   }
 
   const menus = new Set<ID>(have.menus.keys())
   for (const row of backup.tables.menus) {
-    settle('menus', { ...row, householdId: now.householdId, createdBy: person(row.createdBy) })
+    const written = settle('menus', { ...row, householdId: now.householdId, createdBy: person(row.createdBy) })
+    if (!row.deletedAt) noteOwners(written, row.createdBy)
     menus.add(row.id)
   }
 
@@ -704,7 +717,9 @@ export async function planImport(backup: Backup, now: KitchenNow, options: PlanO
       cookedBy: person(row.cookedBy),
       proofPhotos: row.proofPhotos.filter((proof) => photos.has(proof.photoId)),
     }
-    if (settle('servings', serving)) for (const proof of serving.proofPhotos) shown.add(proof.photoId)
+    const written = settle('servings', serving)
+    if (written) for (const proof of serving.proofPhotos) shown.add(proof.photoId)
+    if (!row.deletedAt) noteOwners(written, row.proposedBy, row.cookedBy)
     servings.add(row.id)
   }
 
@@ -719,7 +734,8 @@ export async function planImport(backup: Backup, now: KitchenNow, options: PlanO
     const id = reviewerId && reviewerId !== row.reviewerId ? await options.reviewId(row.servingId, row.dishId, reviewerId) : row.id
     const scores: Review['scores'] = {}
     for (const [criterionId, score] of Object.entries(row.scores)) scores[criterion.get(criterionId) ?? criterionId] = score
-    settle('reviews', { ...row, id, householdId: now.householdId, reviewerId, scores })
+    const written = settle('reviews', { ...row, id, householdId: now.householdId, reviewerId, scores })
+    if (!row.deletedAt) noteOwners(written, row.reviewerId)
   }
 
   // Photos last, because only now it is known which deleted ones are wanted again.
@@ -741,7 +757,8 @@ export async function planImport(backup: Backup, now: KitchenNow, options: PlanO
   const ourLabels = now.settings.reactionLabels ?? {}
   const settings = Object.keys(theirLabels).length > 0 && Object.keys(ourLabels).length === 0 ? { ...now.settings, reactionLabels: theirLabels } : null
 
-  return { sameKitchen, writes: BACKUP_TABLES.flatMap((table) => planned[table]), counts, leftOut, settings }
+  const strangers = backup.people.filter((someone) => unseated.has(someone.id)).map((someone) => someone.name)
+  return { sameKitchen, writes: BACKUP_TABLES.flatMap((table) => planned[table]), counts, leftOut, settings, strangers }
 }
 
 /** Nothing would change: everything in the file is in the kitchen already. */

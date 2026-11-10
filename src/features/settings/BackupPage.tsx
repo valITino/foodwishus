@@ -93,6 +93,8 @@ function PreviewSheet({ opened, open, working, progress, onConfirm, onClose }: {
     >
       <div className="flex flex-col gap-4 pb-1" data-testid="backup-preview">
         <p className="text-sm leading-relaxed">{c.preview.from(summary.kitchenName, date(toDay(summary.madeAt)))}</p>
+        {/* First thing on the sheet: it changes what the person should do before importing. */}
+        {plan.strangers.length > 0 && <WarningNote>{c.preview.strangers(plan.strangers)}</WarningNote>}
         <section aria-labelledby="backup-in-file">
           <h3 id="backup-in-file" className="text-base">
             {c.preview.inFile}
