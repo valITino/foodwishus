@@ -13,7 +13,7 @@ interface DishSeed {
 
 async function openBook(page: Page, prefs: object = {}): Promise<void> {
   await page.addInitScript((extra) => {
-    localStorage.setItem('foodwishus.prefs', JSON.stringify({ demoData: true, ...extra }))
+    localStorage.setItem('foodwishus.prefs', JSON.stringify({ demoData: true, demoEmpty: true, ...extra }))
     localStorage.setItem('foodwishus.lang', 'en')
     localStorage.setItem('foodwishus.theme', 'light')
   }, prefs)

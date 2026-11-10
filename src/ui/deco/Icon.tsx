@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react'
 
-const paths: Record<string, ReactNode> = {
+const paths = {
   today: (
     <>
       <path d="M4 17.5c0-5 3.5-8.5 8-8.5s8 3.5 8 8.5H4Z" />
@@ -86,7 +86,8 @@ const paths: Record<string, ReactNode> = {
       <path d="M14 19.5v-5h5M8.5 9h7M8.5 12.5h4" />
     </>
   ),
-}
+
+} satisfies Record<string, ReactNode>
 
 export type IconName = keyof typeof paths
 

@@ -25,6 +25,8 @@ export interface SeedOptions {
   today?: Day
   /** Defaults to the app's current language. */
   lang?: Lang
+  /** Only the kitchen and its two people, no dishes, meals or photos. For tests that start from a clean table. */
+  empty?: boolean
 }
 
 /**
@@ -51,14 +53,14 @@ export async function ensureDemoKitchen(db: AppDB, options: SeedOptions = {}): P
       await db.households.put(household)
       await db.members.bulkPut([chef, taster])
       await db.criteria.bulkPut(criteria)
-      await seedContent(db, { householdId, chefId: chef.id, tasterId: taster.id }, { today: day, lang })
+      if (!options.empty) await seedContent(db, { householdId, chefId: chef.id, tasterId: taster.id }, { today: day, lang })
       // The demo is seen through the Taster's eyes.
       await db.setMeta(META.memberId, taster.id)
       await db.setMeta(META.householdId, householdId)
     })
   }
   // Not awaited: the kitchen is ready, the photos develop while you look around.
-  void seedDemoPhotos(db)
+  if (!options.empty) void seedDemoPhotos(db)
 }
 
 /** Sample dishes, menus, servings and reviews, written straight into the local tables. */

@@ -1,6 +1,7 @@
 import { AnimatePresence, motion, useDragControls } from 'motion/react'
 import { useEffect, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { useT } from '../../i18n'
 import { Icon } from '../deco/Icon'
 import { buzz, cx } from './cx'
 
@@ -16,6 +17,7 @@ interface SheetProps {
 /** A bottom sheet. Drag the handle down, tap outside or press Escape to close. */
 export function Sheet({ open, onClose, title, children, footer }: SheetProps) {
   const controls = useDragControls()
+  const t = useT()
 
   useEffect(() => {
     if (!open) return
@@ -61,7 +63,7 @@ export function Sheet({ open, onClose, title, children, footer }: SheetProps) {
             {title && (
               <div className="flex shrink-0 items-center justify-between gap-3 px-5 pt-1">
                 <h2 className="text-xl">{title}</h2>
-                <IconButton icon="close" label="Close" onClick={onClose} />
+                <IconButton icon="close" label={t.common.close} onClick={onClose} />
               </div>
             )}
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 pt-3">{children}</div>

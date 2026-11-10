@@ -35,7 +35,8 @@ config and the screenshot tool read the same variable).
 - `src/app/Shell.tsx` owns tabs, the add sheet, toasts and the demo banner.
 - **Demo kitchen:** `enterDemo()` / `leaveDemo()` switch to a separate local database with
   sample content (`src/data/demo`). Handy for screenshots: set
-  `localStorage['foodwishus.prefs'] = '{"demoData":true}'` before loading.
+  `localStorage['foodwishus.prefs'] = '{"demoData":true}'` before loading. Add
+  `"demoEmpty":true` for the same kitchen without sample content (tests that need a clean table).
 - The real backend is Supabase (`supabaseBackend.ts`); rules live in `supabase/migrations`.
   The pretend cloud in `src/data/fake` must follow the same rules. Never point tests at
   the real project.

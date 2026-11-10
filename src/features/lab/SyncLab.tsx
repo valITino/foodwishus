@@ -35,8 +35,6 @@ export function SyncLab() {
 
   useEffect(() => {
     void boot()
-    // Lets the end-to-end test wait for exact moments instead of guessing with timers.
-    Object.assign(window, { __foodwishus: { db, sync, store } })
   }, [])
 
   const guard = (fn: () => Promise<void>) => async () => {

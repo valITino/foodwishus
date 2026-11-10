@@ -81,12 +81,21 @@ export async function recoverKitchen(recoveryKey: string, memberId: string): Pro
   await adopt(await backend.recoverMember(recoveryKey, memberId))
 }
 
-/** Call once when the app opens. Works offline: a paired phone starts from its local copy. */
-export async function boot(): Promise<{ paired: boolean }> {
+let booting: Promise<{ paired: boolean }> | undefined
+
+/**
+ * Call when the app opens. Works offline: a paired phone starts from its local copy.
+ * Safe to call twice (React does so in development): both callers get the same start.
+ */
+export function boot(): Promise<{ paired: boolean }> {
+  return (booting ??= bootOnce())
+}
+
+async function bootOnce(): Promise<{ paired: boolean }> {
   if (navigator.storage?.persist) void navigator.storage.persist()
   if (isDemo) {
     const { ensureDemoKitchen } = await import('./demo/seed')
-    await ensureDemoKitchen(db)
+    await ensureDemoKitchen(db, { empty: getPref('demoEmpty') })
     return { paired: true }
   }
   const householdId = await db.getMeta<string>(META.householdId)

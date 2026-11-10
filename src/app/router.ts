@@ -26,9 +26,38 @@ function current(): Route {
 }
 
 const notify = () => listeners.forEach((fn) => fn())
+
+/** The page currently on screen, remembered so it can be put back if leaving is refused. */
+let shownHash = typeof window !== 'undefined' ? window.location.hash : ''
+let shownDepth = typeof window !== 'undefined' ? ((window.history.state as { depth?: number } | null)?.depth ?? 0) : 0
+let blocker: (() => boolean) | null = null
+
+/**
+ * While set, the phone's own back button asks before leaving the page: the function is
+ * called, and if it returns true the page stays (nothing typed is lost). Used by forms
+ * with unsaved changes through useLeaveGuard. navigate() and back() are never blocked.
+ */
+export function setBlocker(fn: (() => boolean) | null): void {
+  blocker = fn
+}
+
+function remember(): void {
+  shownHash = window.location.hash
+  shownDepth = depth()
+}
+
+function onHistoryEvent(): void {
+  if (window.location.hash !== shownHash && blocker?.()) {
+    window.history.pushState({ depth: shownDepth }, '', shownHash || '#/')
+    return
+  }
+  remember()
+  notify()
+}
+
 if (typeof window !== 'undefined') {
-  window.addEventListener('hashchange', notify)
-  window.addEventListener('popstate', notify)
+  window.addEventListener('hashchange', onHistoryEvent)
+  window.addEventListener('popstate', onHistoryEvent)
 }
 
 function subscribe(onChange: () => void): () => void {
@@ -52,6 +81,7 @@ function depth(): number {
 export function navigate(to: string, options: { replace?: boolean } = {}): void {
   if (options.replace) window.history.replaceState({ depth: depth() }, '', `#${to}`)
   else window.history.pushState({ depth: depth() + 1 }, '', `#${to}`)
+  remember()
   notify()
 }
 

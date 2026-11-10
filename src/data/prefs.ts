@@ -7,10 +7,12 @@ export interface Prefs {
   showCalories: boolean
   /** Fill the app with sample dishes and meals so every screen can be judged. */
   demoData: boolean
+  /** With demoData: open the demo kitchen without sample content. Used by tests. */
+  demoEmpty: boolean
 }
 
 const KEY = 'foodwishus.prefs'
-const defaults: Prefs = { showCalories: true, demoData: false }
+const defaults: Prefs = { showCalories: true, demoData: false, demoEmpty: false }
 const listeners = new Set<() => void>()
 let cache: Prefs | null = null
 
