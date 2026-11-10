@@ -15,6 +15,7 @@ import { useT } from '../i18n'
 import { Screen, Sheet, SteamLoader, TabBar, Toaster, type TabId } from '../ui/components'
 import { Cloche, Flower } from '../ui/deco/Deco'
 import { navigate, useRoute } from './router'
+import { startSettingsSync } from './settingsSync'
 
 // The sync lab talks to the pretend cloud, so it only exists in development builds.
 const SyncLab = import.meta.env.DEV ? lazy(() => import('../features/lab/SyncLab').then((m) => ({ default: m.SyncLab }))) : null
@@ -75,6 +76,8 @@ export function Shell() {
 
   useEffect(() => {
     void boot()
+    // Language, candlelight and calories follow the person to every device.
+    startSettingsSync()
     // Page headers stick below the demo banner instead of hiding under it.
     if (isDemo) document.documentElement.style.setProperty('--banner-h', '2.5rem')
   }, [])

@@ -2,9 +2,9 @@
 // (supabase/migrations), all sync logic lives in sync.ts.
 
 import { createClient, isAuthRetryableFetchError, type SupabaseClient } from '@supabase/supabase-js'
-import { BackendError, type Backend, type Invite, type Membership, type ProfileInput, type PullResult, type PushOp, type RecoveryPeek, type Session } from './backend'
+import { BackendError, type Backend, type Invite, type InvitePeek, type Membership, type PersonCard, type ProfileInput, type PullResult, type PushOp, type Session } from './backend'
 import { camelKeys, reviveRow, snakeKeys } from './case'
-import { SYNC_TABLES, type ID, type ISO } from './types'
+import { SYNC_TABLES, type ID, type ISO, type Role } from './types'
 
 const BUCKET = 'photos'
 
@@ -16,10 +16,29 @@ const KNOWN_CODES = [
   'kitchen_full',
   'invite_invalid',
   'member_not_found',
-  'recovery_key_invalid',
   'not_in_kitchen',
   'bad_invite_kind',
+  'name_taken',
+  'name_invalid',
+  'pin_invalid',
+  'pin_too_simple',
+  'admin_only',
+  'not_yourself',
 ]
+
+type RawMembership = { household_id: ID; member_id: ID; paused?: boolean }
+type RawCard = { name: string; avatar: string; color: string; accessory: string | null; default_role: Role } | null
+
+const toMembership = (row: RawMembership): Membership =>
+  row.paused ? { householdId: row.household_id, memberId: row.member_id, paused: true } : { householdId: row.household_id, memberId: row.member_id }
+
+const toCard = (row: RawCard): PersonCard | null =>
+  row ? { name: row.name, avatar: row.avatar, color: row.color, accessory: row.accessory, defaultRole: row.default_role } : null
+
+/** The profile fields the pairing functions read, in the database's spelling. */
+function memberArg(me: ProfileInput): Record<string, unknown> {
+  return snakeKeys({ ...me })
+}
 
 function looksOffline(message: string | undefined, status?: number): boolean {
   if (status !== undefined && (status === 0 || status === 408 || status === 429 || status >= 500)) return true
@@ -31,6 +50,8 @@ function fromDatabase(error: { message: string; code?: string }, status: number)
   if (status === 401 || error.code === 'PGRST301' || error.code === 'PGRST303' || error.code === '28000') {
     return new BackendError('auth', 'session_invalid', error.message)
   }
+  // Two people in one kitchen cannot share a name: the unique index says no.
+  if (error.code === '23505' && error.message.includes('members_household_name_key')) return new BackendError('rejected', 'name_taken', error.message)
   const known = KNOWN_CODES.find((code) => error.message === code)
   return new BackendError('rejected', known ?? error.code ?? 'rejected', error.message)
 }
@@ -86,16 +107,16 @@ export class SupabaseBackend implements Backend {
   }
 
   async membership(): Promise<Membership | null> {
-    const row = await this.rpc<{ household_id: ID; member_id: ID } | null>('my_membership')
-    return row ? { householdId: row.household_id, memberId: row.member_id } : null
+    const row = await this.rpc<RawMembership | null>('my_membership')
+    return row ? toMembership(row) : null
   }
 
-  async createHousehold(name: string, me: ProfileInput) {
-    const row = await this.rpc<{ household_id: ID; member_id: ID; recovery_key: string }>('create_household', {
-      p_household_name: name,
-      p_member: snakeKeys({ ...me }),
-    })
-    return { householdId: row.household_id, memberId: row.member_id, recoveryKey: row.recovery_key }
+  async kitchenExists(): Promise<boolean> {
+    return Boolean(await this.rpc<boolean>('kitchen_exists'))
+  }
+
+  async createHousehold(name: string, me: ProfileInput, pin: string): Promise<Membership> {
+    return toMembership(await this.rpc<RawMembership>('create_household', { p_household_name: name, p_member: memberArg(me), p_pin: pin }))
   }
 
   async createInvite(kind: 'join' | 'restore', memberId?: ID): Promise<Invite> {
@@ -106,29 +127,49 @@ export class SupabaseBackend implements Backend {
     return { code: row.code, kind: row.kind, expiresAt: row.expires_at }
   }
 
-  async joinHousehold(code: string, me: ProfileInput): Promise<Membership & { kind: 'join' | 'restore' }> {
-    const row = await this.rpc<{ household_id: ID; member_id: ID; kind: 'join' | 'restore' }>('join_household', {
-      p_code: code,
-      p_member: snakeKeys({ ...me }),
-    })
-    return { householdId: row.household_id, memberId: row.member_id, kind: row.kind }
+  async peekInvite(code: string): Promise<InvitePeek> {
+    const row = await this.rpc<{ kind: 'join' | 'restore'; kitchen_name: string; host: RawCard; profile: RawCard }>('peek_invite', { p_code: code })
+    return { kind: row.kind, kitchenName: row.kitchen_name, host: toCard(row.host), profile: toCard(row.profile) }
   }
 
-  async recoveryPeek(key: string): Promise<RecoveryPeek> {
-    const row = await this.rpc<{ household_id: ID; members: RecoveryPeek['members'] }>('recovery_peek', { p_key: key })
-    return { householdId: row.household_id, members: row.members }
+  async joinHousehold(code: string, me: ProfileInput, pin: string): Promise<Membership & { kind: 'join' | 'restore' }> {
+    const row = await this.rpc<RawMembership & { kind: 'join' | 'restore' }>('join_household', { p_code: code, p_member: memberArg(me), p_pin: pin })
+    return { ...toMembership(row), kind: row.kind }
   }
 
-  async recoverMember(key: string, memberId: ID): Promise<Membership> {
-    const row = await this.rpc<{ household_id: ID; member_id: ID }>('recover_member', {
-      p_key: key,
-      p_member_id: memberId,
-    })
-    return { householdId: row.household_id, memberId: row.member_id }
+  async signInWithPin(name: string, pin: string): Promise<Membership> {
+    // A wrong PIN comes back as an answer, not as an error: the database has to keep
+    // its count of wrong tries, and an error would undo that.
+    const row = await this.rpc<
+      | ({ ok: true } & RawMembership)
+      | { ok: false; reason: 'wrong'; tries_left: number }
+      | { ok: false; reason: 'locked'; retry_at: ISO }
+      | { ok: false; reason: 'paused' }
+    >('sign_in_with_pin', { p_name: name, p_pin: pin })
+    if (row.ok) return toMembership(row)
+    if (row.reason === 'locked') throw new BackendError('rejected', 'pin_locked', undefined, { retryAt: row.retry_at })
+    if (row.reason === 'paused') throw new BackendError('rejected', 'account_paused')
+    throw new BackendError('rejected', 'pin_wrong', undefined, { triesLeft: row.tries_left })
   }
 
-  async rotateRecoveryKey(): Promise<string> {
-    return (await this.rpc<{ recovery_key: string }>('rotate_recovery_key')).recovery_key
+  async setPin(pin: string): Promise<void> {
+    await this.rpc<null>('set_pin', { p_pin: pin })
+  }
+
+  async signOutDevice(): Promise<void> {
+    await this.rpc<null>('sign_out_device')
+  }
+
+  async signOutOtherDevices(): Promise<number> {
+    return Number(await this.rpc<number>('sign_out_other_devices'))
+  }
+
+  async setMemberPaused(memberId: ID, paused: boolean): Promise<void> {
+    await this.rpc<null>('set_member_paused', { p_member_id: memberId, p_paused: paused })
+  }
+
+  async signOutMember(memberId: ID): Promise<number> {
+    return Number(await this.rpc<number>('sign_out_member', { p_member_id: memberId }))
   }
 
   async push(op: PushOp): Promise<void> {
@@ -151,7 +192,8 @@ export class SupabaseBackend implements Backend {
       const rows = (raw[table] as Record<string, unknown>[] | undefined) ?? []
       tables[table] = rows.map((row) => reviveRow(table, camelKeys(row)))
     }
-    return { serverTime: raw.server_time as ISO, tables }
+    const seat = raw.seat === 'paused' || raw.seat === 'gone' ? raw.seat : 'ok'
+    return { serverTime: raw.server_time as ISO, tables, seat }
   }
 
   subscribe(householdId: ID, onChange: () => void): () => void {

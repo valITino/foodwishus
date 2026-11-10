@@ -3,20 +3,23 @@
 // Tests and local development run against it, because they must never touch real data.
 // Keep its rules in step with supabase/migrations.
 
-import { BackendError, type Invite, type Membership, type ProfileInput, type PullResult, type PushOp, type RecoveryPeek } from '../backend.ts'
-import { SYNC_TABLES, WRITABLE_TABLES, type ID, type ISO, type SyncTable } from '../types.ts'
+import { BackendError, type BackendErrorDetails, type Invite, type InvitePeek, type Membership, type PersonCard, type ProfileInput, type PullResult, type PushOp } from '../backend.ts'
+import { lockMinutes, nameKey, PIN_TRIES, pinProblem } from '../pin.ts'
+import { SYNC_TABLES, WRITABLE_TABLES, type ID, type ISO, type Role, type SyncTable } from '../types.ts'
 
 type Row = Record<string, unknown> & { id: ID }
 
 interface MemberRow extends Row {
   householdId: ID
-  userId: string | null
   name: string
   avatar: string
   color: string
   accessory: string | null
   status: string | null
-  defaultRole: string
+  defaultRole: Role
+  prefs: Record<string, unknown>
+  isAdmin: boolean
+  disabledAt: ISO | null
   createdAt: ISO
   updatedAt: ISO
   deletedAt: ISO | null
@@ -27,8 +30,16 @@ interface InviteRow {
   householdId: ID
   kind: 'join' | 'restore'
   memberId: ID | null
+  createdBy: ID
   expiresAt: number
   usedAt: number | null
+}
+
+interface Attempts {
+  failed: number
+  lockouts: number
+  lockedUntil: number
+  lastAttempt: number
 }
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -40,16 +51,23 @@ const DEFAULT_CRITERIA: [string, string][] = [
   ['Portion', 'plate'],
   ['Temperature', 'flame'],
 ]
-const PROFILE_FIELDS = ['name', 'avatar', 'color', 'defaultRole', 'status', 'accessory']
+const PROFILE_FIELDS = ['name', 'avatar', 'color', 'defaultRole', 'status', 'accessory', 'prefs']
 
-const reject = (code: string): never => {
-  throw new BackendError('rejected', code)
+const reject = (code: string, details?: BackendErrorDetails): never => {
+  throw new BackendError('rejected', code, undefined, details)
 }
+
+const card = (m: MemberRow | undefined): PersonCard | null =>
+  m ? { name: m.name, avatar: m.avatar, color: m.color, accessory: m.accessory, defaultRole: m.defaultRole } : null
 
 export class FakeCloud {
   private tables = new Map<SyncTable, Map<ID, Row>>()
   private invites = new Map<string, InviteRow>()
-  private recoveryKeys = new Map<ID, string>()
+  /** Which profile each login (one per device) belongs to. One profile can have many. */
+  private devices = new Map<string, ID>()
+  private pins = new Map<ID, string>()
+  /** Wrong PIN tries, counted per typed name, whether or not that name exists. */
+  private attempts = new Map<string, Attempts>()
   private blobs = new Map<string, { bytes: Uint8Array; type: string }>()
   private listeners = new Set<(householdId: ID) => void>()
   private clock = 0
@@ -62,7 +80,9 @@ export class FakeCloud {
     this.tables.clear()
     for (const t of SYNC_TABLES) this.tables.set(t, new Map())
     this.invites.clear()
-    this.recoveryKeys.clear()
+    this.devices.clear()
+    this.pins.clear()
+    this.attempts.clear()
     this.blobs.clear()
   }
 
@@ -89,12 +109,35 @@ export class FakeCloud {
     return [...this.table('members').values()] as MemberRow[]
   }
 
+  /** The profile this login belongs to, paused or not. */
+  private seatOf(userId: string): MemberRow | undefined {
+    const memberId = this.devices.get(userId)
+    return memberId ? this.members().find((m) => m.id === memberId && !m.deletedAt) : undefined
+  }
+
+  /** The profile this login may act as: logged in and not paused. */
   private memberOf(userId: string): MemberRow | undefined {
-    return this.members().find((m) => m.userId === userId && !m.deletedAt)
+    const seat = this.seatOf(userId)
+    return seat && !seat.disabledAt ? seat : undefined
+  }
+
+  private admin(userId: string): MemberRow {
+    const me = this.memberOf(userId) ?? reject('not_in_kitchen')
+    return me.isAdmin ? me : reject('admin_only')
   }
 
   private seats(householdId: ID): MemberRow[] {
     return this.members().filter((m) => m.householdId === householdId && !m.deletedAt)
+  }
+
+  private touch(member: MemberRow): void {
+    member.updatedAt = this.now()
+    this.emit(member.householdId)
+  }
+
+  private checkPin(pin: string): void {
+    const problem = pinProblem(pin)
+    if (problem) reject(problem)
   }
 
   private emit(householdId: ID): void {
@@ -108,13 +151,19 @@ export class FakeCloud {
   }
 
   membership(userId: string): Membership | null {
-    const me = this.memberOf(userId)
-    return me ? { householdId: me.householdId, memberId: me.id } : null
+    const me = this.seatOf(userId)
+    if (!me) return null
+    return me.disabledAt ? { householdId: me.householdId, memberId: me.id, paused: true } : { householdId: me.householdId, memberId: me.id }
   }
 
-  createHousehold(userId: string, name: string, me: ProfileInput): Membership & { recoveryKey: string } {
-    if (this.memberOf(userId)) reject('already_in_kitchen')
-    if ([...this.table('households').values()].some((h) => !h.deletedAt)) reject('kitchen_already_exists')
+  kitchenExists(_userId: string): boolean {
+    return [...this.table('households').values()].some((h) => !h.deletedAt)
+  }
+
+  createHousehold(userId: string, name: string, me: ProfileInput, pin: string): Membership {
+    if (this.seatOf(userId)) reject('already_in_kitchen')
+    this.checkPin(pin)
+    if (this.kitchenExists(userId)) reject('kitchen_already_exists')
 
     const at = this.now()
     const householdId = this.id()
@@ -126,7 +175,8 @@ export class FakeCloud {
       updatedAt: at,
       deletedAt: null,
     })
-    const memberId = this.addMember(householdId, userId, { avatar: 'whisk', color: 'rose', defaultRole: 'chef', ...me }, 'Chef')
+    // Whoever opens the kitchen is its admin.
+    const memberId = this.addMember(householdId, { avatar: 'whisk', color: 'rose', defaultRole: 'chef', ...me }, 'Chef', true)
     DEFAULT_CRITERIA.forEach(([label, icon], sortOrder) => {
       const id = this.id()
       this.table('criteria').set(id, {
@@ -141,25 +191,27 @@ export class FakeCloud {
         deletedAt: null,
       })
     })
-    const recoveryKey = this.code(20)
-    this.recoveryKeys.set(householdId, recoveryKey)
+    this.pins.set(memberId, pin)
+    this.devices.set(userId, memberId)
     this.emit(householdId)
-    return { householdId, memberId, recoveryKey }
+    return { householdId, memberId }
   }
 
-  private addMember(householdId: ID, userId: string, me: ProfileInput, fallbackName: string): ID {
+  private addMember(householdId: ID, me: ProfileInput, fallbackName: string, isAdmin: boolean): ID {
     const at = this.now()
     const id = this.id()
     const row: MemberRow = {
       id,
       householdId,
-      userId,
-      name: me.name?.trim() || fallbackName,
+      name: me.name?.trim().slice(0, 40) || fallbackName,
       avatar: me.avatar ?? 'fork',
       color: me.color ?? 'sage',
-      accessory: null,
-      status: null,
+      accessory: me.accessory ?? null,
+      status: me.status?.trim().slice(0, 60) || null,
       defaultRole: me.defaultRole ?? 'taster',
+      prefs: {},
+      isAdmin,
+      disabledAt: null,
       createdAt: at,
       updatedAt: at,
       deletedAt: null,
@@ -169,11 +221,12 @@ export class FakeCloud {
   }
 
   createInvite(userId: string, kind: 'join' | 'restore', memberId?: ID): Invite {
-    const me = this.memberOf(userId) ?? reject('not_in_kitchen')
+    const me = this.admin(userId)
     if (kind === 'join') {
       if (this.seats(me.householdId).length >= 2) reject('kitchen_full')
-    } else if (!this.seats(me.householdId).some((m) => m.id === memberId)) {
-      reject('member_not_found')
+    } else {
+      if (memberId === me.id) reject('not_yourself')
+      if (!this.seats(me.householdId).some((m) => m.id === memberId)) reject('member_not_found')
     }
     const code = this.code(10)
     const expiresAt = Date.now() + 48 * 3_600_000
@@ -182,62 +235,138 @@ export class FakeCloud {
       householdId: me.householdId,
       kind,
       memberId: kind === 'restore' ? (memberId as ID) : null,
+      createdBy: me.id,
       expiresAt,
       usedAt: null,
     })
     return { code, kind, expiresAt: new Date(expiresAt).toISOString() }
   }
 
-  joinHousehold(userId: string, code: string, me: ProfileInput): Membership & { kind: 'join' | 'restore' } {
-    if (this.memberOf(userId)) reject('already_in_kitchen')
+  private validInvite(code: string): InviteRow {
     const invite = this.invites.get(normalize(code))
     if (!invite || invite.usedAt || invite.expiresAt < Date.now()) return reject('invite_invalid')
+    return invite
+  }
+
+  peekInvite(_userId: string, code: string): InvitePeek {
+    const invite = this.validInvite(code)
+    const seats = this.seats(invite.householdId)
+    return {
+      kind: invite.kind,
+      kitchenName: String(this.table('households').get(invite.householdId)?.name ?? ''),
+      host: card(seats.find((m) => m.id === invite.createdBy)),
+      profile: invite.kind === 'restore' ? card(seats.find((m) => m.id === invite.memberId)) : null,
+    }
+  }
+
+  joinHousehold(userId: string, code: string, me: ProfileInput, pin: string): Membership & { kind: 'join' | 'restore' } {
+    if (this.seatOf(userId)) reject('already_in_kitchen')
+    const invite = this.validInvite(code)
+    this.checkPin(pin)
 
     let memberId: ID
     if (invite.kind === 'join') {
-      if (this.seats(invite.householdId).length >= 2) reject('kitchen_full')
-      memberId = this.addMember(invite.householdId, userId, me, 'Taster')
+      const seats = this.seats(invite.householdId)
+      if (seats.length >= 2) reject('kitchen_full')
+      const wanted = nameKey(me.name ?? '') || 'taster'
+      if (seats.some((m) => nameKey(m.name) === wanted)) reject('name_taken')
+      memberId = this.addMember(invite.householdId, me, 'Taster', false)
     } else {
       const seat = this.seats(invite.householdId).find((m) => m.id === invite.memberId) ?? reject('member_not_found')
-      seat.userId = userId
-      seat.updatedAt = this.now()
+      // Back in with a fresh start: the forgotten PIN and its wrong tries are history,
+      // and so is every device that was still logged in (it may be the lost phone).
+      this.attempts.delete(nameKey(seat.name))
+      this.dropDevices(seat.id)
       memberId = seat.id
     }
+    this.pins.set(memberId, pin)
+    this.devices.set(userId, memberId)
     invite.usedAt = Date.now()
     this.emit(invite.householdId)
     return { householdId: invite.householdId, memberId, kind: invite.kind }
   }
 
-  private householdForKey(key: string): ID {
-    for (const [householdId, stored] of this.recoveryKeys) {
-      if (stored === normalize(key)) return householdId
+  signInWithPin(userId: string, name: string, pin: string): Membership {
+    if (this.seatOf(userId)) reject('already_in_kitchen')
+    const key = nameKey(name).slice(0, 40)
+    const now = Date.now()
+    const tries = this.attempts.get(key) ?? { failed: 0, lockouts: 0, lockedUntil: 0, lastAttempt: now }
+    if (tries.lockedUntil > now) reject('pin_locked', { retryAt: new Date(tries.lockedUntil).toISOString() })
+
+    const found = this.members().find((m) => !m.deletedAt && nameKey(m.name) === key && this.pins.get(m.id) === pin)
+    if (!found) {
+      // The same answer for a wrong PIN and for a name nobody has: strangers learn nothing.
+      tries.failed += 1
+      tries.lastAttempt = now
+      this.attempts.set(key, tries)
+      if (tries.failed >= PIN_TRIES) {
+        tries.failed = 0
+        tries.lockouts += 1
+        tries.lockedUntil = now + lockMinutes(tries.lockouts) * 60_000
+        reject('pin_locked', { retryAt: new Date(tries.lockedUntil).toISOString() })
+      }
+      return reject('pin_wrong', { triesLeft: PIN_TRIES - tries.failed })
     }
-    return reject('recovery_key_invalid')
+
+    this.attempts.delete(key)
+    if (found.disabledAt) reject('account_paused')
+    this.devices.set(userId, found.id)
+    return { householdId: found.householdId, memberId: found.id }
   }
 
-  recoveryPeek(_userId: string, key: string): RecoveryPeek {
-    const householdId = this.householdForKey(key)
-    return {
-      householdId,
-      members: this.seats(householdId).map((m) => ({ id: m.id, name: m.name, avatar: m.avatar, color: m.color })),
-    }
-  }
-
-  recoverMember(userId: string, key: string, memberId: ID): Membership {
-    if (this.memberOf(userId)) reject('already_in_kitchen')
-    const householdId = this.householdForKey(key)
-    const seat = this.seats(householdId).find((m) => m.id === memberId) ?? reject('member_not_found')
-    seat.userId = userId
-    seat.updatedAt = this.now()
-    this.emit(householdId)
-    return { householdId, memberId: seat.id }
-  }
-
-  rotateRecoveryKey(userId: string): string {
+  setPin(userId: string, pin: string): void {
     const me = this.memberOf(userId) ?? reject('not_in_kitchen')
-    const key = this.code(20)
-    this.recoveryKeys.set(me.householdId, key)
-    return key
+    this.checkPin(pin)
+    this.pins.set(me.id, pin)
+    this.attempts.delete(nameKey(me.name))
+  }
+
+  signOutDevice(userId: string): void {
+    this.devices.delete(userId)
+  }
+
+  private dropDevices(memberId: ID, except?: string): number {
+    let count = 0
+    for (const [login, member] of this.devices) {
+      if (member !== memberId || login === except) continue
+      this.devices.delete(login)
+      count += 1
+    }
+    return count
+  }
+
+  signOutOtherDevices(userId: string): number {
+    const me = this.memberOf(userId) ?? reject('not_in_kitchen')
+    return this.dropDevices(me.id, userId)
+  }
+
+  // ------------------------------------------------------------------- admin --
+
+  private partnerOf(admin: MemberRow, memberId: ID): MemberRow {
+    if (memberId === admin.id) reject('not_yourself')
+    return this.seats(admin.householdId).find((m) => m.id === memberId) ?? reject('member_not_found')
+  }
+
+  setMemberPaused(userId: string, memberId: ID, paused: boolean): void {
+    const partner = this.partnerOf(this.admin(userId), memberId)
+    if (Boolean(partner.disabledAt) === paused) return
+    partner.disabledAt = paused ? this.now() : null
+    this.touch(partner)
+  }
+
+  signOutMember(userId: string, memberId: ID): number {
+    return this.dropDevices(this.partnerOf(this.admin(userId), memberId).id)
+  }
+
+  /**
+   * The owner's master key, for when both people are locked out. In the real cloud this
+   * can only be run from the Supabase dashboard (private.rescue_code), never from the app.
+   */
+  rescueCode(name: string): string {
+    const seat = this.members().find((m) => !m.deletedAt && nameKey(m.name) === nameKey(name)) ?? reject('member_not_found')
+    const code = this.code(10)
+    this.invites.set(code, { code, householdId: seat.householdId, kind: 'restore', memberId: seat.id, createdBy: seat.id, expiresAt: Date.now() + 48 * 3_600_000, usedAt: null })
+    return code
   }
 
   // -------------------------------------------------------------------- sync --
@@ -254,9 +383,15 @@ export class FakeCloud {
       table.set(op.id, { ...(existing as Row), ...defined({ name, settings }), updatedAt: at })
     } else if (op.table === 'members') {
       // Each person may edit only their own profile fields.
-      if (op.kind !== 'patch' || !existing || (existing as MemberRow).userId !== userId) return
+      if (op.kind !== 'patch' || !existing || existing.id !== me.id) return
       const allowed = Object.fromEntries(Object.entries(op.data).filter(([k]) => PROFILE_FIELDS.includes(k)))
       if (typeof allowed.status === 'string' && allowed.status.length > 60) reject('status_too_long')
+      if (typeof allowed.name === 'string') {
+        const wanted = nameKey(allowed.name)
+        if (!wanted || allowed.name.length > 40) reject('name_invalid')
+        // Names are how people log in, so two people cannot share one.
+        if (this.seats(me.householdId).some((m) => m.id !== me.id && nameKey(m.name) === wanted)) reject('name_taken')
+      }
       table.set(op.id, { ...existing, ...allowed, updatedAt: at })
     } else {
       if (!WRITABLE_TABLES.includes(op.table)) reject('forbidden')
@@ -289,13 +424,13 @@ export class FakeCloud {
           const mine = name === 'households' ? row.id === me.householdId : row.householdId === me.householdId
           if (!mine) continue
           if (since && (row.updatedAt as ISO) <= since) continue
-          const { userId: _userId, ...visible } = row
-          rows.push(structuredClone(visible) as Row)
+          rows.push(structuredClone(row))
         }
       }
       tables[name] = rows
     }
-    return { serverTime: this.now(), tables }
+    const seat = this.seatOf(userId)
+    return { serverTime: this.now(), tables, seat: !seat ? 'gone' : seat.disabledAt ? 'paused' : 'ok' }
   }
 
   subscribe(listener: (householdId: ID) => void): () => void {

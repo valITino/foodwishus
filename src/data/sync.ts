@@ -11,7 +11,11 @@ import { META, type AppDB } from './db'
 import type { Store } from './store'
 import { nowIso, SYNC_TABLES, type ID, type ISO, type Photo } from './types'
 
-export type SyncState = 'idle' | 'syncing' | 'offline' | 'error' | 'locked-out'
+/**
+ * locked-out: this device is no longer logged in. paused: the admin has paused the profile;
+ * the engine keeps asking and carries on by itself once it is switched on again.
+ */
+export type SyncState = 'idle' | 'syncing' | 'offline' | 'error' | 'locked-out' | 'paused'
 
 export interface SyncStatus {
   state: SyncState
@@ -150,10 +154,10 @@ export class SyncEngine {
     if (!householdId || this.status.state === 'locked-out') return
     this.setStatus({ state: 'syncing' })
     try {
-      if (!this.seatConfirmed) {
-        if ((await this.backend.membership()) === null) throw new LockedOut()
-        this.seatConfirmed = true
-      }
+      // Ask the cloud whether this device still has its seat: once after opening the app,
+      // and before every pass that has something to send. A device that was logged out or
+      // paused must keep its changes instead of sending them into the void.
+      if (!this.seatConfirmed || this.status.state === 'paused' || (await this.db.outbox.count()) > 0) await this.confirmSeat()
       await this.pushOutbox()
       if (await this.uploadBlobs(householdId)) await this.pushOutbox()
       await this.pull()
@@ -164,6 +168,8 @@ export class SyncEngine {
     } catch (e) {
       if (isLockedOut(e)) {
         this.setStatus({ state: 'locked-out', lastError: null })
+      } else if (e instanceof Paused) {
+        this.setStatus({ state: 'paused', lastError: null })
       } else if (isBackendError(e) && e.kind === 'network') {
         this.setStatus({ state: 'offline', lastError: null })
       } else {
@@ -174,6 +180,14 @@ export class SyncEngine {
     } finally {
       await this.refreshCounts()
     }
+  }
+
+  private async confirmSeat(): Promise<void> {
+    this.seatConfirmed = false
+    const seat = await this.backend.membership()
+    if (seat === null) throw new LockedOut()
+    if (seat.paused) throw new Paused()
+    this.seatConfirmed = true
   }
 
   // ---------------------------------------------------------------- 1. push --
@@ -194,7 +208,7 @@ export class SyncEngine {
         // A refusal can mean this phone was unpaired. Never throw data away in that case.
         if (!membershipChecked) {
           membershipChecked = true
-          if ((await this.backend.membership()) === null) throw new LockedOut()
+          await this.confirmSeat()
         }
 
         const attempts = op.attempts + 1
@@ -246,6 +260,9 @@ export class SyncEngine {
   private async pull(): Promise<void> {
     const since = (await this.db.getMeta<ISO>(META.cursor)) ?? null
     const result = await this.backend.pull(since)
+    // An idle device learns here that it was logged out or paused from somewhere else.
+    if (result.seat === 'gone') throw new LockedOut()
+    if (result.seat === 'paused') throw new Paused()
 
     const tables = SYNC_TABLES.map((t) => this.db.table(t))
     await this.db.transaction('rw', [...tables, this.db.outbox, this.db.meta], async () => {
@@ -331,6 +348,12 @@ export class SyncEngine {
 class LockedOut extends Error {
   constructor() {
     super('locked_out')
+  }
+}
+
+class Paused extends Error {
+  constructor() {
+    super('paused')
   }
 }
 

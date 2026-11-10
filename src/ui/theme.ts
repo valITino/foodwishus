@@ -37,6 +37,12 @@ export function initTheme(): void {
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => apply(getTheme()))
 }
 
+/** Hear about every change. Returns a function that stops listening. */
+export function onThemeChange(fn: () => void): () => void {
+  listeners.add(fn)
+  return () => listeners.delete(fn)
+}
+
 export function useTheme(): ThemeChoice {
   return useSyncExternalStore((fn) => {
     listeners.add(fn)

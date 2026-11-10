@@ -6,6 +6,7 @@ import type { Backend, Membership, ProfileInput } from './backend'
 import { AppDB, META } from './db'
 import { HttpFakeBackend } from './fake/httpBackend'
 import { getPref, setPref } from './prefs'
+import { takeSeat } from './seat'
 import { Store } from './store'
 import { SupabaseBackend } from './supabaseBackend'
 import { SyncEngine, type SyncStatus } from './sync'
@@ -36,38 +37,37 @@ export function useSyncStatus(): SyncStatus {
   )
 }
 
-/** Remember which kitchen this phone belongs to, then fetch everything. */
+/** Remember who this device is logged in as, then fetch everything. */
 async function adopt(membership: Membership): Promise<void> {
-  await db.transaction('rw', db.meta, async () => {
-    await db.setMeta(META.householdId, membership.householdId)
-    await db.setMeta(META.memberId, membership.memberId)
-    await db.meta.delete(META.cursor)
-  })
+  await takeSeat(db, membership)
   await sync.start()
   await sync.sync()
 }
 
-/** Start the kitchen. Returns the recovery key, which is shown exactly once. */
-export async function startKitchen(name: string, me: ProfileInput): Promise<string> {
-  const result = await backend.createHousehold(name, me)
-  await adopt(result)
-  return result.recoveryKey
+/** Open the kitchen. Whoever does this is its admin. The PIN is for logging in on other devices. */
+export async function startKitchen(name: string, me: ProfileInput, pin: string): Promise<void> {
+  await adopt(await backend.createHousehold(name, me, pin))
 }
 
 /**
- * Join with an invite code, or move a profile to this phone with a restore code.
- * Returns which of the two happened. After a "restore" the profile already exists:
- * do not overwrite it with what was typed during onboarding.
+ * Use a code from the admin. "join" takes the second seat with this profile and PIN.
+ * "restore" logs in as the profile the code was made for (the profile typed here is
+ * ignored) and replaces its forgotten PIN. Returns which of the two happened.
  */
-export async function joinKitchen(code: string, me: ProfileInput): Promise<'join' | 'restore'> {
-  const result = await backend.joinHousehold(code, me)
+export async function joinKitchen(code: string, me: ProfileInput, pin: string): Promise<'join' | 'restore'> {
+  const result = await backend.joinHousehold(code, me, pin)
   await adopt(result)
   return result.kind
 }
 
+/** Log in on this device with name and PIN. Profile, settings and everything else follow. */
+export async function logIn(name: string, pin: string): Promise<void> {
+  await adopt(await backend.signInWithPin(name, pin))
+}
+
 /**
- * This login already has a seat in the cloud but the phone does not know it (the reply
- * to "start" or "join" was lost on the way). Take the seat. Returns false when there is none.
+ * This login already has a seat in the cloud but the device does not know it (the reply
+ * to "start", "join" or "log in" was lost on the way). Take the seat. Returns false when there is none.
  */
 export async function resumeKitchen(): Promise<boolean> {
   const membership = await backend.membership()
@@ -76,9 +76,24 @@ export async function resumeKitchen(): Promise<boolean> {
   return true
 }
 
-/** Get back in with the recovery key, as one of the kitchen's existing members. */
-export async function recoverKitchen(recoveryKey: string, memberId: string): Promise<void> {
-  await adopt(await backend.recoverMember(recoveryKey, memberId))
+/**
+ * Log this device out and wipe its copy of the kitchen. Needs a connection, so the cloud
+ * knows the device is gone. Changes that were not sent yet are lost: check
+ * `sync.status.pending` first and warn. The page reloads to the start screen.
+ */
+export async function logOut(): Promise<void> {
+  await backend.signOutDevice()
+  await forgetThisDevice()
+}
+
+/** The cloud already logged this device out: wipe the local copy and start over. */
+export async function forgetThisDevice(): Promise<void> {
+  sync.stop()
+  await backend.signOut().catch(() => undefined)
+  db.close()
+  await Dexie.delete(db.name)
+  window.location.hash = '/'
+  window.location.reload()
 }
 
 let booting: Promise<{ paired: boolean }> | undefined

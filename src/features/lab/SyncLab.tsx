@@ -10,6 +10,9 @@ import { addPhotoFromFile } from '../../data/photos'
 import { newId, nowIso, type Dish } from '../../data/types'
 import { Button, Card, Field, SyncPill } from '../../ui/components'
 
+/** The lab is a developer bench: everybody there gets the same PIN. */
+const LAB_PIN = '246813'
+
 function Thumb({ id }: { id: string }) {
   const url = usePhotoUrl(id)
   return url ? (
@@ -92,9 +95,9 @@ export function SyncLab() {
       {me === null && (
         <Card className="flex flex-col gap-3">
           <Field label="Your name" value={name} onChange={(e) => setName(e.target.value)} />
-          <Button onClick={guard(async () => void (await startKitchen('Our kitchen', { name, defaultRole: 'chef' })))}>Start our kitchen</Button>
+          <Button onClick={guard(async () => void (await startKitchen('Our kitchen', { name, defaultRole: 'chef' }, LAB_PIN)))}>Start our kitchen</Button>
           <Field label="Invite code" value={code} onChange={(e) => setCode(e.target.value)} />
-          <Button variant="secondary" onClick={guard(async () => void (await joinKitchen(code, { name, defaultRole: 'taster' })))}>
+          <Button variant="secondary" onClick={guard(async () => void (await joinKitchen(code, { name, defaultRole: 'taster' }, LAB_PIN)))}>
             Join with code
           </Button>
         </Card>

@@ -23,8 +23,8 @@ describe('pairing', () => {
   it('refuses a second kitchen, a third person and a wrong code', async () => {
     const { her } = await makeCouple(cloud)
     const stranger = makePhone(cloud)
-    await expect(stranger.backend.createHousehold('Mine', { name: 'X' })).rejects.toMatchObject({ code: 'kitchen_already_exists' })
-    await expect(stranger.backend.joinHousehold('WRONGCODE1', { name: 'X' })).rejects.toMatchObject({ code: 'invite_invalid' })
+    await expect(stranger.backend.createHousehold('Mine', { name: 'X' }, '864209')).rejects.toMatchObject({ code: 'kitchen_already_exists' })
+    await expect(stranger.backend.joinHousehold('WRONGCODE1', { name: 'X' }, '864209')).rejects.toMatchObject({ code: 'invite_invalid' })
     await expect(her.backend.createInvite('join')).rejects.toMatchObject({ code: 'kitchen_full' })
     expect((await stranger.backend.pull(null)).tables.dishes).toEqual([])
   })
@@ -258,14 +258,14 @@ describe('photos', () => {
 })
 
 describe('restore and lock-out', () => {
-  it('moves a profile to a new phone and locks the old one out without losing its unsent work', async () => {
+  it('lets a person back in on a new phone and logs the old one out without losing its unsent work', async () => {
     const { her, him } = await makeCouple(cloud)
     const hisMemberId = (await him.store.memberId()) as string
 
     const invite = await her.backend.createInvite('restore', hisMemberId)
     const newPhone = makePhone(cloud)
-    const membership = await newPhone.backend.joinHousehold(invite.code, { name: 'ignored' })
-    expect(membership.memberId).toBe(hisMemberId)
+    const membership = await newPhone.backend.joinHousehold(invite.code, { name: 'ignored' }, '864209')
+    expect(membership).toMatchObject({ memberId: hisMemberId, kind: 'restore' })
     await newPhone.adopt(membership)
     await newPhone.engine.sync()
     expect((await newPhone.db.members.toArray()).map((m) => m.name).sort()).toEqual(['Leo', 'Mia'])
@@ -275,20 +275,5 @@ describe('restore and lock-out', () => {
     expect(him.engine.status.state).toBe('locked-out')
     expect(await him.db.outbox.count()).toBe(1)
     expect(await him.db.deadLetters.count()).toBe(0)
-  })
-
-  it('lets the recovery key bring a profile back when both phones are gone', async () => {
-    const { her, recoveryKey } = await makeCouple(cloud)
-    await her.dish({ name: 'Zopf' })
-    await her.engine.sync()
-
-    const fresh = makePhone(cloud)
-    await expect(fresh.backend.recoveryPeek('AAAAAAAAAAAAAAAAAAAA')).rejects.toMatchObject({ code: 'recovery_key_invalid' })
-    const pretty = `${recoveryKey.slice(0, 5)}-${recoveryKey.slice(5, 10)}-${recoveryKey.slice(10).toLowerCase()}`
-    const peek = await fresh.backend.recoveryPeek(pretty)
-    const mia = peek.members.find((m) => m.name === 'Mia')
-    await fresh.adopt(await fresh.backend.recoverMember(pretty, mia?.id as string))
-    await fresh.engine.sync()
-    expect((await fresh.db.dishes.toArray()).map((d) => d.name)).toEqual(['Zopf'])
   })
 })

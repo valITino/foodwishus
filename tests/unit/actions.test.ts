@@ -18,7 +18,7 @@ beforeEach(async () => {
   await db.setMeta(META.householdId, householdId)
   await db.setMeta(META.memberId, memberId)
   const at = nowIso()
-  const me: Member = { id: memberId, householdId, name: 'Leo', avatar: 'fork', color: 'sage', accessory: null, status: null, defaultRole: 'taster', createdAt: at, updatedAt: at, deletedAt: null }
+  const me: Member = { id: memberId, householdId, name: 'Leo', avatar: 'fork', color: 'sage', accessory: null, status: null, defaultRole: 'taster', prefs: {}, isAdmin: false, disabledAt: null, createdAt: at, updatedAt: at, deletedAt: null }
   await db.members.put(me)
 })
 

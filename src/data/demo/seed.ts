@@ -43,8 +43,8 @@ export async function ensureDemoKitchen(db: AppDB, options: SeedOptions = {}): P
     const householdId = newId()
     const row = { householdId, createdAt: at, updatedAt: at, deletedAt: null }
     const household: Household = { id: householdId, name: say(KITCHEN.name, lang), settings: {}, createdAt: at, updatedAt: at, deletedAt: null }
-    const chef: Member = { ...row, id: newId(), name: 'Mia', avatar: 'whisk', color: 'rose', accessory: 'bow', status: say(KITCHEN.chefStatus, lang), defaultRole: 'chef' }
-    const taster: Member = { ...row, createdAt: joinedAt, updatedAt: joinedAt, id: newId(), name: 'Leo', avatar: 'fork', color: 'sage', accessory: null, status: say(KITCHEN.tasterStatus, lang), defaultRole: 'taster' }
+    const chef: Member = { ...row, id: newId(), name: 'Mia', avatar: 'whisk', color: 'rose', accessory: 'bow', status: say(KITCHEN.chefStatus, lang), defaultRole: 'chef', prefs: {}, isAdmin: false, disabledAt: null }
+    const taster: Member = { ...row, createdAt: joinedAt, updatedAt: joinedAt, id: newId(), name: 'Leo', avatar: 'fork', color: 'sage', accessory: null, status: say(KITCHEN.tasterStatus, lang), defaultRole: 'taster', prefs: {}, isAdmin: true, disabledAt: null }
     const criteria: Criterion[] = CRITERIA.map(([, en, de, icon], sortOrder) => ({ ...row, id: newId(), label: lang === 'de' ? de : en, icon, active: true, sortOrder }))
 
     await db.transaction('rw', db.tables, async () => {

@@ -42,6 +42,9 @@ function subscribe(fn: () => void): () => void {
   return () => listeners.delete(fn)
 }
 
+/** Hear about every change. Returns a function that stops listening. */
+export const onLangChange = subscribe
+
 export function useLang(): Lang {
   return useSyncExternalStore(subscribe, getLang)
 }

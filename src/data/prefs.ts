@@ -1,4 +1,5 @@
-// Choices that belong to this phone only (they do not sync).
+// Choices kept on this device. showCalories also travels with the person's profile
+// (src/app/settingsSync.ts); the demo switches stay local.
 
 import { useSyncExternalStore } from 'react'
 
@@ -38,6 +39,12 @@ export function setPref<K extends keyof Prefs>(key: K, value: Prefs[K]): void {
     /* private mode: keep it in memory */
   }
   for (const fn of listeners) fn()
+}
+
+/** Hear about every change. Returns a function that stops listening. */
+export function onPrefChange(fn: () => void): () => void {
+  listeners.add(fn)
+  return () => listeners.delete(fn)
 }
 
 export function usePref<K extends keyof Prefs>(key: K): Prefs[K] {

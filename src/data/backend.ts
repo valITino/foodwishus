@@ -14,16 +14,26 @@ export type BackendErrorKind =
   /** The cloud project is not configured yet (for example anonymous sign-ins are off). */
   | 'setup'
 
+/** Extra facts that come with some refusals. */
+export interface BackendErrorDetails {
+  /** pin_wrong: how many tries are left before the name is paused. */
+  triesLeft?: number
+  /** pin_locked: when the next try is allowed. */
+  retryAt?: ISO
+}
+
 export class BackendError extends Error {
   readonly kind: BackendErrorKind
   /** Stable machine code, such as "kitchen_full" or "invite_invalid". */
   readonly code: string
+  readonly details: BackendErrorDetails
 
-  constructor(kind: BackendErrorKind, code: string, message?: string) {
+  constructor(kind: BackendErrorKind, code: string, message?: string, details: BackendErrorDetails = {}) {
     super(message ?? code)
     this.name = 'BackendError'
     this.kind = kind
     this.code = code
+    this.details = details
   }
 }
 
@@ -36,12 +46,16 @@ export interface Session {
 export interface Membership {
   householdId: ID
   memberId: ID
+  /** The admin has paused this profile. Nothing syncs until it is switched on again. */
+  paused?: boolean
 }
 
 export interface ProfileInput {
   name: string
   avatar?: string
   color?: string
+  accessory?: string | null
+  status?: string | null
   defaultRole?: Role
 }
 
@@ -51,9 +65,23 @@ export interface Invite {
   expiresAt: ISO
 }
 
-export interface RecoveryPeek {
-  householdId: ID
-  members: { id: ID; name: string; avatar: string; color: string }[]
+/** What a person looks like to someone who is not in the kitchen yet. */
+export interface PersonCard {
+  name: string
+  avatar: string
+  color: string
+  accessory: string | null
+  defaultRole: Role
+}
+
+/** What a code leads to, before it is used. */
+export interface InvitePeek {
+  kind: 'join' | 'restore'
+  kitchenName: string
+  /** Who made the code. */
+  host: PersonCard | null
+  /** Restore codes only: the profile that is waiting to be picked up. */
+  profile: PersonCard | null
 }
 
 /** One change on its way to the cloud. "put" sends a whole row, "patch" only the changed fields. */
@@ -69,23 +97,49 @@ export interface PullResult {
   serverTime: ISO
   /** camelCase rows that changed since the cursor, per table. */
   tables: Partial<Record<SyncTable, Record<string, unknown>[]>>
+  /** Whether this device still has its seat: logged in, paused by the admin, or logged out. */
+  seat: 'ok' | 'paused' | 'gone'
 }
 
 export interface Backend {
   readonly name: 'supabase' | 'fake' | 'memory'
 
-  /** Returns the current login, creating an anonymous one on first launch. Needs a connection once. */
+  /** Returns this device's login, creating an anonymous one on first launch. Needs a connection once. */
   ensureSession(): Promise<Session>
-  /** Which kitchen this login belongs to, or null when the phone is not paired. */
+  /** Which profile this device is logged in as, or null when it is not logged in. */
   membership(): Promise<Membership | null>
+  /** True once somebody has opened the kitchen. There is only ever one. */
+  kitchenExists(): Promise<boolean>
 
-  createHousehold(name: string, me: ProfileInput): Promise<Membership & { recoveryKey: string }>
+  /** Open the kitchen. The PIN is what lets this person log in on other devices later. */
+  createHousehold(name: string, me: ProfileInput, pin: string): Promise<Membership>
+  /**
+   * Admin only. "join" invites the second person. "restore" lets the partner back in
+   * without their PIN (they choose a new one).
+   */
   createInvite(kind: 'join' | 'restore', memberId?: ID): Promise<Invite>
-  /** kind tells whether a new seat was taken ("join") or an existing profile moved to this phone ("restore"). */
-  joinHousehold(code: string, me: ProfileInput): Promise<Membership & { kind: 'join' | 'restore' }>
-  recoveryPeek(key: string): Promise<RecoveryPeek>
-  recoverMember(key: string, memberId: ID): Promise<Membership>
-  rotateRecoveryKey(): Promise<string>
+  /** Look at a code without using it. Rejects with invite_invalid. */
+  peekInvite(code: string): Promise<InvitePeek>
+  /**
+   * Use a code. "join" takes the second seat with the given profile and PIN. "restore"
+   * logs this device in as the existing profile and replaces its PIN.
+   */
+  joinHousehold(code: string, me: ProfileInput, pin: string): Promise<Membership & { kind: 'join' | 'restore' }>
+  /**
+   * Log this device in as an existing person. Rejects with pin_wrong (details.triesLeft)
+   * or pin_locked (details.retryAt). An unknown name looks exactly like a wrong PIN.
+   */
+  signInWithPin(name: string, pin: string): Promise<Membership>
+  /** Replace my PIN. */
+  setPin(pin: string): Promise<void>
+  /** Log this device out of the profile. Needs a connection. */
+  signOutDevice(): Promise<void>
+  /** Log every other device out of my profile. Resolves with how many there were. */
+  signOutOtherDevices(): Promise<number>
+  /** Admin only: pause the partner's profile, or switch it on again. */
+  setMemberPaused(memberId: ID, paused: boolean): Promise<void>
+  /** Admin only: log the partner out on all their devices. Resolves with how many there were. */
+  signOutMember(memberId: ID): Promise<number>
 
   push(op: PushOp): Promise<void>
   pull(since: ISO | null): Promise<PullResult>
@@ -96,6 +150,7 @@ export interface Backend {
   /** Resolves null when the file is not in the cloud (yet). */
   downloadBlob(path: string): Promise<Blob | null>
 
+  /** Forget this device's login. The next call starts a fresh anonymous one. */
   signOut(): Promise<void>
 }
 

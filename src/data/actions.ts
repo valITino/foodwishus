@@ -188,7 +188,7 @@ export async function removeServing(id: ID): Promise<void> {
 
 // ---------------------------------------------------------------- profile --
 
-export type ProfileChanges = Partial<Pick<Member, 'name' | 'avatar' | 'color' | 'accessory' | 'status' | 'defaultRole'>>
+export type ProfileChanges = Partial<Pick<Member, 'name' | 'avatar' | 'color' | 'accessory' | 'status' | 'defaultRole' | 'prefs'>>
 
 export async function updateMyProfile(changes: ProfileChanges): Promise<void> {
   const { memberId } = await me()
