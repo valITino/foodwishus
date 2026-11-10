@@ -34,7 +34,8 @@ interface People {
 /** Open the demo kitchen on Today and wait until it is ready. */
 async function openKitchen(page: Page): Promise<People> {
   await page.addInitScript(() => {
-    localStorage.setItem('foodwishus.prefs', '{"demoData":true}')
+    // The demo kitchen with its two people and nothing on the table.
+    localStorage.setItem('foodwishus.prefs', '{"demoData":true,"demoEmpty":true}')
     localStorage.setItem('foodwishus.lang', 'en')
   })
   await page.goto('/#/')
@@ -42,21 +43,9 @@ async function openKitchen(page: Page): Promise<People> {
   await page.waitForFunction(() => Boolean(window.__foodwishus))
   const people = await page.evaluate(async () => {
     const { db } = window.__foodwishus
-    // In development React mounts everything twice, and the demo kitchen is currently
-    // seeded once per mount: two kitchens, two Mias, two Leos. Keep the kitchen this
-    // phone belongs to. This transaction queues up behind the seeding, so it sees the
-    // final state; with a single kitchen it changes nothing.
-    return db.transaction('rw', db.tables, async () => {
-      const householdId: string = await db.getMeta('me.householdId')
-      const leo: string = await db.getMeta('me.memberId')
-      for (const table of [db.members, db.criteria]) {
-        const strangers: { id: string; householdId: string }[] = (await table.toArray()).filter((row: { householdId: string }) => row.householdId !== householdId)
-        await table.bulkDelete(strangers.map((row) => row.id))
-      }
-      await db.households.where('id').notEqual(householdId).delete()
-      const members: { id: string; name: string }[] = await db.members.toArray()
-      return { leo, mia: members.find((m) => m.id !== leo)!.id, names: members.map((m) => m.name).sort() }
-    })
+    const leo: string = await db.getMeta('me.memberId')
+    const members: { id: string; name: string }[] = await db.members.toArray()
+    return { leo, mia: members.find((m) => m.id !== leo)!.id, names: members.map((m) => m.name).sort() }
   })
   expect(people.names).toEqual(['Leo', 'Mia'])
   return { mia: people.mia, leo: people.leo }
