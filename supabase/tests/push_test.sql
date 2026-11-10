@@ -1,6 +1,6 @@
 -- Test for push notifications in the database (0007_push.sql): which changes call the
--- push function, that nothing else does, that a write never fails because of it, and
--- who may manage which device's subscription.
+-- push function, that nothing else does, that a write never fails because of it, who
+-- may manage which device's subscription, and who can get at the secret and the keys.
 --
 -- Run it in the Supabase SQL editor, or locally with supabase/tests/local/run.sh push.
 -- It builds a throwaway second kitchen with three throwaway logins, plays through the
@@ -9,7 +9,8 @@
 --
 -- Safe next to a real kitchen: it touches only its own rows, and nothing is ever sent.
 -- pg_net delivers after a commit, and this never commits. While it runs it points the
--- push settings at an address that does not exist; the rollback restores the real ones.
+-- push settings at an address that does not exist; the rollback restores the real ones,
+-- secret and keys included.
 
 do $$
 declare
@@ -26,7 +27,12 @@ declare
   r1 uuid := gen_random_uuid();
   r2 uuid := gen_random_uuid();
   target constant text := 'https://push-test.invalid/functions/v1/push';
-  secret constant text := 'test-secret-0123456789-0123456789-0123456789';
+  v_subject constant text := 'https://push-test.invalid/app/';
+  key_a constant text := 'B' || repeat('a', 86);  -- shaped like a public key
+  key_a_private constant text := repeat('p', 43);
+  key_b constant text := 'B' || repeat('b', 86);
+  key_b_private constant text := repeat('q', 43);
+  v_secret text;
   ep_phone constant text := 'https://push-test.invalid/send/bens-phone';
   ep_tablet constant text := 'https://push-test.invalid/send/bens-tablet';
   ep_new constant text := 'https://push-test.invalid/send/bens-phone-renewed';
@@ -34,6 +40,7 @@ declare
   n integer;
   b boolean;
   txt text;
+  target_now text;
   ev jsonb;
   hdr jsonb;
   report text[] := '{}';
@@ -60,7 +67,10 @@ begin
   select count(*) into seen from public.servings where id = quiet;
   report := report || format('%s 01 no settings row: the proposal is saved (%s) and nothing is sent (%s)', case when n = 0 and seen = 1 then 'ok  ' else 'FAIL' end, seen, n);
 
-  insert into private.push_config (function_url, secret) values (target, secret);
+  -- ---- switching on: one statement, and the secret is made in the database
+  perform private.push_setup(target, v_subject);
+  select c.secret into v_secret from private.push_config c;
+  report := report || format('%s 01b set-up makes its own secret (%s characters) and stores address and subject', case when char_length(v_secret) >= 32 and (select count(*) from private.push_config c where c.function_url = target and c.subject = v_subject) = 1 then 'ok  ' else 'FAIL' end, char_length(v_secret));
   seen := 0;
 
   -- ---- proposed
@@ -72,7 +82,7 @@ begin
   select convert_from(body, 'UTF8')::jsonb, headers into ev, hdr from net.http_request_queue where url = target order by id desc limit 1;
   report := report || format('%s 02 proposing calls the function once (%s) with type, kitchen, actor and meal (%s)',
     case when n = seen + 1 and ev = jsonb_build_object('type', 'proposed', 'household_id', hh, 'actor_id', m1, 'serving_id', meal, 'review_id', null) then 'ok  ' else 'FAIL' end, n - seen, ev ->> 'type');
-  report := report || format('%s 03 the call carries the shared secret and is JSON', case when hdr ->> 'x-push-secret' = secret and hdr ->> 'Content-Type' = 'application/json' then 'ok  ' else 'FAIL' end);
+  report := report || format('%s 03 the call carries the shared secret and is JSON', case when hdr ->> 'x-push-secret' = v_secret and hdr ->> 'Content-Type' = 'application/json' then 'ok  ' else 'FAIL' end);
   seen := n;
 
   -- ---- ordinary edits are not events
@@ -325,6 +335,107 @@ begin
      and has_function_privilege('authenticated', 'private.my_member_ids()', 'execute')
      and has_function_privilege('authenticated', 'private.seat_state()', 'execute') into b;
   report := report || format('%s 34 the settings, the secret and the sending are out of the app''s reach; the old helpers still work (%s)', case when b then 'ok  ' else 'FAIL' end, b);
+
+  -- ---- the secret and the keys: made here, readable by the function only
+  perform private.push_setup('https://push-test.invalid/functions/v1/push-moved', v_subject);
+  select c.secret, c.function_url into txt, target_now from private.push_config c;
+  report := report || format('%s 35 running set-up again moves the address (%s) and keeps the secret', case when txt = v_secret and target_now like '%%push-moved' then 'ok  ' else 'FAIL' end, target_now like '%%push-moved');
+
+  perform private.push_new_secret();
+  select c.secret into txt from private.push_config c;
+  report := report || format('%s 36 a new secret on request: different, and long enough (%s characters)', case when txt <> v_secret and char_length(txt) >= 32 then 'ok  ' else 'FAIL' end, char_length(txt));
+  v_secret := txt;
+
+  begin
+    perform private.push_setup('http://push-test.invalid/not-https', v_subject);
+    report := report || text 'FAIL 37 set-up accepted an address that is not https';
+  exception when others then
+    report := report || format('ok   37 set-up refuses an address that is not https (%s)', sqlstate);
+  end;
+
+  execute 'set local role authenticated';
+  perform set_config('request.jwt.claims', json_build_object('sub', u1, 'role', 'authenticated')::text, true);
+  begin
+    perform public.push_settings();
+    report := report || text 'FAIL 38 a logged-in device could read the secret and the private key';
+  exception when others then
+    report := report || format('ok   38 a logged-in device cannot read the secret or the private key (%s)', sqlstate);
+  end;
+  begin
+    perform public.push_store_keys(key_a, key_a_private);
+    report := report || text 'FAIL 39 a logged-in device could plant its own key pair';
+  exception when others then
+    report := report || format('ok   39 a logged-in device cannot plant a key pair (%s)', sqlstate);
+  end;
+  select public.push_public_key() into txt;
+  report := report || format('%s 40 a logged-in device may ask for the public key: none yet (%s)', case when txt is null then 'ok  ' else 'FAIL' end, coalesce(txt, 'null'));
+  execute 'reset role';
+
+  execute 'set local role anon';
+  n := 0;
+  begin perform public.push_settings(); exception when others then n := n + 1; end;
+  begin perform public.push_store_keys(key_a, key_a_private); exception when others then n := n + 1; end;
+  begin perform public.push_public_key(); exception when others then n := n + 1; end;
+  execute 'reset role';
+  report := report || format('%s 41 somebody without a login gets none of the three (%s of 3 refused)', case when n = 3 then 'ok  ' else 'FAIL' end, n);
+
+  execute 'set local role service_role';
+  ev := public.push_settings();
+  report := report || format('%s 42 the function (service role) gets secret and subject, and sees that there are no keys yet',
+    case when ev ->> 'secret' = v_secret and ev ->> 'subject' = v_subject and ev -> 'vapid_public' = 'null'::jsonb and ev -> 'vapid_private' = 'null'::jsonb then 'ok  ' else 'FAIL' end);
+  begin
+    perform public.push_store_keys('not a key', key_a_private);
+    report := report || text 'FAIL 43 something that is not a key was stored';
+  exception when others then
+    report := report || format('%s 43 something that is not a key is refused (%s)', case when sqlerrm = 'push_invalid' then 'ok  ' else 'FAIL' end, sqlerrm);
+  end;
+  ev := public.push_store_keys(key_a, key_a_private);
+  hdr := public.push_store_keys(key_b, key_b_private);
+  report := report || format('%s 44 the first pair is kept; a second caller is answered with that same pair',
+    case when ev = jsonb_build_object('vapid_public', key_a, 'vapid_private', key_a_private) and hdr = ev then 'ok  ' else 'FAIL' end);
+  ev := public.push_settings();
+  execute 'reset role';
+  report := report || format('%s 45 from then on the function gets the pair with its settings', case when ev ->> 'vapid_public' = key_a and ev ->> 'vapid_private' = key_a_private and ev ->> 'secret' = v_secret then 'ok  ' else 'FAIL' end);
+
+  execute 'set local role authenticated';
+  select public.push_public_key() into txt;
+  execute 'reset role';
+  report := report || format('%s 46 and the app gets the public half, nothing more', case when txt = key_a then 'ok  ' else 'FAIL' end);
+
+  perform private.push_setup(target, v_subject);
+  select count(*) into n from private.push_config c where c.vapid_public = key_a and c.secret = v_secret;
+  report := report || format('%s 47 running set-up again keeps the keys too (%s)', case when n = 1 then 'ok  ' else 'FAIL' end, n);
+
+  perform private.push_forget_keys();
+  execute 'set local role service_role';
+  ev := public.push_store_keys(key_b, key_b_private);
+  execute 'reset role';
+  report := report || format('%s 48 after the keys are thrown away, a new pair can be stored', case when ev ->> 'vapid_public' = key_b then 'ok  ' else 'FAIL' end);
+
+  delete from private.push_config;
+  perform private.push_new_secret();
+  perform private.push_forget_keys();
+  execute 'set local role service_role';
+  ev := public.push_settings();
+  hdr := public.push_store_keys(key_a, key_a_private);
+  execute 'reset role';
+  select count(*) into n from private.push_config;
+  report := report || format('%s 49 switched off: no settings, no keys, nothing stored (%s rows)', case when ev is null and hdr is null and public.push_public_key() is null and n = 0 then 'ok  ' else 'FAIL' end, n);
+
+  select not has_function_privilege('authenticated', 'public.push_settings()', 'execute')
+     and not has_function_privilege('authenticated', 'public.push_store_keys(text, text)', 'execute')
+     and not has_function_privilege('anon', 'public.push_settings()', 'execute')
+     and not has_function_privilege('anon', 'public.push_store_keys(text, text)', 'execute')
+     and not has_function_privilege('anon', 'public.push_public_key()', 'execute')
+     and has_function_privilege('authenticated', 'public.push_public_key()', 'execute')
+     and has_function_privilege('service_role', 'public.push_settings()', 'execute')
+     and has_function_privilege('service_role', 'public.push_store_keys(text, text)', 'execute')
+     and not has_function_privilege('authenticated', 'private.push_setup(text, text)', 'execute')
+     and not has_function_privilege('authenticated', 'private.push_new_secret()', 'execute')
+     and not has_function_privilege('authenticated', 'private.push_forget_keys()', 'execute')
+     and not has_function_privilege('service_role', 'private.push_setup(text, text)', 'execute')
+     and not has_function_privilege('anon', 'private.push_setup(text, text)', 'execute') into b;
+  report := report || format('%s 50 on paper too: settings and keys for the service role, the public key for logged-in devices, set-up for the owner alone (%s)', case when b then 'ok  ' else 'FAIL' end, b);
 
   raise exception E'PUSH REPORT (rolled back)\n%', array_to_string(report, E'\n');
 end

@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { handlePush, SECRET_HEADER, type PushConfig } from '../../supabase/functions/push/handler'
+import { pushHandler, SECRET_HEADER } from '../../supabase/functions/push/handler'
 import { fromBase64Url, toBase64Url } from '../../supabase/functions/push/webpush'
+import { makeBrowser, open, type Browser } from './pushBrowser'
 
 // The whole push function, minus its Deno wrapper, run against a stand-in database
 // (Supabase's REST dialect) and a stand-in push service. Nothing here leaves the machine.
+//
+// The function is given no secrets: the shared secret, the subject and the VAPID keys
+// are in the database, and it fetches them with the service role.
 
 const SUPABASE = 'https://project.supabase.test'
 const SERVICE_KEY = 'service-role-key-for-tests'
@@ -15,54 +19,37 @@ const MEAL = '0f8fad5b-d9cb-469f-a165-70867728950e'
 const DISH = '55555555-5555-4555-8555-555555555555'
 const MENU = '66666666-6666-4666-8666-666666666666'
 const REVIEW = '44444444-4444-4444-8444-444444444444'
-const NOW = new Date('2026-11-10T17:30:00Z')
+const START = new Date('2026-11-10T17:30:00Z').getTime()
+const SUBJECT = 'https://kitchen.example.org/foodwishus/'
 
-type Bytes = Uint8Array<ArrayBuffer>
 type Row = Record<string, unknown>
-interface Browser {
-  id: string
-  endpoint: string
-  keys: CryptoKeyPair
-  publicKey: Bytes
-  auth: Bytes
-}
-
-const utf8 = (text: string): Bytes => new TextEncoder().encode(text)
-
-async function makeBrowser(name: string): Promise<Browser> {
-  const keys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])
-  return { id: crypto.randomUUID(), endpoint: `https://push.service.test/send/${name}`, keys, publicKey: new Uint8Array(await crypto.subtle.exportKey('raw', keys.publicKey)), auth: crypto.getRandomValues(new Uint8Array(16)) }
-}
-
-async function hkdf(salt: Bytes, secret: Bytes, info: Bytes, length: number): Promise<Bytes> {
-  const key = await crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveBits'])
-  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, key, length * 8))
-}
-
-/** What the browser would read: opens a sealed message with the subscription's own keys. */
-async function open(body: Uint8Array, browser: Browser): Promise<Record<string, string>> {
-  const salt = body.slice(0, 16)
-  const sender = body.slice(21, 21 + body[20])
-  const senderKey = await crypto.subtle.importKey('raw', sender, { name: 'ECDH', namedCurve: 'P-256' }, false, [])
-  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: senderKey }, browser.keys.privateKey, 256))
-  const info = new Uint8Array([...utf8('WebPush: info\0'), ...browser.publicKey, ...sender])
-  const ikm = await hkdf(browser.auth, shared, info, 32)
-  const key = await crypto.subtle.importKey('raw', await hkdf(salt, ikm, utf8('Content-Encoding: aes128gcm\0'), 16), 'AES-GCM', false, ['decrypt'])
-  const plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: await hkdf(salt, ikm, utf8('Content-Encoding: nonce\0'), 12) }, key, body.slice(21 + body[20])))
-  return JSON.parse(new TextDecoder().decode(plain.slice(0, plain.lastIndexOf(2)))) as Record<string, string>
-}
+const utf8 = (text: string) => new TextEncoder().encode(text)
 
 // ------------------------------------------------------------ the stand-ins --
 
+/** private.push_config: one row, or none while notifications are not set up. */
+interface ConfigRow {
+  secret: string
+  subject: string
+  vapid_public: string | null
+  vapid_private: string | null
+}
+
 let tables: Record<string, Row[]>
+let settingsRow: ConfigRow | null
 let pushes: { endpoint: string; headers: Record<string, string>; body: Uint8Array }[]
-let dbCalls: { method: string; url: string; headers: Record<string, string> }[]
+let dbCalls: { method: string; url: string; headers: Record<string, string>; body: Row | null }[]
 let pushStatus: Record<string, number>
 let dbDown = false
-let config: PushConfig
+let rowGoneWhenStoring = false
+/** The clock every handler in a test reads. */
+let clock = START
 let leoPhone: Browser
 let leoTablet: Browser
 let miaPhone: Browser
+
+const looks = () => dbCalls.filter((c) => c.url === '/rest/v1/rpc/push_settings').length
+const stores = () => dbCalls.filter((c) => c.url === '/rest/v1/rpc/push_store_keys')
 
 /** Just enough of PostgREST: eq, in and is.null filters on one table. */
 function query(table: string, params: URLSearchParams): Row[] {
@@ -80,16 +67,27 @@ function query(table: string, params: URLSearchParams): Row[] {
 const world = (async (input: string | URL | Request, init: RequestInit = {}) => {
   const url = new URL(String(input))
   const headers = (init.headers ?? {}) as Record<string, string>
+  const answer = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
   if (url.origin === SUPABASE) {
-    dbCalls.push({ method: init.method ?? 'GET', url: url.pathname + url.search, headers })
-    if (dbDown) return new Response('{"message":"down"}', { status: 503 })
+    const body = typeof init.body === 'string' ? (JSON.parse(init.body) as Row) : null
+    dbCalls.push({ method: init.method ?? 'GET', url: url.pathname + url.search, headers, body })
+    if (dbDown) return answer({ message: 'down' }, 503)
+    // The two database functions that are for the service role alone (0007_push.sql).
+    if (url.pathname === '/rest/v1/rpc/push_settings') return answer(settingsRow)
+    if (url.pathname === '/rest/v1/rpc/push_store_keys') {
+      const { p_public, p_private } = body as { p_public: string; p_private: string }
+      if (!/^[A-Za-z0-9_-]{87}$/.test(p_public) || !/^[A-Za-z0-9_-]{43}$/.test(p_private)) return answer({ code: 'P0001', message: 'push_invalid' }, 400)
+      if (!settingsRow || rowGoneWhenStoring) return answer(null)
+      if (!settingsRow.vapid_public) Object.assign(settingsRow, { vapid_public: p_public, vapid_private: p_private })
+      return answer({ vapid_public: settingsRow.vapid_public, vapid_private: settingsRow.vapid_private })
+    }
     const table = url.pathname.replace('/rest/v1/', '')
     if (init.method === 'DELETE') {
       const gone = new Set(query(table, url.searchParams))
       tables[table] = tables[table].filter((row) => !gone.has(row))
       return new Response(null, { status: 204 })
     }
-    return new Response(JSON.stringify(query(table, url.searchParams)), { status: 200, headers: { 'content-type': 'application/json' } })
+    return answer(query(table, url.searchParams))
   }
   if (url.origin === 'https://push.service.test') {
     pushes.push({ endpoint: url.href, headers, body: init.body as Uint8Array })
@@ -110,18 +108,20 @@ const subscription = (browser: Browser, memberId: string, muted: string[] = []):
   muted_types: muted,
 })
 
+/** A VAPID pair as the function would make and store it. */
+async function makeKeys(): Promise<{ vapid_public: string; vapid_private: string }> {
+  const keys = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'])
+  return { vapid_public: toBase64Url(new Uint8Array(await crypto.subtle.exportKey('raw', keys.publicKey))), vapid_private: (await crypto.subtle.exportKey('jwk', keys.privateKey)).d as string }
+}
+
+/** One running copy of the function. Each has its own memory of the settings, like in the cloud. */
+const startFunction = () => pushHandler({ supabaseUrl: SUPABASE, serviceRoleKey: SERVICE_KEY }, { fetch: world, now: () => new Date(clock) })
+let handle: ReturnType<typeof startFunction>
+
 beforeEach(async () => {
-  const vapidKeys = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'])
-  config = {
-    supabaseUrl: SUPABASE,
-    serviceRoleKey: SERVICE_KEY,
-    pushSecret: SECRET,
-    vapid: {
-      publicKey: toBase64Url(new Uint8Array(await crypto.subtle.exportKey('raw', vapidKeys.publicKey))),
-      privateKey: (await crypto.subtle.exportKey('jwk', vapidKeys.privateKey)).d as string,
-      subject: 'mailto:kitchen@example.org',
-    },
-  }
+  clock = START
+  settingsRow = { secret: SECRET, subject: SUBJECT, ...(await makeKeys()) }
+  handle = startFunction()
   leoPhone = await makeBrowser('leo-phone')
   leoTablet = await makeBrowser('leo-tablet')
   miaPhone = await makeBrowser('mia-phone')
@@ -129,6 +129,7 @@ beforeEach(async () => {
   dbCalls = []
   pushStatus = {}
   dbDown = false
+  rowGoneWhenStoring = false
   tables = {
     members: [
       { id: MIA, household_id: H, name: 'Mia', prefs: { lang: 'en' }, disabled_at: null, deleted_at: null },
@@ -146,34 +147,54 @@ beforeEach(async () => {
 
 const eventBody = (changes: Row = {}) => ({ type: 'served', household_id: H, actor_id: MIA, serving_id: MEAL, review_id: null, ...changes })
 
-function call(body: unknown, options: { secret?: string | null; method?: string } = {}): Promise<Response> {
+function call(body: unknown, options: { secret?: string | null; method?: string; on?: typeof handle } = {}): Promise<Response> {
   const headers: Record<string, string> = { 'content-type': 'application/json' }
   if (options.secret !== null) headers[SECRET_HEADER] = options.secret ?? SECRET
   const method = options.method ?? 'POST'
   const request = new Request('https://project.supabase.test/functions/v1/push', { method, headers, body: method === 'POST' ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined })
-  return handlePush(request, config, { fetch: world, now: () => NOW })
+  return (options.on ?? handle)(request)
 }
 
 // ---------------------------------------------------------------- the tests --
 
 describe('who may call the function', () => {
-  it('refuses a call without the shared secret, or with a wrong one, before looking anything up', async () => {
+  it('refuses a call without the secret before looking anything up', async () => {
     expect((await call(eventBody(), { secret: null })).status).toBe(401)
-    expect((await call(eventBody(), { secret: 'guess' })).status).toBe(401)
-    expect((await call(eventBody(), { secret: `${SECRET}x` })).status).toBe(401)
     expect((await call(eventBody(), { secret: '' })).status).toBe(401)
     expect(dbCalls).toEqual([])
     expect(pushes).toEqual([])
   })
 
-  it('refuses everything while its own secrets are missing, even a call with an empty secret', async () => {
-    for (const broken of [{ pushSecret: '' }, { pushSecret: 'short' }, { serviceRoleKey: '' }, { supabaseUrl: '' }, { vapid: { ...config.vapid, privateKey: '' } }, { vapid: { ...config.vapid, subject: '' } }] as Partial<PushConfig>[]) {
-      const request = new Request('https://project.supabase.test/functions/v1/push', { method: 'POST', headers: { [SECRET_HEADER]: broken.pushSecret ?? SECRET }, body: JSON.stringify(eventBody()) })
-      const answer = await handlePush(request, { ...config, ...broken }, { fetch: world, now: () => NOW })
-      expect(answer.status).toBe(500)
+  it('refuses a wrong secret, and sends nothing', async () => {
+    for (const guess of ['guess', `${SECRET}x`, SECRET.slice(1)]) {
+      const answer = await call(eventBody(), { secret: guess })
+      expect(answer.status).toBe(401)
+      expect(await answer.json()).toEqual({ error: 'wrong_secret' })
     }
-    expect(dbCalls).toEqual([])
     expect(pushes).toEqual([])
+    // It looked at its settings and at nothing else in the kitchen.
+    expect(dbCalls.map((c) => c.url)).toEqual(['/rest/v1/rpc/push_settings'])
+  })
+
+  it('answers "not set up" while the database has no settings for it', async () => {
+    settingsRow = null
+    const answer = await call(eventBody())
+    expect(answer.status).toBe(500)
+    expect(await answer.json()).toEqual({ error: 'not_set_up' })
+    expect((await call({ type: 'init' })).status).toBe(500)
+    expect(pushes).toEqual([])
+    expect(stores()).toEqual([])
+  })
+
+  it('is given nothing but the service role key, and fetches the rest with it', async () => {
+    await call(eventBody())
+    expect(dbCalls[0]).toMatchObject({ method: 'POST', url: '/rest/v1/rpc/push_settings', body: {}, headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } })
+    // Neither the service role key nor the shared secret ever travels to a push service.
+    expect(pushes.length).toBeGreaterThan(0)
+    for (const push of pushes) {
+      expect(JSON.stringify(push.headers)).not.toContain(SERVICE_KEY)
+      expect(JSON.stringify(push.headers)).not.toContain(SECRET)
+    }
   })
 
   it('answers only to POST, and only to events it knows', async () => {
@@ -182,7 +203,150 @@ describe('who may call the function', () => {
     expect((await call({ type: 'served' })).status).toBe(400)
     expect((await call(eventBody({ type: 'burnt' }))).status).toBe(400)
     expect((await call(eventBody({ serving_id: `${MEAL}&or=(id.neq.x)` }))).status).toBe(400)
-    expect(dbCalls).toEqual([])
+    expect(dbCalls.filter((c) => !c.url.startsWith('/rest/v1/rpc/'))).toEqual([])
+    expect(pushes).toEqual([])
+  })
+})
+
+describe('remembering the settings', () => {
+  it('asks the database once, then again after five minutes', async () => {
+    await call(eventBody())
+    await call(eventBody())
+    clock += 4 * 60_000
+    await call(eventBody())
+    expect(looks()).toBe(1)
+    clock += 2 * 60_000
+    await call(eventBody())
+    expect(looks()).toBe(2)
+  })
+
+  it('picks up a new secret by itself: the first call with it makes it look again', async () => {
+    await call(eventBody())
+    expect(looks()).toBe(1)
+
+    // select private.push_new_secret();
+    const fresh = 'another-secret-made-in-the-database-0123456789abcdef'
+    ;(settingsRow as ConfigRow).secret = fresh
+    clock += 30_000
+    const answer = await call(eventBody(), { secret: fresh })
+    expect(answer.status).toBe(200)
+    expect(looks()).toBe(2)
+    // The old one is history.
+    expect((await call(eventBody(), { secret: SECRET })).status).toBe(401)
+  })
+
+  it('however many wrong secrets arrive, it asks the database at most once in ten seconds', async () => {
+    await call(eventBody())
+    for (let i = 0; i < 20; i++) {
+      clock += 1000
+      expect((await call(eventBody(), { secret: `guess-${i}` })).status).toBe(401)
+    }
+    // Twenty seconds of guessing: the first look, and two more.
+    expect(looks()).toBe(3)
+    // The right secret still works straight away.
+    expect((await call(eventBody())).status).toBe(200)
+  })
+
+  it('does not hammer the database while it is not set up, and notices when it is', async () => {
+    settingsRow = null
+    for (let i = 0; i < 5; i++) expect((await call(eventBody())).status).toBe(500)
+    expect(looks()).toBe(1)
+
+    // select private.push_setup(...);
+    settingsRow = { secret: SECRET, subject: SUBJECT, vapid_public: null, vapid_private: null }
+    clock += 11_000
+    expect((await call({ type: 'init' })).status).toBe(200)
+  })
+})
+
+describe('the key pair', () => {
+  const noKeys = () => Object.assign(settingsRow as ConfigRow, { vapid_public: null, vapid_private: null })
+
+  it('"init" makes the pair, stores it in the database and answers with the public half only', async () => {
+    noKeys()
+    const answer = await call({ type: 'init' })
+    expect(answer.status).toBe(200)
+    const body = (await answer.json()) as { ok: boolean; publicKey: string }
+    expect(Object.keys(body).sort()).toEqual(['ok', 'publicKey'])
+    expect(body.ok).toBe(true)
+
+    // A real P-256 public key, uncompressed, the way a browser wants it.
+    const point = fromBase64Url(body.publicKey)
+    expect(point.length).toBe(65)
+    expect(point[0]).toBe(4)
+    expect(settingsRow).toMatchObject({ vapid_public: body.publicKey })
+    expect(settingsRow?.vapid_private).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(JSON.stringify(body)).not.toContain(settingsRow?.vapid_private as string)
+
+    // The two halves belong together: what the private half signs, the public half verifies.
+    const jwk = { kty: 'EC', crv: 'P-256', x: toBase64Url(point.slice(1, 33)), y: toBase64Url(point.slice(33, 65)) }
+    const signer = await crypto.subtle.importKey('jwk', { ...jwk, d: settingsRow?.vapid_private as string }, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign'])
+    const checker = await crypto.subtle.importKey('raw', point, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'])
+    const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, signer, utf8('hello'))
+    expect(await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, checker, signature, utf8('hello'))).toBe(true)
+  })
+
+  it('"init" a second time changes nothing and answers with the same key', async () => {
+    noKeys()
+    const first = (await (await call({ type: 'init' })).json()) as { publicKey: string }
+    const second = (await (await call({ type: 'init' })).json()) as { publicKey: string }
+    const elsewhere = (await (await call({ type: 'init' }, { on: startFunction() })).json()) as { publicKey: string }
+    expect(second.publicKey).toBe(first.publicKey)
+    expect(elsewhere.publicKey).toBe(first.publicKey)
+    expect(stores()).toHaveLength(1)
+  })
+
+  it('two first calls at the same moment end up with one pair', async () => {
+    noKeys()
+    const [a, b] = await Promise.all([call({ type: 'init' }, { on: startFunction() }), call({ type: 'init' }, { on: startFunction() })])
+    const [first, second] = [(await a.json()) as { publicKey: string }, (await b.json()) as { publicKey: string }]
+    expect(first.publicKey).toBe(second.publicKey)
+    expect(first.publicKey).toBe(settingsRow?.vapid_public)
+  })
+
+  it('"init" needs the secret like everything else', async () => {
+    noKeys()
+    expect((await call({ type: 'init' }, { secret: 'guess' })).status).toBe(401)
+    expect((await call({ type: 'init' }, { secret: null })).status).toBe(401)
+    expect(settingsRow?.vapid_public).toBeNull()
+    expect(stores()).toEqual([])
+  })
+
+  it('an ordinary event makes the pair too if nobody has yet, and signs with it', async () => {
+    noKeys()
+    const answer = await call(eventBody())
+    expect(await answer.json()).toEqual({ type: 'served', sent: 2, gone: 0, failed: 0 })
+    expect(stores()).toHaveLength(1)
+    expect(settingsRow?.vapid_public).toMatch(/^[A-Za-z0-9_-]{87}$/)
+    for (const push of pushes) expect(push.headers.Authorization).toContain(`k=${settingsRow?.vapid_public}`)
+
+    // The next event uses what is there.
+    await call(eventBody())
+    expect(stores()).toHaveLength(1)
+  })
+
+  it('after the keys were thrown away, "init" makes new ones even where the old are still remembered', async () => {
+    await call(eventBody())
+    const before = settingsRow?.vapid_public
+    // select private.push_forget_keys();
+    noKeys()
+    const answer = (await (await call({ type: 'init' })).json()) as { publicKey: string }
+    expect(answer.publicKey).not.toBe(before)
+    expect(answer.publicKey).toBe(settingsRow?.vapid_public)
+
+    pushes = []
+    await call(eventBody())
+    for (const push of pushes) expect(push.headers.Authorization).toContain(`k=${answer.publicKey}`)
+  })
+
+  it('reports it when the pair cannot be stored', async () => {
+    // Notifications were switched off between the look and the storing: the row is gone.
+    noKeys()
+    rowGoneWhenStoring = true
+    const answer = await call({ type: 'init' })
+    expect(answer.status).toBe(502)
+    expect(await answer.json()).toEqual({ error: 'failed', message: 'the key pair could not be stored' })
+    expect(pushes).toEqual([])
   })
 })
 
@@ -202,21 +366,20 @@ describe('"Served, proof needed!"', () => {
       url: `/review/${MEAL}`,
     })
     expect(onPhone.headers).toMatchObject({ 'Content-Encoding': 'aes128gcm', TTL: '21600', Urgency: 'high', Topic: MEAL.replaceAll('-', '') })
-    // Signed as us, for this push service.
+    // Signed as us, with the key and the subject from the database, for this push service.
     const [, token, key] = /^vapid t=(.+), k=(.+)$/.exec(onPhone.headers.Authorization) as RegExpExecArray
-    expect(key).toBe(config.vapid.publicKey)
-    expect(JSON.parse(new TextDecoder().decode(fromBase64Url(token.split('.')[1])))).toMatchObject({ aud: 'https://push.service.test', sub: 'mailto:kitchen@example.org' })
+    expect(key).toBe(settingsRow?.vapid_public)
+    expect(JSON.parse(new TextDecoder().decode(fromBase64Url(token.split('.')[1])))).toMatchObject({ aud: 'https://push.service.test', sub: SUBJECT })
   })
 
   it('reads the kitchen with the service role, and only this kitchen', async () => {
     await call(eventBody())
-    expect(dbCalls.length).toBeGreaterThan(0)
-    for (const { headers, url } of dbCalls) {
+    const reads = dbCalls.filter((c) => !c.url.startsWith('/rest/v1/rpc/'))
+    expect(reads.length).toBeGreaterThanOrEqual(4)
+    for (const { headers, url } of reads) {
       expect(headers).toMatchObject({ apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` })
       expect(url).toContain(H)
     }
-    // The service role key never travels to the push service.
-    for (const push of pushes) expect(JSON.stringify(push.headers)).not.toContain(SERVICE_KEY)
   })
 
   it('skips a device that muted this kind, and a paused profile altogether', async () => {
@@ -313,6 +476,16 @@ describe('when something breaks', () => {
     dbDown = true
     const answer = await call(eventBody())
     expect(answer.status).toBe(502)
+    expect(await answer.json()).toMatchObject({ error: 'failed' })
+    expect(pushes).toEqual([])
+
+    // Back up: the very next call works. An outage is not mistaken for "not set up".
+    dbDown = false
+    expect(await (await call(eventBody())).json()).toMatchObject({ sent: 2 })
+    // Down again, this time with the settings still remembered: reported just the same.
+    pushes = []
+    dbDown = true
+    expect((await call(eventBody())).status).toBe(502)
     expect(pushes).toEqual([])
   })
 

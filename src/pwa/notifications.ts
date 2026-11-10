@@ -6,7 +6,10 @@ import { useSyncExternalStore } from 'react'
 import { isDemo, push } from '../data/app'
 import type { PushView } from '../data/push'
 
-/** Call once when the app starts. Never asks for permission: that only follows a tap. */
+/**
+ * Call once when the app starts. Never asks for permission: that only follows a tap.
+ * A device that has notifications off asks the cloud nothing here.
+ */
 export function startNotifications(): void {
   if (isDemo) return
   void push.refresh()

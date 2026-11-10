@@ -9,11 +9,17 @@
 --
 -- How it travels: a trigger notices the change and asks pg_net to call the Edge Function
 -- "push" (supabase/functions/push) once the change is committed. The function works out
--- who should hear about it and sends the notifications. Where the function lives, and the
--- secret it expects, are kept in one row of private.push_config, which the API cannot
--- read. While that row is missing the triggers do nothing, so this migration is safe to
--- apply before the function exists. To switch notifications on, follow
--- supabase/functions/push/README.md.
+-- who should hear about it and sends the notifications.
+--
+-- Nobody ever copies a secret anywhere. Everything the function needs to know lives in
+-- one row of private.push_config, which the API cannot read: where the function is, the
+-- shared secret the triggers send along (made here, in the database), and the VAPID key
+-- pair that signs the messages (made by the function the first time it is asked, and
+-- stored here). The function itself only has what Supabase gives every function: the
+-- project's address and the service role key, with which it fetches the rest.
+-- While the row is missing the triggers do nothing, so this migration is safe to apply
+-- before the function exists. To switch notifications on, follow
+-- supabase/functions/push/README.md: it is three statements.
 --
 -- Also here: every subscription is tied to the login (device) that made it. The app
 -- manages its own through three functions, and a device that is logged out, by itself,
@@ -32,12 +38,20 @@ create index push_subscriptions_user_idx on public.push_subscriptions (user_id);
 drop policy "own devices" on public.push_subscriptions;
 revoke all on public.push_subscriptions from anon, authenticated;
 
--- Where the push function lives and the secret it expects. One row at most.
+-- Everything the push function needs to know. One row at most.
 create table private.push_config (
   only_row boolean primary key default true check (only_row),
+  -- Where the function lives.
   function_url text not null check (function_url ~ '^https://'),
+  -- Sent along by the triggers; the function refuses calls without it.
   secret text not null check (char_length(secret) >= 32),
-  updated_at timestamptz not null default now()
+  -- Whom a push service may contact about our messages: an https address.
+  subject text not null check (subject ~ '^https://'),
+  -- The VAPID key pair, base64url. Empty until the function has made it.
+  vapid_public text check (vapid_public ~ '^[A-Za-z0-9_-]{87}$'),
+  vapid_private text check (vapid_private ~ '^[A-Za-z0-9_-]{43}$'),
+  updated_at timestamptz not null default now(),
+  check ((vapid_public is null) = (vapid_private is null))
 );
 alter table private.push_config enable row level security;
 revoke all on private.push_config from public, anon, authenticated;
@@ -178,6 +192,79 @@ $$;
 create trigger drop_pushes after delete on private.member_devices
   for each row execute function private.drop_device_pushes();
 
+-- ---------------------------------------------------------------- set-up ----
+
+-- Switch notifications on, or change where the function lives. Run once from the SQL
+-- editor (it is not reachable from the app):
+--   select private.push_setup('https://<ref>.supabase.co/functions/v1/push', 'https://<where the app lives>/');
+-- The shared secret is made here the first time and never shown or returned. Running
+-- this again keeps the secret and the keys.
+create function private.push_setup(p_function_url text, p_subject text) returns void
+language sql security definer set search_path = ''
+as $$
+  insert into private.push_config (function_url, secret, subject)
+  values (p_function_url, encode(extensions.gen_random_bytes(32), 'hex'), p_subject)
+  on conflict (only_row) do update
+  set function_url = excluded.function_url, subject = excluded.subject, updated_at = now()
+$$;
+
+-- A new shared secret, should the old one ever have been seen. The function notices by
+-- itself. Does nothing while notifications are not set up.
+create function private.push_new_secret() returns void
+language sql security definer set search_path = ''
+as $$
+  update private.push_config
+  set secret = encode(extensions.gen_random_bytes(32), 'hex'), updated_at = now()
+$$;
+
+-- Throw the VAPID keys away. The function makes new ones the next time it is asked to
+-- (README: "New keys"), and every device signs up again by itself when the app is opened.
+create function private.push_forget_keys() returns void
+language sql security definer set search_path = ''
+as $$
+  update private.push_config
+  set vapid_public = null, vapid_private = null, updated_at = now()
+$$;
+
+-- For the app: the public half of the key pair, which a browser needs to sign up.
+-- Null while notifications are not set up. It is public by nature.
+create function public.push_public_key() returns text
+language sql stable security definer set search_path = ''
+as $$
+  select vapid_public from private.push_config
+$$;
+
+-- For the push function alone (service role): everything it needs. Null without a row.
+create function public.push_settings() returns jsonb
+language sql stable security definer set search_path = ''
+as $$
+  select jsonb_build_object(
+    'secret', secret, 'subject', subject,
+    'vapid_public', vapid_public, 'vapid_private', vapid_private
+  )
+  from private.push_config
+$$;
+
+-- For the push function alone: keep the key pair it just made, unless there is one
+-- already. Answers with the pair that is stored afterwards, so two first calls at the
+-- same moment end up using the same one. Null without a row.
+create function public.push_store_keys(p_public text, p_private text) returns jsonb
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if coalesce(p_public, '') !~ '^[A-Za-z0-9_-]{87}$' or coalesce(p_private, '') !~ '^[A-Za-z0-9_-]{43}$' then
+    raise exception 'push_invalid' using errcode = 'P0001';
+  end if;
+  update private.push_config
+  set vapid_public = p_public, vapid_private = p_private, updated_at = now()
+  where vapid_public is null;
+  return (
+    select jsonb_build_object('vapid_public', vapid_public, 'vapid_private', vapid_private)
+    from private.push_config
+  );
+end
+$$;
+
 -- ------------------------------------------------------------- functions ----
 
 -- Sign this device up for notifications, or replace what is known about it.
@@ -256,11 +343,22 @@ begin
   foreach f in array array[
     'public.save_push_subscription(text, text, text, text[], text)',
     'public.set_push_muted(text, text[])',
-    'public.remove_push_subscription(text)'
+    'public.remove_push_subscription(text)',
+    'public.push_public_key()'
   ]
   loop
     execute format('revoke all on function %s from public, anon', f);
     execute format('grant execute on function %s to authenticated', f);
+  end loop;
+
+  -- The secret and the private key: for the push function's service role and nobody else.
+  foreach f in array array[
+    'public.push_settings()',
+    'public.push_store_keys(text, text)'
+  ]
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
   end loop;
 end
 $$;

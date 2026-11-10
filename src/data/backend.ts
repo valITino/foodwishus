@@ -173,6 +173,11 @@ export interface Backend {
   subscribe(householdId: ID, onChange: () => void): () => void
 
   /**
+   * The public half of the key pair that signs the kitchen's notifications. A browser
+   * needs it to sign up. Null while notifications are not set up for this kitchen.
+   */
+  pushPublicKey(): Promise<string | null>
+  /**
    * Sign this device up for notifications, or replace what the cloud knows about it.
    * One row per device; the row belongs to whoever is logged in on it now.
    * Rejects with not_in_kitchen or push_invalid.

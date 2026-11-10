@@ -14,11 +14,11 @@ export interface PushTarget {
 }
 
 export interface Vapid {
-  /** 65 bytes, base64url: the key the app subscribed with (VITE_VAPID_PUBLIC_KEY). */
+  /** 65 bytes, base64url: the key the app's browsers subscribed with. */
   publicKey: string
-  /** 32 bytes, base64url. Lives only in the function's secrets. */
+  /** 32 bytes, base64url. Lives in the database's private schema and nowhere else. */
   privateKey: string
-  /** "mailto:someone@example.org" or an https address: whom the push service may contact. */
+  /** An https address: where a push service finds whoever sends these messages. */
   subject: string
 }
 
@@ -32,8 +32,8 @@ export interface PushOptions {
 
 type Bytes = Uint8Array<ArrayBuffer>
 
-export function fromBase64Url(text: string): Bytes {
-  const padded = text.replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(text.length / 4) * 4, '=')
+export function fromBase64Url(encoded: string): Bytes {
+  const padded = encoded.replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(encoded.length / 4) * 4, '=')
   const binary = atob(padded)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
@@ -56,7 +56,9 @@ function concat(...parts: Uint8Array[]): Bytes {
   return out
 }
 
-const utf8 = (text: string): Bytes => new TextEncoder().encode(text)
+const utf8 = (plain: string): Bytes => new TextEncoder().encode(plain)
+/** The zero byte that ends each label in the key derivation. */
+const ZERO = new Uint8Array(1)
 
 async function hkdf(salt: Bytes, secret: Bytes, info: Bytes, length: number): Promise<Bytes> {
   const key = await crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveBits'])
@@ -83,13 +85,13 @@ export async function encryptPayload(plaintext: Uint8Array, target: Pick<PushTar
   const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: theirKey }, local.privateKey, 256))
 
   // RFC 8291, section 3.4: mix in the device's secret and both public keys.
-  const keyInfo = concat(utf8('WebPush: info\0'), theirPublic, localPublic)
+  const keyInfo = concat(utf8('WebPush: info'), ZERO, theirPublic, localPublic)
   const ikm = await hkdf(authSecret, shared, keyInfo, 32)
 
   // RFC 8188: one key and one nonce per message, from a fresh salt.
   const salt = fixed?.salt ?? crypto.getRandomValues(new Uint8Array(16))
-  const contentKey = await hkdf(salt, ikm, utf8('Content-Encoding: aes128gcm\0'), 16)
-  const nonce = await hkdf(salt, ikm, utf8('Content-Encoding: nonce\0'), 12)
+  const contentKey = await hkdf(salt, ikm, concat(utf8('Content-Encoding: aes128gcm'), ZERO), 16)
+  const nonce = await hkdf(salt, ikm, concat(utf8('Content-Encoding: nonce'), ZERO), 12)
 
   const key = await crypto.subtle.importKey('raw', contentKey, 'AES-GCM', false, ['encrypt'])
   // 0x02 marks the last (here: only) record.
@@ -103,7 +105,7 @@ export async function encryptPayload(plaintext: Uint8Array, target: Pick<PushTar
 /** The Authorization header that proves the request is ours, for one push service. */
 export async function vapidAuthorization(endpoint: string, vapid: Vapid, now: Date): Promise<string> {
   const publicKey = fromBase64Url(vapid.publicKey)
-  if (publicKey.length !== 65 || publicKey[0] !== 4) throw new Error('VAPID_PUBLIC_KEY is malformed')
+  if (publicKey.length !== 65 || publicKey[0] !== 4) throw new Error('the VAPID public key is malformed')
   const jwk: JsonWebKey = {
     kty: 'EC',
     crv: 'P-256',
@@ -123,7 +125,7 @@ export async function vapidAuthorization(endpoint: string, vapid: Vapid, now: Da
  * Send one message to one device. Resolves with the push service's answer:
  * 201 accepted, 404 or 410 the subscription is gone for good, 429 and 5xx try later.
  */
-export async function sendWebPush(target: PushTarget, payload: string, vapid: Vapid, options: PushOptions, send: typeof fetch = fetch, now: Date = new Date()): Promise<Response> {
+export async function sendWebPush(target: PushTarget, payload: string, vapid: Vapid, options: PushOptions, send: typeof fetch, now: Date): Promise<Response> {
   const body = await encryptPayload(utf8(payload), target)
   const headers: Record<string, string> = {
     Authorization: await vapidAuthorization(target.endpoint, vapid, now),

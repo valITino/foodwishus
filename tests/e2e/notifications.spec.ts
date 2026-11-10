@@ -5,9 +5,9 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 // service worker and no push service, so the browser's part is stood in for here (the
 // worker itself is tested against the production build in tests/pwa). What the cloud
 // would hand to the push service is read from the pretend cloud instead of a lock screen.
-
-/** The example key from RFC 8292. Good enough to subscribe a stand-in with. */
-const KEY = 'BA1Hxzyi1RUM1b5wjxsn7nGxAszw2u61m164i3MrAIxHF6YK5h4SDYic-dRuU_RCPCfA5aq9ojSwk5Y2EmClBPs'
+//
+// The key a browser signs up with comes from the cloud. The pretend cloud has one from
+// the start; "/__cloud/push-key" plays the owner who has not set notifications up yet.
 
 interface Kit {
   db: { outbox: { count(): Promise<number> }; servings: { toArray(): Promise<{ id: string; status: string }[]> } }
@@ -37,8 +37,6 @@ test.afterEach(async () => {
 })
 
 interface PhoneOptions {
-  /** The build's VAPID key. Leave out for "notifications are not set up yet". */
-  key?: string
   /** What the browser already thinks about notifications from this site. */
   permission?: 'default' | 'granted' | 'denied'
   /** What the person answers when the browser asks. */
@@ -57,14 +55,13 @@ async function openPhone(browser: Browser, name: string, options: PhoneOptions =
   const context = await browser.newContext()
   devices.push(context)
   await context.addInitScript(
-    ([who, key, permission, answer, lang, theme, installed]) => {
+    ([who, permission, answer, lang, theme, installed]) => {
       if (!localStorage.getItem('foodwishus.lang')) localStorage.setItem('foodwishus.lang', lang)
       if (!localStorage.getItem('foodwishus.theme')) localStorage.setItem('foodwishus.theme', theme)
       if (!localStorage.getItem('rig.permission')) localStorage.setItem('rig.permission', permission)
       const bump = (counter: string) => localStorage.setItem(counter, String(Number(localStorage.getItem(counter) ?? 0) + 1))
       Object.assign(window, {
         __foodwishusPush: {
-          vapidKey: key,
           device: {
             supported: () => true,
             permission: () => localStorage.getItem('rig.permission'),
@@ -89,7 +86,7 @@ async function openPhone(browser: Browser, name: string, options: PhoneOptions =
         window.matchMedia = (query: string) => (query === '(display-mode: standalone)' ? ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} } as unknown as MediaQueryList) : real(query))
       }
     },
-    [name, options.key ?? '', options.permission ?? 'default', options.answer ?? 'granted', options.lang ?? 'en', options.theme ?? 'light', options.installed ?? false] as const,
+    [name, options.permission ?? 'default', options.answer ?? 'granted', options.lang ?? 'en', options.theme ?? 'light', options.installed ?? false] as const,
   )
   return context.newPage()
 }
@@ -138,8 +135,8 @@ async function act<T>(page: Page, what: (app: Kit) => Promise<T>): Promise<T> {
 
 test('turning notifications on, hearing from the kitchen, muting a kind and turning them off', async ({ browser, request }) => {
   await request.post('/__cloud/reset')
-  const mia = await openPhone(browser, 'mia-phone', { key: KEY })
-  const leo = await openPhone(browser, 'leo-phone', { key: KEY })
+  const mia = await openPhone(browser, 'mia-phone')
+  const leo = await openPhone(browser, 'leo-phone')
   await pair(mia, leo)
   const pushes = async (): Promise<Pushes> => ((await (await request.get('/__cloud/pushes')).json()) as { result: Pushes }).result
   let mealId = ''
@@ -236,8 +233,8 @@ test('turning notifications on, hearing from the kitchen, muting a kind and turn
 
 test('logging a device out takes its notifications along', async ({ browser, request }) => {
   await request.post('/__cloud/reset')
-  const mia = await openPhone(browser, 'mia-phone', { key: KEY })
-  const leo = await openPhone(browser, 'leo-phone', { key: KEY, permission: 'granted' })
+  const mia = await openPhone(browser, 'mia-phone')
+  const leo = await openPhone(browser, 'leo-phone', { permission: 'granted' })
   await pair(mia, leo)
   const pushes = async (): Promise<Pushes> => ((await (await request.get('/__cloud/pushes')).json()) as { result: Pushes }).result
 
@@ -264,8 +261,8 @@ test('logging a device out takes its notifications along', async ({ browser, req
 
 test('a blocked browser gets told how to unblock, in words, and nothing to tap', async ({ browser, request }) => {
   await request.post('/__cloud/reset')
-  const mia = await openPhone(browser, 'mia-phone', { key: KEY, answer: 'denied', lang: 'de', theme: 'dark' })
-  const leo = await openPhone(browser, 'leo-phone', { key: KEY })
+  const mia = await openPhone(browser, 'mia-phone', { answer: 'denied', lang: 'de', theme: 'dark' })
+  const leo = await openPhone(browser, 'leo-phone')
   await pair(mia, leo)
 
   await openNotifications(mia)
@@ -296,8 +293,8 @@ test('a blocked browser gets told how to unblock, in words, and nothing to tap',
 
 test('a closed question is not a no: the page says what to do', async ({ browser, request }) => {
   await request.post('/__cloud/reset')
-  const mia = await openPhone(browser, 'mia-phone', { key: KEY, answer: 'default' })
-  const leo = await openPhone(browser, 'leo-phone', { key: KEY })
+  const mia = await openPhone(browser, 'mia-phone', { answer: 'default' })
+  const leo = await openPhone(browser, 'leo-phone')
   await pair(mia, leo)
   await openNotifications(mia)
   await mia.getByRole('button', { name: 'Turn on notifications' }).click()
@@ -306,20 +303,51 @@ test('a closed question is not a no: the page says what to do', async ({ browser
   await expect(mia.getByRole('button', { name: 'Turn on notifications' })).toBeEnabled()
 })
 
-test('without a key the page says notifications are not set up yet, and offers nothing to tap', async ({ browser, request }) => {
+test('until the owner has set notifications up, the page says so and offers nothing to tap', async ({ browser, request }) => {
   await request.post('/__cloud/reset')
+  // The cloud has no key for browsers to sign up with yet.
+  await request.post('/__cloud/push-key')
   const mia = await openPhone(browser, 'mia-phone')
   const leo = await openPhone(browser, 'leo-phone')
   await pair(mia, leo)
 
-  await mia.goto('/#/settings')
-  await expect(mia.getByTestId('notifications-state')).toHaveText('Not set up yet.')
   await openNotifications(mia)
   await expect(deviceCard(mia)).toHaveAttribute('data-status', 'unconfigured')
   await expect(deviceCard(mia)).toContainText('Notifications are not set up for this kitchen yet.')
   await expect(mia.getByTestId('notifications-page').getByRole('button')).toHaveCount(0)
   await expect(mia.getByTestId('notifications-page').getByRole('switch')).toHaveCount(0)
   expect(await asked(mia)).toBe(0)
+  await mia.getByRole('button', { name: 'Back' }).click()
+  await expect(mia.getByTestId('notifications-state')).toHaveText('Not set up yet.')
+
+  // The owner switches them on (three statements in the SQL editor). No new build, no
+  // update of the app: the next look at the page offers the button.
+  await request.post('/__cloud/push-key?value=BA1Hxzyi1RUM1b5wjxsn7nGxAszw2u61m164i3MrAIxHF6YK5h4SDYic-dRuU_RCPCfA5aq9ojSwk5Y2EmClBPs')
+  await openNotifications(mia)
+  await expect(deviceCard(mia)).toHaveAttribute('data-status', 'off')
+  await mia.getByRole('button', { name: 'Turn on notifications' }).click()
+  await expect(deviceCard(mia)).toHaveAttribute('data-status', 'on')
+  expect(await asked(mia)).toBe(1)
+})
+
+test('a device that has never reached the cloud says it cannot tell yet, instead of guessing', async ({ browser, request }) => {
+  await request.post('/__cloud/reset')
+  const mia = await openPhone(browser, 'mia-phone')
+  const leo = await openPhone(browser, 'leo-phone')
+  await pair(mia, leo)
+  await mia.goto('/#/')
+  await expect(mia.getByRole('navigation', { name: 'Main' })).toBeVisible()
+
+  await mia.context().setOffline(true)
+  await openNotifications(mia)
+  await expect(deviceCard(mia)).toHaveAttribute('data-status', 'unknown')
+  await expect(deviceCard(mia)).toContainText('The cloud cannot be reached right now')
+  await expect(deviceCard(mia).getByRole('button')).toHaveCount(0)
+
+  // Back online and back on the page: now it knows.
+  await mia.context().setOffline(false)
+  await mia.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  await expect(mia.getByRole('button', { name: 'Turn on notifications' })).toBeVisible()
 })
 
 test('the demo kitchen has no notifications to offer', async ({ page }) => {

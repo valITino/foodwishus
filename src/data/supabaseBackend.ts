@@ -174,6 +174,10 @@ export class SupabaseBackend implements Backend {
     return Number(await this.rpc<number>('sign_out_member', { p_member_id: memberId }))
   }
 
+  async pushPublicKey(): Promise<string | null> {
+    return (await this.rpc<string | null>('push_public_key')) || null
+  }
+
   async savePushSubscription(subscription: PushSubscriptionInput): Promise<void> {
     await this.rpc<null>('save_push_subscription', {
       p_endpoint: subscription.endpoint,

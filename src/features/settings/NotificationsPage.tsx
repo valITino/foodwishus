@@ -6,7 +6,7 @@ import { push } from '../../data/app'
 import { PUSH_TYPES, type PushType } from '../../data/backend'
 import type { PushProblem } from '../../data/push'
 import { usePartner } from '../../data/queries'
-import { useCopy } from '../../i18n'
+import { useCopy, useT } from '../../i18n'
 import { usePush } from '../../pwa/notifications'
 import { Button, buzz, Card, Tag, toast, Toggle } from '../../ui/components'
 import { Cloche } from '../../ui/deco/Deco'
@@ -15,17 +15,21 @@ import { deviceCopy } from './deviceCopy'
 
 export function NotificationsPage() {
   const c = useCopy(deviceCopy).notifications
+  const t = useT()
   const { status, muted } = usePush()
   const partner = usePartner()
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<PushProblem | null>(null)
+  /** True once the cloud has been asked (or could not be reached) since this page opened. */
+  const [asked, setAsked] = useState(false)
   const who = partner?.name ?? c.partner
 
-  // What this device remembers may be old: look at what the browser really holds. And
-  // again on coming back, for example from lifting a block in the browser's settings.
+  // Ask the cloud whether notifications are set up, and look at what the browser really
+  // holds: what this device remembers may be old. And again on coming back, for example
+  // from lifting a block in the browser's settings.
   useEffect(() => {
     const look = () => {
-      if (document.visibilityState === 'visible') void push.refresh()
+      if (document.visibilityState === 'visible') void push.refresh(true).finally(() => setAsked(true))
     }
     look()
     document.addEventListener('visibilitychange', look)
@@ -74,6 +78,7 @@ export function NotificationsPage() {
             <Cloche size={52} className="shrink-0" />
           </div>
 
+          {status === 'unknown' && <p className="text-sm text-ink-soft">{asked ? c.cannotAsk : t.loading}</p>}
           {status === 'unconfigured' && <p className="text-sm text-ink-soft">{c.unconfigured}</p>}
           {status === 'unsupported' && <p className="text-sm text-ink-soft">{c.unsupported}</p>}
           {status === 'blocked' && <WarningNote>{c.blocked}</WarningNote>}

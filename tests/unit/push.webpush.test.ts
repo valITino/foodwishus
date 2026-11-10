@@ -67,7 +67,7 @@ async function makeVapid() {
   const keys = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'])
   const publicKey = toBase64Url(new Uint8Array(await crypto.subtle.exportKey('raw', keys.publicKey)))
   const privateKey = (await crypto.subtle.exportKey('jwk', keys.privateKey)).d as string
-  return { keys, vapid: { publicKey, privateKey, subject: 'mailto:kitchen@example.org' } }
+  return { keys, vapid: { publicKey, privateKey, subject: 'https://kitchen.example.org/' } }
 }
 
 describe('base64url', () => {
@@ -137,7 +137,7 @@ describe('signing as us (VAPID, RFC 8292)', () => {
       // The push service's origin, not the whole address.
       aud: 'https://fcm.googleapis.com',
       exp: Math.floor(now.getTime() / 1000) + 12 * 3600,
-      sub: 'mailto:kitchen@example.org',
+      sub: 'https://kitchen.example.org/',
     })
     const sig = fromBase64Url(signature)
     expect(sig.length).toBe(64)
@@ -146,7 +146,7 @@ describe('signing as us (VAPID, RFC 8292)', () => {
 
   it('says so when the public key is not a key', async () => {
     const { vapid } = await makeVapid()
-    await expect(vapidAuthorization('https://push.example.test/x', { ...vapid, publicKey: 'nope' }, new Date())).rejects.toThrow(/VAPID_PUBLIC_KEY/)
+    await expect(vapidAuthorization('https://push.example.test/x', { ...vapid, publicKey: 'nope' }, new Date())).rejects.toThrow(/VAPID public key/)
   })
 })
 
@@ -179,7 +179,7 @@ describe('sending', () => {
       headers = init?.headers as Record<string, string>
       return new Response(null, { status: 201 })
     }) as typeof fetch
-    await sendWebPush(browser.target, 'x', vapid, { ttl: 60, topic: 'far too long for a topic, and with spaces in it' }, send)
+    await sendWebPush(browser.target, 'x', vapid, { ttl: 60, topic: 'far too long for a topic, and with spaces in it' }, send, new Date())
     expect(headers.Topic).toBeUndefined()
     expect(headers.Urgency).toBe('normal')
   })
