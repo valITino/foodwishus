@@ -1,0 +1,25 @@
+name: Keep Supabase awake
+
+# Free Supabase projects pause after about a week without activity. This calls a
+# harmless function every two days. The key below is the publishable key: it is
+# public by design and can read or write nothing by itself.
+#
+# Note: GitHub switches off scheduled workflows in a repository that has seen no
+# activity for 60 days. It emails first; one click re-enables them.
+
+on:
+  schedule:
+    - cron: '23 5 */2 * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the database
+        run: |
+          curl --fail-with-body -sS -X POST \
+            "https://cxdygkvkkmddwbvtnmyg.supabase.co/rest/v1/rpc/ping" \
+            -H "apikey: sb_publishable_IfRq8TQ60_aota-yBYxDgQ_TumFeC_6" \
+            -H "Content-Type: application/json" \
+            -d '{}'
