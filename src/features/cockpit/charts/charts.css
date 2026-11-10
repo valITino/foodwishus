@@ -1,0 +1,49 @@
+/* Charts grow in once, the first time they scroll into view: bars from their baseline,
+   lines from the left, hearts and dots with a small pop. The page-wide reduced-motion
+   rule shortens all of this to nothing. */
+
+.fw-chart [data-g] {
+  transform-box: fill-box;
+  transition:
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.45s ease-out;
+  transition-delay: calc(var(--i, 0) * 26ms);
+}
+
+.fw-chart [data-g='x'] {
+  transform-origin: left center;
+}
+
+.fw-chart [data-g='y'] {
+  transform-origin: center bottom;
+}
+
+.fw-chart [data-g='pop'] {
+  transform-origin: center;
+}
+
+.fw-chart[data-grow='wait'] [data-g='x'] {
+  transform: scaleX(0);
+}
+
+.fw-chart[data-grow='wait'] [data-g='y'] {
+  transform: scaleY(0);
+}
+
+.fw-chart[data-grow='wait'] [data-g='pop'] {
+  transform: scale(0.3);
+  opacity: 0;
+}
+
+.fw-chart[data-grow='wait'] [data-g='fade'] {
+  opacity: 0;
+}
+
+/* Sideways scrollers inside a card (the heart calendar, the day bars) hide their bar. */
+.fw-scroll {
+  scrollbar-width: none;
+}
+
+.fw-scroll::-webkit-scrollbar {
+  display: none;
+}

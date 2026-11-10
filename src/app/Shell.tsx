@@ -4,7 +4,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { boot, isDemo, leaveDemo, useSyncStatus } from '../data/app'
 import { useMe } from '../data/hooks'
-import { CockpitScreen } from '../features/cockpit'
+import { CockpitRoutes, CockpitScreen } from '../features/cockpit'
 import { Onboarding, PausedScreen, usePaused } from '../features/onboarding'
 import { PlanningRoutes, TodayScreen, WeekScreen, WishlistScreen } from '../features/planning'
 import { RecipeBookScreen, RecipesRoutes } from '../features/recipes'
@@ -133,6 +133,7 @@ export function Shell() {
   else if (tab === 'week') page = <WeekScreen />
   else if (tab === 'cockpit') page = <CockpitScreen />
   else if (tab === 'recipes') page = <RecipeBookScreen />
+  else if (path.startsWith('/cockpit/dish/')) page = <CockpitRoutes route={route} />
   else if (path.startsWith('/recipes/') || path.startsWith('/menus/')) page = <RecipesRoutes route={route} />
   else if (path.startsWith('/serving/') || path.startsWith('/propose/')) page = <PlanningRoutes route={route} />
   else if (path.startsWith('/settings')) page = <SettingsRoutes route={route} />
