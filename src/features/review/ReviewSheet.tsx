@@ -135,7 +135,7 @@ export function ReviewSheet({ open, onClose, servingId, dishId, dishName, dish, 
           <p className="mb-2 text-xs font-extrabold">{c.details.portions}</p>
           <div role="group" aria-label={c.details.portions} className="flex flex-wrap gap-2">
             {PORTIONS.map((amount) => (
-              <Chip key={amount} selected={portion === amount} className="px-3.5" onClick={() => change({ portionsEaten: amount })}>
+              <Chip key={amount} selected={portion === amount} className="min-w-11 justify-center px-3.5" onClick={() => change({ portionsEaten: amount })}>
                 {c.details.portionLabels[amount]}
               </Chip>
             ))}

@@ -3,7 +3,7 @@ import { useId, type InputHTMLAttributes, type TextareaHTMLAttributes } from 're
 import { buzz, cx } from './cx'
 
 const fieldBox =
-  'w-full rounded-field border-[1.5px] border-line-strong bg-surface px-4 text-base font-semibold text-ink placeholder:text-ink-soft/70 placeholder:font-medium focus:border-rose-ink focus:outline-none focus:ring-3 focus:ring-rose/40'
+  'w-full rounded-field border-[1.5px] border-line-strong bg-surface px-4 text-base font-semibold text-ink placeholder:text-ink-soft placeholder:font-medium focus:border-rose-ink focus:outline-none focus:ring-3 focus:ring-rose/40'
 
 interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string

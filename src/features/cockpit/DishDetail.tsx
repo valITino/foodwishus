@@ -43,7 +43,8 @@ function Photos({ visits, name, w }: { visits: Visit[]; name: string; w: Words }
           <p className="text-sm text-ink-soft">{c.noPhotos}</p>
         </Card>
       ) : (
-        <ul className="fw-scroll -mx-4 flex snap-x scroll-px-5 gap-4 overflow-x-auto px-5 pb-3 pt-3" data-testid="photo-timeline">
+        // The strip scrolls sideways and holds nothing to tab to, so it takes focus itself: arrow keys then scroll it.
+        <ul tabIndex={0} aria-label={c.photos} className="fw-scroll -mx-4 flex snap-x scroll-px-5 gap-4 overflow-x-auto px-5 pb-3 pt-3 -outline-offset-2" data-testid="photo-timeline">
           {photos.map(({ proof, day }, i) => (
             <li key={proof.photoId} className="w-40 shrink-0 snap-start">
               <Polaroid caption={formatDay(day, w.lang, 'date-short')} source={proof.source} tilt={TILTS[i % TILTS.length]} tape={TAPES[i % TAPES.length]}>

@@ -15,16 +15,52 @@ interface SheetProps {
   footer?: ReactNode
 }
 
-/** A bottom sheet. Drag the handle down, tap outside, press Escape or go back to close. */
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/**
+ * A bottom sheet. Drag the handle down, tap outside, press Escape or go back to close.
+ * While it is open the keyboard stays inside it; when it closes, focus goes back to
+ * whatever opened it.
+ */
 export function Sheet({ open, onClose, title, children, footer }: SheetProps) {
   const controls = useDragControls()
   const t = useT()
   const close = useRef(onClose)
   close.current = onClose
+  const frame = useRef<HTMLDivElement>(null)
+  /** What had focus when the sheet opened. Kept in a ref, so it survives the effect running twice in development. */
+  const opener = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close.current()
+    const active = document.activeElement
+    if (active instanceof HTMLElement && !frame.current?.contains(active)) opener.current = active
+    // Start inside the sheet, unless something in it has asked for focus already (a search field).
+    if (frame.current && !frame.current.contains(active)) frame.current.focus({ preventScroll: true })
+
+    /** Only the sheet on top answers the keyboard when one sheet lies on another. */
+    const onTop = () => {
+      const dialogs = document.querySelectorAll('[role="dialog"]')
+      return dialogs[dialogs.length - 1] === frame.current
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (!frame.current || !onTop()) return
+      if (e.key === 'Escape') return close.current()
+      if (e.key !== 'Tab') return
+      // Tab goes round inside the sheet instead of wandering off to the page underneath.
+      const stops = [...frame.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null)
+      if (stops.length === 0) return e.preventDefault()
+      const [first, last] = [stops[0], stops[stops.length - 1]]
+      const at = document.activeElement
+      const inside = frame.current.contains(at) && at !== frame.current
+      if (e.shiftKey && (!inside || at === first)) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && (!inside || at === last)) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     window.addEventListener('keydown', onKey)
@@ -34,13 +70,16 @@ export function Sheet({ open, onClose, title, children, footer }: SheetProps) {
       document.body.style.overflow = previous
       window.removeEventListener('keydown', onKey)
       release()
+      // Back to where the person was, if that is still on the page and nothing else took focus meanwhile.
+      const lost = !document.activeElement || document.activeElement === document.body || Boolean(frame.current?.contains(document.activeElement))
+      if (opener.current?.isConnected && lost) opener.current.focus({ preventScroll: true })
     }
   }, [open])
 
   return createPortal(
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal="true" aria-label={title}>
+        <div ref={frame} tabIndex={-1} className="fixed inset-0 z-50 flex items-end justify-center outline-none" role="dialog" aria-modal="true" aria-label={title}>
           <motion.div
             className="absolute inset-0 bg-[#2a1f24]/50"
             initial={{ opacity: 0 }}
@@ -156,7 +195,7 @@ export function Toaster() {
             transition={{ type: 'spring', stiffness: 500, damping: 32 }}
             className={cx(
               'flex max-w-full items-center gap-2 rounded-full px-4 py-2.5 text-sm font-extrabold shadow-float',
-              item.tone === 'ok' ? 'bg-ink text-ground' : 'bg-cherry text-white',
+              item.tone === 'ok' ? 'bg-ink text-ground' : 'bg-cherry text-on-cherry',
             )}
           >
             <Icon name={item.tone === 'ok' ? 'check' : 'close'} size={18} />

@@ -95,7 +95,7 @@ export function RoundButton({ label, onClick, children, tone = 'plain', disabled
 
 /** How the shared Field looks, without a width, for inputs that sit inside a row. */
 export const fieldLook =
-  'rounded-field border-[1.5px] border-line-strong bg-surface text-base font-semibold text-ink placeholder:text-ink-soft/70 placeholder:font-medium focus:border-rose-ink focus:outline-none focus:ring-3 focus:ring-rose/40'
+  'rounded-field border-[1.5px] border-line-strong bg-surface text-base font-semibold text-ink placeholder:text-ink-soft placeholder:font-medium focus:border-rose-ink focus:outline-none focus:ring-3 focus:ring-rose/40'
 
 /** The same box the shared Field draws, for inputs that need a different frame around them. */
 export const fieldBox = `w-full px-4 ${fieldLook}`

@@ -108,7 +108,7 @@ export const settingsCopy = {
         profile: { new: () => 'A change to your profile', change: () => 'A change to your profile', removal: () => 'A change to your profile' },
         kitchen: { new: () => "A change to the kitchen's name", change: () => "A change to the kitchen's name", removal: () => "A change to the kitchen's name" },
       },
-      refusedAt: (when: string) => `Refused ${when}`,
+      refusedAt: (when: string) => `Refused: ${when}`,
       retry: 'Try again',
       retried: 'Trying again',
       retryAll: 'Try all again',

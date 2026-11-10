@@ -32,7 +32,7 @@ export function StepPage({ title, backTo = '/', children, footer }: StepPageProp
 export function ErrorNote({ children }: { children: ReactNode }) {
   return (
     <div role="alert" data-testid="pairing-error" className="flex items-start gap-2.5 rounded-card border-[1.5px] border-cherry bg-surface px-3.5 py-3">
-      <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-cherry text-white" aria-hidden>
+      <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-cherry text-on-cherry" aria-hidden>
         <Icon name="close" size={13} />
       </span>
       <p className="min-w-0 text-sm font-bold leading-snug">{children}</p>

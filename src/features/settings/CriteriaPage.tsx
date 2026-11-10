@@ -160,7 +160,6 @@ export function CriteriaPage() {
                     <DragHandle {...handle} label={c.move(criterion.label)} />
                     <button
                       type="button"
-                      aria-label={c.editLabel(criterion.label)}
                       onClick={() => show(criterion)}
                       className="flex min-h-14 min-w-0 flex-1 items-center gap-2.5 py-2 pr-1 text-left"
                       data-testid="criterion-row"

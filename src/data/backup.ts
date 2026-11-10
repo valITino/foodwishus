@@ -100,8 +100,10 @@ export function buildBackup(kitchen: KitchenSnapshot, options: BuildOptions): Ba
     app: options.app,
     madeAt: options.madeAt,
     kitchen: { id: home, name: kitchen.household.name, settings: kitchen.household.settings ?? {} },
+    // Whoever opened the kitchen comes first: the same file every time, whatever order the database hands the rows out in.
     people: mine(kitchen.members)
       .filter((member) => !member.deletedAt)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || (a.id < b.id ? -1 : 1))
       .map((member) => ({ id: member.id, name: member.name, role: member.defaultRole })),
     withPhotos: photoIds !== null,
     tables: {

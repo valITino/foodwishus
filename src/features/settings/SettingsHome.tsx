@@ -109,7 +109,6 @@ export function SettingsHome() {
         {member ? (
           <button
             type="button"
-            aria-label={c.profile.edit}
             data-testid="my-profile"
             onClick={() => navigate('/settings/profile')}
             className="flex w-full items-center gap-4 rounded-card border border-line bg-surface p-4 pt-5 text-left active:translate-y-[2px]"
@@ -124,6 +123,8 @@ export function SettingsHome() {
                 {member.status || c.profile.noStatus}
               </span>
             </span>
+            {/* Read aloud after the name and status, so what is seen is also what is said. */}
+            <span className="sr-only">{c.profile.edit}</span>
             <Icon name="next" size={20} className="shrink-0 text-ink-soft" />
           </button>
         ) : (

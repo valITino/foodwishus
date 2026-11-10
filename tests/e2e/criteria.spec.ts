@@ -54,7 +54,7 @@ test('add, rename, pick an icon, reorder, switch off and on: the review sheet fo
   })
 
   await test.step('rename one and give it another icon', async () => {
-    await page.getByRole('button', { name: 'Edit Texture' }).click()
+    await page.getByRole('button', { name: 'Texture Edit' }).click()
     await expect(sheet(page)).toContainText('Edit criterion')
     await expect(page.getByLabel('Name')).toHaveValue('Texture')
     await page.getByLabel('Name').fill('Bite')
@@ -124,7 +124,7 @@ test('a criterion that was rated can only be switched off, and the Cockpit keeps
   await openCriteria(page)
 
   // Smell has three months of ratings: no way to remove it.
-  await page.getByRole('button', { name: 'Edit Smell' }).click()
+  await page.getByRole('button', { name: 'Smell Edit' }).click()
   await expect(sheet(page)).toContainText(/Rated in \d+ reviews, so it cannot be removed/)
   await expect(sheet(page).getByRole('button', { name: 'Remove criterion' })).toHaveCount(0)
   await sheet(page).getByRole('button', { name: 'Close' }).click()
@@ -137,7 +137,7 @@ test('a criterion that was rated can only be switched off, and the Cockpit keeps
   await page.getByLabel('Name').fill('Typo')
   await sheet(page).getByRole('button', { name: 'Add criterion' }).click()
   await expect(rows(page)).toHaveCount(7)
-  await page.getByRole('button', { name: 'Edit Typo' }).click()
+  await page.getByRole('button', { name: 'Typo Edit' }).click()
   await sheet(page).getByRole('button', { name: 'Remove criterion' }).click()
   await expect(toast(page, 'Removed')).toBeVisible()
   await expect(rows(page)).toHaveCount(6)

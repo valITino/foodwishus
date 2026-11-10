@@ -62,7 +62,7 @@ test('refused changes are listed in plain words, with "Try again" and "Discard"'
     await expect(leo.getByTestId('sync-stuck')).toHaveText('2')
     await expect(refused(leo)).toHaveCount(2)
     await expect(refused(leo).nth(0)).toContainText('A new dish: Smuggled soup')
-    await expect(refused(leo).nth(0)).toContainText(/Refused Today, \d\d:\d\d/)
+    await expect(refused(leo).nth(0)).toContainText(/Refused: Today, \d\d:\d\d/)
     await expect(refused(leo).nth(1)).toContainText('A change to your profile')
     await expect(leo.getByTestId('refused')).toContainText('"Try again" sends a change once more. "Discard" gives up on it for good.')
     // The refused dish is still on this device, and Mia has never seen it.
