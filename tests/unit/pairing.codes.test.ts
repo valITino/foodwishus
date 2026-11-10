@@ -1,32 +1,31 @@
 import { describe, expect, it } from 'vitest'
-import { caretAfterGrouping, cleanCode, groupCode, INVITE_LENGTH, invitePath, KEY_LENGTH, readInvite } from '../../src/features/onboarding/codes'
+import { caretAfterGrouping, cleanCode, groupCode, invitePath, readInvite } from '../../src/features/onboarding/codes'
 
-describe('invite codes and recovery keys', () => {
-  it('cleans what was typed: letters and digits, upper case, cut to length', () => {
-    expect(cleanCode(' abcde-fghjk ', INVITE_LENGTH)).toBe('ABCDEFGHJK')
-    expect(cleanCode('abcde fghjk lmnpq', INVITE_LENGTH)).toBe('ABCDEFGHJK')
-    expect(cleanCode('ab-cd', INVITE_LENGTH)).toBe('ABCD')
-    expect(cleanCode('', KEY_LENGTH)).toBe('')
+describe('invite and restore codes', () => {
+  it('cleans what was typed: letters and digits, upper case, ten at most', () => {
+    expect(cleanCode(' abcde-fghjk ')).toBe('ABCDEFGHJK')
+    expect(cleanCode('abcde fghjk lmnpq')).toBe('ABCDEFGHJK')
+    expect(cleanCode('ab-cd')).toBe('ABCD')
+    expect(cleanCode('')).toBe('')
   })
 
   it('shows codes in groups of five', () => {
     expect(groupCode('ABCDEFGHJK')).toBe('ABCDE-FGHJK')
-    expect(groupCode('ABCDEFGHJKLMNPQRSTUV')).toBe('ABCDE-FGHJK-LMNPQ-RSTUV')
     expect(groupCode('ABCDEFG')).toBe('ABCDE-FG')
     expect(groupCode('ABCDE')).toBe('ABCDE')
     expect(groupCode('')).toBe('')
   })
 
-  it('takes the code out of a pasted invite link and notices a restore link', () => {
-    expect(readInvite('https://example.org/foodwishus/#/join?code=abcdefghjk')).toEqual({ code: 'ABCDEFGHJK', restore: false })
-    expect(readInvite('https://example.org/foodwishus/#/join?code=ABCDEFGHJK&restore=1')).toEqual({ code: 'ABCDEFGHJK', restore: true })
-    expect(readInvite('abcde-fghjk')).toEqual({ code: 'ABCDEFGHJK', restore: false })
+  it('takes the code out of a pasted link', () => {
+    expect(readInvite('https://example.org/foodwishus/#/join/abcdefghjk')).toBe('ABCDEFGHJK')
+    expect(readInvite('https://example.org/foodwishus/#/join/ABCDE-FGHJK')).toBe('ABCDEFGHJK')
+    expect(readInvite('https://example.org/foodwishus/#/join?code=ABCDEFGHJK')).toBe('ABCDEFGHJK')
+    expect(readInvite('abcde-fghjk')).toBe('ABCDEFGHJK')
   })
 
   it('builds the route of an invite link, which reads back to the same code', () => {
-    expect(invitePath('ABCDEFGHJK', false)).toBe('/join?code=ABCDEFGHJK')
-    expect(invitePath('ABCDEFGHJK', true)).toBe('/join?code=ABCDEFGHJK&restore=1')
-    expect(readInvite(`https://x.test/#${invitePath('ABCDEFGHJK', true)}`)).toEqual({ code: 'ABCDEFGHJK', restore: true })
+    expect(invitePath('ABCDEFGHJK')).toBe('/join/ABCDEFGHJK')
+    expect(readInvite(`https://x.test/#${invitePath('ABCDEFGHJK')}`)).toBe('ABCDEFGHJK')
   })
 
   it('keeps the cursor behind the same characters after regrouping', () => {

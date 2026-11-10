@@ -1,562 +1,457 @@
-// Onboarding: everything a phone sees while it is not paired with a kitchen.
+// The start: everything a device shows while nobody is logged in on it.
 //
-//   /                      welcome (or "this phone was signed out")
-//   /start                 make a profile, start the kitchen
-//   /join                  type an invite or restore code
-//   /join?code=XXXX        invite link: make a profile, join
-//   /join?code=XXXX&restore=1   restore link: move an existing profile here
-//   /recover               recovery key, then "which one are you?"
+//   /             welcome: start from scratch, I have a code, look around first, back to the kitchen
+//   /start        open a new kitchen, step by step
+//   /join         type a code
+//   /join/CODE    an invite link (join, step by step) or a restore link (welcome back, new PIN)
+//   /login        "Back to the kitchen": name and PIN
 //
-// The app shell swaps this for the real app the instant the phone is paired. So each
-// pairing call first moves the address to where the app should open, and whatever still
-// has to happen afterwards (showing the recovery key, saving the status line) is handed
-// over through handoff.ts.
+// A device that the cloud has logged out lands here too (lockedOut) and gets the log-in
+// form with its data kept. The screen for a paused seat is PausedScreen, shown by the shell.
+//
+// The app shell swaps this for the real app the instant the device is logged in. So each
+// call first moves the address to where the app should open.
 
 import { MotionConfig } from 'motion/react'
 import { useEffect, useState } from 'react'
 import { navigate, type Route } from '../../app/router'
-import { backend, enterDemo, joinKitchen, recoverKitchen, resumeKitchen, startKitchen } from '../../data/app'
-import { isBackendError, type RecoveryPeek } from '../../data/backend'
-import type { ID } from '../../data/types'
-import { setLang, useCopy, useLang, useT, type Lang } from '../../i18n'
-import { Avatar, Button, buzz, Card, cx, Field, Segmented, toast, Toggle } from '../../ui/components'
-import { Mascot } from '../../ui/deco/Deco'
-import { Icon } from '../../ui/deco/Icon'
-import { defaultDraft, extrasOf, isReady, toProfileInput, type ProfileDraft } from '../profile/draft'
-import { focusNameField, ProfileForm } from '../profile/ProfileForm'
+import { backend, enterDemo, forgetThisDevice, joinKitchen, logIn, resumeKitchen, startKitchen } from '../../data/app'
+import { isBackendError, type InvitePeek, type ProfileInput } from '../../data/backend'
+import { useMe } from '../../data/hooks'
+import { PIN_LENGTH } from '../../data/pin'
+import { useCopy } from '../../i18n'
+import { Avatar, Button, buzz, Card, toast } from '../../ui/components'
+import { toProfileInput, withRole } from '../profile/draft'
 import { CodeField } from './CodeField'
-import { cleanCode, groupCode, INVITE_LENGTH, invitePath, KEY_LENGTH } from './codes'
+import { cleanCode, INVITE_LENGTH, invitePath } from './codes'
 import { pairingCopy } from './copy'
-import { errorCopy, explain } from './errors'
-import { applyParkedProfile, keepKey, oweKey, parkProfile, setStarting } from './handoff'
-import { BusyScreen, ErrorNote, StepPage } from './parts'
+import { LockedOut, LoginPage } from './Login'
+import { NewPinFields, newPinTrouble, type PinTrouble } from './NewPinFields'
+import { BusyScreen, ErrorNote, StepPage, WarningNote } from './parts'
+import { clearSetup, freshSetup, loadSetup, saveSetup, type Setup } from './setupDraft'
+import { useExplain } from './useExplain'
+import { Welcome } from './Welcome'
+import { STEPS, Wizard, type StepName } from './Wizard'
 
-type Busy = 'start' | 'join' | 'restore' | 'recover'
-type Problem = { at: 'start' | 'code' | 'recover'; message: string }
+export { PausedScreen, usePaused } from './Paused'
+
+type Busy = 'start' | 'join' | 'restore' | 'login' | 'peek'
+type Problem = { at: 'welcome' | 'code' | 'login' | 'restore' | StepName; message: string }
+
+const hasCode = (e: unknown, code: string) => isBackendError(e) && e.code === code
+
+/** Which wizard step a refusal from the cloud belongs to. */
+function stepFor(e: unknown): StepName {
+  if (hasCode(e, 'name_taken') || hasCode(e, 'name_invalid')) return 'you'
+  return 'pin'
+}
 
 /**
- * Taking over an existing seat needs a login that holds no seat yet. A phone whose
- * storage was cleared can still carry its old login; in that case sign out and try once more.
+ * Use a code. If the cloud says this device already has a seat, either the first try got
+ * through and only its answer was lost (the code is used up: take the seat), or the device
+ * carries an old login (log that out and use the code properly).
  */
-async function withFreshLogin<T>(attempt: () => Promise<T>): Promise<T> {
+async function joinWithCode(code: string, profile: ProfileInput, pin: string): Promise<void> {
   try {
-    return await attempt()
+    await joinKitchen(code, profile, pin)
   } catch (e) {
-    if (!isBackendError(e) || e.code !== 'already_in_kitchen') throw e
-    await backend.signOut()
-    return attempt()
+    if (!hasCode(e, 'already_in_kitchen')) throw e
+    const unused = await backend.peekInvite(code).then(
+      () => true,
+      (peekError: unknown) => {
+        if (hasCode(peekError, 'invite_invalid')) return false
+        throw peekError
+      },
+    )
+    if (!unused) {
+      if (await resumeKitchen()) return
+      throw e
+    }
+    await backend.signOutDevice()
+    await joinKitchen(code, profile, pin)
   }
+}
+
+/** Log in. An old login still sitting on this device is logged out first, so the name and PIN typed now decide. */
+async function logInAs(name: string, pin: string): Promise<void> {
+  try {
+    await logIn(name, pin)
+  } catch (e) {
+    if (!hasCode(e, 'already_in_kitchen')) throw e
+    await backend.signOutDevice()
+    await logIn(name, pin)
+  }
+}
+
+/** The saved draft, at its step if it belongs to the page we open on, otherwise from the first step. */
+function initialSetup(door: string | undefined, linkCode: string): Setup {
+  const saved = loadSetup()
+  if (!saved) return freshSetup('start')
+  const sameFlow = (door === 'start' && saved.flow === 'start') || (door === 'join' && saved.flow === 'join' && saved.code === linkCode)
+  return sameFlow ? saved : { ...saved, step: 0 }
 }
 
 export function Onboarding({ route, lockedOut }: { route: Route; lockedOut: boolean }) {
   const c = useCopy(pairingCopy)
-  const errors = useCopy(errorCopy)
-  const { path, query } = route
-  const linkCode = cleanCode(query.get('code') ?? '', INVITE_LENGTH)
-  const linkRestore = query.get('restore') === '1'
+  const explain = useExplain()
+  const me = useMe()
+  const { path, segments } = route
+  const door = segments[0]
+  const linkCode = door === 'join' && segments[1] ? cleanCode(segments[1]) : ''
 
-  const [draft, setDraft] = useState<ProfileDraft>(() => defaultDraft(path === '/join' ? 'taster' : 'chef'))
-  const [touched, setTouched] = useState(false)
-  const [kitchenName, setKitchenName] = useState('')
+  const [setup, setSetup] = useState<Setup>(() => initialSetup(door, linkCode))
+  const [pin, setPin] = useState('')
+  const [pinAgain, setPinAgain] = useState('')
   const [code, setCode] = useState(linkCode)
-  const [restore, setRestore] = useState(linkRestore || lockedOut)
-  const [recoveryKey, setRecoveryKey] = useState('')
-  const [peek, setPeek] = useState<RecoveryPeek | null>(null)
+  const [peeked, setPeeked] = useState<{ code: string; peek: InvitePeek } | null>(null)
+  const [loginName, setLoginName] = useState('')
+  const [loginPin, setLoginPin] = useState('')
   const [busy, setBusy] = useState<Busy | null>(null)
+  const [checking, setChecking] = useState(false)
   const [problem, setProblem] = useState<Problem | null>(null)
 
-  // An invite link opened while the app is already showing: take its code over,
-  // and forget what was wrong with the code before it.
-  useEffect(() => {
-    if (path !== '/join' || !linkCode) return
-    setCode(linkCode)
-    setProblem(null)
-    if (linkRestore) setRestore(true)
-  }, [path, linkCode, linkRestore])
+  const patchSetup = (patch: Partial<Setup>) => setSetup((was) => ({ ...was, ...patch }))
+  const problemAt = (at: Problem['at']) => (problem?.at === at ? problem.message : null)
 
-  useEffect(() => {
-    if (lockedOut) setRestore(true)
-  }, [lockedOut])
+  // The draft outlives a reload. The PIN is not part of it.
+  useEffect(() => saveSetup(setup), [setup])
 
-  // Back on the first screen, old complaints are forgotten.
+  // Arrived directly on a deeper page (an invite link, a typed address): put the start
+  // screen underneath, so that going back leads there instead of out of the app. The
+  // router keeps the number of in-app steps behind a page in the history entry itself.
   useEffect(() => {
-    if (path === '/') setProblem(null)
+    const stepsBehind = (window.history.state as { depth?: number } | null)?.depth ?? 0
+    if (stepsBehind > 0 || path === '/') return
+    const here = window.location.hash.replace(/^#/, '')
+    navigate('/', { replace: true })
+    navigate(here)
   }, [path])
 
-  const edit = (patch: Partial<ProfileDraft>) => {
-    setTouched(true)
-    setDraft((was) => ({ ...was, ...patch }))
-  }
+  // Back on the start screen (on purpose, not while a call is on its way): old complaints
+  // and typed PINs are forgotten.
+  useEffect(() => {
+    if (path !== '/' || busy || lockedOut) return
+    setProblem((was) => (was?.at === 'welcome' ? was : null))
+    setPin('')
+    setPinAgain('')
+    setLoginPin('')
+  }, [path, busy, lockedOut])
 
-  /** Open a step. Until something was typed, the profile starts out as that step's usual role. */
-  const open = (to: string, role?: 'chef' | 'taster') => {
-    if (role && !touched) setDraft(defaultDraft(role))
-    setProblem(null)
-    navigate(to)
-  }
+  // The page for opening a kitchen always works on a "start" draft.
+  const draftFlow = setup.flow
+  useEffect(() => {
+    if (door === 'start' && draftFlow !== 'start') setSetup((was) => ({ ...was, flow: 'start', code: '', step: 0 }))
+  }, [door, draftFlow])
 
+  // A device that was logged out still knows who used it: fill in the name.
+  const knownName = me?.member?.name
+  useEffect(() => {
+    if (lockedOut && knownName) setLoginName((was) => was || knownName)
+  }, [lockedOut, knownName])
+
+  // A code in the address (an invite or restore link): look at what it leads to.
+  const peekedCode = peeked?.code
+  useEffect(() => {
+    if (door !== 'join' || !linkCode || busy || peekedCode === linkCode) return
+    setCode(linkCode)
+    if (linkCode.length < INVITE_LENGTH) {
+      setProblem({ at: 'code', message: c.code.tooShort })
+      navigate('/join', { replace: true })
+      return
+    }
+    let current = true
+    backend.peekInvite(linkCode).then(
+      (peek) => current && setPeeked({ code: linkCode, peek }),
+      (e: unknown) => {
+        if (!current) return
+        setProblem({ at: 'code', message: explain(e) })
+        navigate('/join', { replace: true })
+      },
+    )
+    return () => {
+      current = false
+    }
+  }, [door, linkCode, busy, peekedCode, c, explain])
+
+  // A fresh invite: start its wizard at the first step, as the opposite of the host.
+  useEffect(() => {
+    if (!peeked || peeked.peek.kind !== 'join') return
+    setSetup((was) => {
+      if (was.flow === 'join' && was.code === peeked.code) return was
+      const hostRole = peeked.peek.host?.defaultRole
+      const role = hostRole === 'chef' ? 'taster' : hostRole === 'taster' ? 'chef' : was.profile.role
+      return { ...was, flow: 'join', code: peeked.code, step: 0, roleChosen: true, profile: withRole(was.profile, role) }
+    })
+  }, [peeked])
+
+  /** Back to a wizard step (or another screen) with what went wrong. */
   const fail = (at: Problem['at'], e: unknown, backTo: string) => {
-    parkProfile(null)
+    if ((STEPS as readonly string[]).includes(at)) patchSetup({ step: STEPS.indexOf(at as StepName) })
+    setProblem({ at, message: explain(e) })
     setBusy(null)
-    setProblem({ at, message: explain(e, errors) })
     navigate(backTo, { replace: true })
   }
 
-  const start = async () => {
-    if (!isReady(draft)) {
-      focusNameField()
-      return setProblem({ at: 'start', message: c.nameMissing })
+  const openStart = async () => {
+    setProblem(null)
+    setChecking(true)
+    try {
+      // There is only ever one kitchen. If it exists, nobody should fill in a profile for nothing.
+      if (await backend.kitchenExists()) setProblem({ at: 'welcome', message: c.welcome.exists })
+      else {
+        patchSetup({ flow: 'start', code: '', step: 0 })
+        navigate('/start')
+      }
+    } catch (e) {
+      setProblem({ at: 'welcome', message: explain(e) })
     }
+    setChecking(false)
+  }
+
+  const start = async () => {
     setProblem(null)
     setBusy('start')
-    setStarting(true)
-    oweKey(true)
-    parkProfile(extrasOf(draft))
-    // Where the app opens once the kitchen exists: the recovery key, then the invite.
+    // Where the app opens once the kitchen exists: "you are the admin", then the invite.
     navigate('/settings/welcome', { replace: true })
     try {
-      keepKey(await startKitchen(kitchenName.trim() || c.start.defaultKitchen, toProfileInput(draft)))
-      await applyParkedProfile()
-      setStarting(false)
-    } catch (e) {
-      setStarting(false)
-      oweKey(false)
-      // The kitchen may exist already: the first try reached the cloud but its answer got lost.
-      // The recovery key from that try is gone, so go straight to making a new one.
-      if (isBackendError(e) && e.code === 'already_in_kitchen' && (await resumeKitchen().catch(() => false))) {
-        await applyParkedProfile().catch(() => undefined)
-        setBusy(null)
-        navigate('/settings/key', { replace: true })
-        return
-      }
-      fail('start', e, '/start')
-    }
-  }
-
-  const join = async (joinCode: string, asRestore: boolean) => {
-    if (joinCode.length < INVITE_LENGTH) return setProblem({ at: 'code', message: c.code.tooShort })
-    if (!asRestore && !isReady(draft)) {
-      focusNameField()
-      return setProblem({ at: 'code', message: c.nameMissing })
-    }
-    setProblem(null)
-    setBusy(asRestore ? 'restore' : 'join')
-    parkProfile(asRestore ? null : extrasOf(draft))
-    navigate('/', { replace: true })
-    try {
-      const attempt = () => joinKitchen(joinCode, asRestore ? { name: '' } : toProfileInput(draft))
-      const kind = await (asRestore ? withFreshLogin(attempt) : attempt())
-      if (kind === 'restore') {
-        // The profile already exists and came along. Nothing typed here may overwrite it.
-        parkProfile(null)
-        toast(c.done.restored)
-      } else if (asRestore) {
-        // It was an ordinary invite after all: a new seat, so the profile still needs making.
-        navigate('/settings/profile', { replace: true })
-        toast(c.done.joinedFinishProfile)
-      } else {
-        await applyParkedProfile()
-        toast(c.done.joined)
-      }
+      await startKitchen(setup.kitchenName.trim() || c.wizard.defaultKitchen, toProfileInput(setup.profile), pin)
+      clearSetup()
       buzz([12, 40, 12])
     } catch (e) {
-      fail('code', e, '/join')
+      // The first try may have reached the cloud while its answer got lost: then the kitchen is ours already.
+      if (hasCode(e, 'already_in_kitchen') && (await resumeKitchen().catch(() => false))) return clearSetup()
+      if (hasCode(e, 'kitchen_already_exists')) return fail('welcome', e, '/')
+      fail(stepFor(e), e, '/start')
     }
   }
 
-  const findKitchen = async () => {
-    if (recoveryKey.length < KEY_LENGTH) return setProblem({ at: 'recover', message: c.recover.tooShort })
+  const checkCode = async () => {
+    if (code.length < INVITE_LENGTH) return setProblem({ at: 'code', message: c.code.tooShort })
     setProblem(null)
-    setBusy('recover')
+    setBusy('peek')
     try {
-      setPeek(await backend.recoveryPeek(recoveryKey))
+      const peek = await backend.peekInvite(code)
+      setPeeked({ code, peek })
+      navigate(invitePath(code))
     } catch (e) {
-      setProblem({ at: 'recover', message: explain(e, errors) })
+      setProblem({ at: 'code', message: explain(e) })
     }
     setBusy(null)
   }
 
-  const recover = async (memberId: ID) => {
+  /** Use the code that was peeked at: take the second seat, or come back as an existing profile. */
+  const redeem = async (kind: 'join' | 'restore') => {
+    if (!peeked) return
+    const { code: inviteCode, peek } = peeked
     setProblem(null)
-    setBusy('recover')
-    parkProfile(null)
+    setBusy(kind)
     navigate('/', { replace: true })
     try {
-      await withFreshLogin(() => recoverKitchen(recoveryKey, memberId))
-      toast(c.done.recovered)
+      await joinWithCode(inviteCode, kind === 'join' ? toProfileInput(setup.profile) : { name: '' }, pin)
+      clearSetup()
+      toast(kind === 'join' ? c.done.joined : c.done.back(peek.profile?.name ?? ''))
       buzz([12, 40, 12])
     } catch (e) {
-      if (isBackendError(e) && e.code === 'recovery_key_invalid') setPeek(null)
-      fail('recover', e, '/recover')
+      if (hasCode(e, 'invite_invalid') || hasCode(e, 'kitchen_full') || hasCode(e, 'member_not_found')) {
+        setPeeked(null)
+        return fail('code', e, '/join')
+      }
+      fail(kind === 'join' ? stepFor(e) : 'restore', e, invitePath(inviteCode))
     }
+  }
+
+  const login = async () => {
+    if (!loginName.trim()) return setProblem({ at: 'login', message: c.login.nameMissing })
+    if (loginPin.length < PIN_LENGTH) return setProblem({ at: 'login', message: c.login.pinMissing })
+    setProblem(null)
+    setBusy('login')
+    // A logged-out device carries on where it was; from the log-in page the app opens on Today.
+    const stayHere = lockedOut && door !== 'login' && door !== 'join' && door !== 'start'
+    if (!stayHere) navigate('/', { replace: true })
+    try {
+      await logInAs(loginName, loginPin)
+      toast(c.done.back(''))
+      buzz([12, 40, 12])
+    } catch (e) {
+      setLoginPin('')
+      setProblem({ at: 'login', message: explain(e) })
+      setBusy(null)
+      if (!stayHere) navigate(lockedOut ? '/' : '/login', { replace: true })
+    }
+  }
+
+  const loginForm = {
+    name: loginName,
+    pin: loginPin,
+    onName: (name: string) => {
+      setLoginName(name)
+      setProblem(null)
+    },
+    onPin: (value: string) => {
+      setLoginPin(value)
+      setProblem(null)
+    },
+    problem: problemAt('login'),
+    onSubmit: () => void login(),
+  }
+
+  const wizard = {
+    setup,
+    onSetup: patchSetup,
+    pin,
+    pinAgain,
+    onPin: setPin,
+    onPinAgain: setPinAgain,
+    problem: problem && (STEPS as readonly string[]).includes(problem.at) ? { step: problem.at as StepName, message: problem.message } : null,
+    onProblemSeen: () => setProblem(null),
   }
 
   let screen
   if (busy) {
     screen = <BusyScreen label={c.busy[busy]} />
-  } else if (path === '/join' && linkCode.length === INVITE_LENGTH && !restore) {
-    screen = (
-      <JoinStep draft={draft} onEdit={edit} code={linkCode} problem={problem?.at === 'code' ? problem.message : null} onSubmit={() => void join(linkCode, false)} />
-    )
-  } else if (path === '/join') {
+  } else if (door === 'join' && linkCode) {
+    if (peeked?.code !== linkCode) screen = <BusyScreen label={c.busy.peek} />
+    else if (peeked.peek.kind === 'restore') {
+      screen = (
+        <RestoreStep
+          peek={peeked.peek}
+          pin={pin}
+          pinAgain={pinAgain}
+          onPin={setPin}
+          onPinAgain={setPinAgain}
+          problem={problemAt('restore')}
+          onProblemSeen={() => setProblem(null)}
+          onSubmit={() => void redeem('restore')}
+        />
+      )
+    } else if (setup.flow !== 'join' || setup.code !== linkCode) {
+      // One moment: the draft is being pointed at this invite.
+      screen = <BusyScreen label={c.busy.peek} />
+    } else {
+      screen = <Wizard flow="join" {...wizard} peek={peeked.peek} onSubmit={() => void redeem('join')} exitTo="/join" />
+    }
+  } else if (door === 'join') {
     screen = (
       <CodeStep
         code={code}
-        restore={restore}
-        problem={problem?.at === 'code' ? problem.message : null}
-        onCode={(next, meta) => {
+        problem={problemAt('code')}
+        onCode={(next) => {
           setCode(next)
-          if (meta.restore) setRestore(true)
           setProblem(null)
         }}
-        onRestore={setRestore}
-        onSubmit={() => {
-          if (restore) return void join(code, true)
-          if (code.length < INVITE_LENGTH) return setProblem({ at: 'code', message: c.code.tooShort })
-          setProblem(null)
-          if (!touched) setDraft(defaultDraft('taster'))
-          navigate(invitePath(code, false))
-        }}
-      />
-    )
-  } else if (path === '/recover') {
-    screen = (
-      <RecoverStep
-        recoveryKey={recoveryKey}
-        peek={peek}
-        problem={problem?.at === 'recover' ? problem.message : null}
-        onKey={(next) => {
-          setRecoveryKey(next)
-          setProblem(null)
-        }}
-        onFind={() => void findKitchen()}
-        onRecover={(id) => void recover(id)}
-        onOtherKey={() => {
-          setPeek(null)
-          setProblem(null)
-        }}
+        onSubmit={() => void checkCode()}
       />
     )
   } else if (lockedOut) {
-    screen = <LockedOut onRestore={() => open('/join')} onKey={() => open('/recover')} />
-  } else if (path === '/start') {
+    screen = <LockedOut {...loginForm} onHaveCode={() => navigate('/join')} onStartOver={() => void forgetThisDevice()} />
+  } else if (door === 'login') {
+    screen = <LoginPage {...loginForm} />
+  } else if (door === 'start') {
+    screen = <Wizard flow="start" {...wizard} onSubmit={() => void start()} exitTo="/" />
+  } else {
     screen = (
-      <StartStep
-        draft={draft}
-        onEdit={edit}
-        kitchenName={kitchenName}
-        onKitchenName={setKitchenName}
-        problem={problem?.at === 'start' ? problem.message : null}
-        onSubmit={() => void start()}
+      <Welcome
+        checking={checking}
+        problem={problemAt('welcome')}
+        onStart={() => void openStart()}
+        onCode={() => {
+          setProblem(null)
+          navigate('/join')
+        }}
+        onDemo={enterDemo}
+        onLogin={() => {
+          setProblem(null)
+          navigate('/login')
+        }}
       />
     )
-  } else {
-    screen = <Welcome onStart={() => open('/start', 'chef')} onInvite={() => open('/join', 'taster')} onKey={() => open('/recover')} />
   }
 
   return <MotionConfig reducedMotion="user">{screen}</MotionConfig>
-}
-
-// ------------------------------------------------------------------ welcome --
-
-function Wordmark() {
-  const t = useT()
-  return (
-    <>
-      <h1 className="mt-3 font-display text-[2.6rem] font-bold leading-none tracking-tight font-soft" aria-label={t.brand.name}>
-        Food<span className="font-semibold italic text-cherry">wish</span>
-        <span className="text-rose-ink">Us</span>
-      </h1>
-      <p className="mt-1 font-script text-3xl text-rose-ink">{t.brand.slogan}</p>
-    </>
-  )
-}
-
-function Welcome({ onStart, onInvite, onKey }: { onStart: () => void; onInvite: () => void; onKey: () => void }) {
-  const c = useCopy(pairingCopy)
-  const t = useT()
-  const lang = useLang()
-  return (
-    <div className="gingham flex min-h-dvh flex-col bg-ground" data-testid="welcome">
-      <header className="scallop-bottom bg-blush [--scallop:12px]">
-        <div className="app-column flex flex-col items-center px-5 pb-6 pt-[max(2.75rem,env(safe-area-inset-top))] text-center">
-          <Mascot size={148} mood="love" />
-          <Wordmark />
-        </div>
-      </header>
-      <main className="app-column flex flex-1 flex-col px-5 pb-8 pt-7">
-        <p className="mx-auto max-w-[30ch] text-balance text-center text-base text-ink-soft">{c.welcome.lead}</p>
-        <div className="mt-7 flex flex-col gap-3.5">
-          <Button size="lg" block onClick={onStart}>
-            {c.welcome.start}
-          </Button>
-          <Button variant="secondary" block onClick={onInvite}>
-            {c.welcome.invite}
-          </Button>
-          <Button variant="secondary" block onClick={onKey}>
-            {c.welcome.key}
-          </Button>
-        </div>
-        <div className="mt-auto flex flex-col items-center gap-3 pt-8">
-          <Button variant="quiet" onClick={enterDemo}>
-            {t.demo.enter}
-          </Button>
-          <div className="w-52">
-            <Segmented<Lang>
-              label={c.welcome.language}
-              value={lang}
-              options={[
-                { value: 'en', label: 'English' },
-                { value: 'de', label: 'Deutsch' },
-              ]}
-              onChange={setLang}
-            />
-          </div>
-        </div>
-      </main>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------- signed out --
-
-function LockedOut({ onRestore, onKey }: { onRestore: () => void; onKey: () => void }) {
-  const c = useCopy(pairingCopy)
-  return (
-    <div className="gingham flex min-h-dvh flex-col bg-ground" data-testid="locked-out">
-      <main className="app-column flex flex-1 flex-col items-center px-6 pb-8 pt-[max(3.5rem,env(safe-area-inset-top))] text-center">
-        <Mascot size={124} mood="sleepy" />
-        <h1 className="mt-5 text-2xl">{c.lockedOut.title}</h1>
-        <p className="mt-2 text-balance font-script text-[1.7rem] leading-tight text-rose-ink">{c.lockedOut.script}</p>
-        <p className="mt-4 text-pretty text-sm text-ink-soft">{c.lockedOut.body}</p>
-        <div className="mt-7 flex w-full flex-col gap-3.5">
-          <Button size="lg" block onClick={onRestore}>
-            {c.lockedOut.restore}
-          </Button>
-          <Button variant="secondary" block onClick={onKey}>
-            {c.lockedOut.key}
-          </Button>
-        </div>
-        <p className="mt-6 text-balance text-xs text-ink-soft">{c.lockedOut.hint}</p>
-      </main>
-    </div>
-  )
-}
-
-// --------------------------------------------------------- profile + start --
-
-interface StartProps {
-  draft: ProfileDraft
-  onEdit: (patch: Partial<ProfileDraft>) => void
-  kitchenName: string
-  onKitchenName: (name: string) => void
-  problem: string | null
-  onSubmit: () => void
-}
-
-function StartStep({ draft, onEdit, kitchenName, onKitchenName, problem, onSubmit }: StartProps) {
-  const c = useCopy(pairingCopy)
-  return (
-    <StepPage
-      title={c.start.title}
-      footer={
-        <>
-          {problem && <ErrorNote>{problem}</ErrorNote>}
-          <Button size="lg" block onClick={onSubmit}>
-            {c.start.submit}
-          </Button>
-        </>
-      }
-    >
-      <p className="px-4 text-base text-ink-soft">{c.start.lead}</p>
-      <div className="mt-5">
-        <ProfileForm draft={draft} onChange={onEdit} />
-      </div>
-      <section className="mt-8 px-4">
-        <Field
-          label={c.start.kitchenLabel}
-          placeholder={c.start.kitchenPlaceholder}
-          hint={c.start.kitchenHint}
-          value={kitchenName}
-          maxLength={80}
-          enterKeyHint="done"
-          onChange={(e) => onKitchenName(e.target.value)}
-        />
-      </section>
-    </StepPage>
-  )
-}
-
-// ---------------------------------------------------------- profile + join --
-
-interface JoinProps {
-  draft: ProfileDraft
-  onEdit: (patch: Partial<ProfileDraft>) => void
-  code: string
-  problem: string | null
-  onSubmit: () => void
-}
-
-function JoinStep({ draft, onEdit, code, problem, onSubmit }: JoinProps) {
-  const c = useCopy(pairingCopy)
-  return (
-    <StepPage
-      title={c.join.title}
-      footer={
-        <>
-          {problem && <ErrorNote>{problem}</ErrorNote>}
-          <Button size="lg" block onClick={onSubmit}>
-            {c.join.submit}
-          </Button>
-        </>
-      }
-    >
-      <p className="px-4 text-base text-ink-soft">{c.join.lead}</p>
-      <div className="mx-4 mt-4 flex items-center justify-between gap-3 rounded-card border border-line bg-surface py-1.5 pl-4 pr-1.5">
-        <div className="min-w-0">
-          <p className="text-2xs font-extrabold text-ink-soft">{c.join.codeTag}</p>
-          <p className="tabular text-sm font-extrabold tracking-[0.08em]" data-testid="join-code">
-            {groupCode(code)}
-          </p>
-        </div>
-        <Button variant="quiet" onClick={() => navigate('/join', { replace: true })}>
-          {c.join.change}
-        </Button>
-      </div>
-      <div className="mt-6">
-        <ProfileForm draft={draft} onChange={onEdit} />
-      </div>
-    </StepPage>
-  )
 }
 
 // ------------------------------------------------------------- code entry --
 
 interface CodeProps {
   code: string
-  restore: boolean
   problem: string | null
-  onCode: (code: string, meta: { restore: boolean }) => void
-  onRestore: (restore: boolean) => void
+  onCode: (code: string) => void
   onSubmit: () => void
 }
 
-function CodeStep({ code, restore, problem, onCode, onRestore, onSubmit }: CodeProps) {
+function CodeStep({ code, problem, onCode, onSubmit }: CodeProps) {
   const c = useCopy(pairingCopy)
   return (
     <StepPage
-      title={restore ? c.lockedOut.restore : c.code.title}
+      title={c.code.title}
       footer={
         <Button size="lg" block onClick={onSubmit}>
-          {restore ? c.code.restoreSubmit : c.code.next}
+          {c.code.check}
         </Button>
       }
     >
-      <div className="flex flex-col gap-5 px-4">
-        <p className="text-base text-ink-soft">{restore ? c.code.restoreLead : c.code.lead}</p>
-        <CodeField
-          label={restore ? c.restoreInvite.codeLabel : c.code.label}
-          placeholder={c.code.placeholder}
-          hint={c.code.hint}
-          value={code}
-          length={INVITE_LENGTH}
-          acceptLinks
-          onChange={onCode}
-          onEnter={onSubmit}
-        />
+      <div className="flex flex-col gap-5 px-4" data-testid="code-step">
+        <p className="text-base text-ink-soft">{c.code.lead}</p>
+        <CodeField label={c.code.label} placeholder={c.code.placeholder} hint={c.code.hint} value={code} onChange={onCode} onEnter={onSubmit} />
         {problem && <ErrorNote>{problem}</ErrorNote>}
-        <Card pad={false} className="px-4 pb-3.5 pt-1">
-          <Toggle label={c.code.restoreToggle} checked={restore} onChange={onRestore} />
-          <p className="text-xs text-ink-soft">{c.code.restoreHint}</p>
-        </Card>
       </div>
     </StepPage>
   )
 }
 
-// ------------------------------------------------------------ recovery key --
+// --------------------------------------------------- back in with a code --
 
-interface RecoverProps {
-  recoveryKey: string
-  peek: RecoveryPeek | null
+interface RestoreProps {
+  peek: InvitePeek
+  pin: string
+  pinAgain: string
+  onPin: (pin: string) => void
+  onPinAgain: (pin: string) => void
   problem: string | null
-  onKey: (key: string) => void
-  onFind: () => void
-  onRecover: (memberId: ID) => void
-  onOtherKey: () => void
+  onProblemSeen: () => void
+  onSubmit: () => void
 }
 
-function RecoverStep({ recoveryKey, peek, problem, onKey, onFind, onRecover, onOtherKey }: RecoverProps) {
+/** A restore code: "Welcome back", then only a new PIN. */
+function RestoreStep({ peek, pin, pinAgain, onPin, onPinAgain, problem, onProblemSeen, onSubmit }: RestoreProps) {
   const c = useCopy(pairingCopy)
-  const [who, setWho] = useState<ID | null>(null)
-  const chosen = peek?.members.find((m) => m.id === who)
+  const [trouble, setTrouble] = useState<PinTrouble | null>(null)
+  const who = peek.profile
 
-  if (!peek) {
-    return (
-      <StepPage
-        title={c.recover.title}
-        footer={
-          <Button size="lg" block onClick={onFind}>
-            {c.recover.find}
-          </Button>
-        }
-      >
-        <div className="flex flex-col gap-5 px-4">
-          <p className="text-base text-ink-soft">{c.recover.lead}</p>
-          <CodeField label={c.recover.label} placeholder={c.recover.placeholder} value={recoveryKey} length={KEY_LENGTH} onChange={(next) => onKey(next)} onEnter={onFind} />
-          {problem && <ErrorNote>{problem}</ErrorNote>}
-        </div>
-      </StepPage>
-    )
+  const submit = () => {
+    const wrong = newPinTrouble(pin, pinAgain, c.pin)
+    setTrouble(wrong)
+    if (!wrong) onSubmit()
+  }
+  const typing = (set: (pin: string) => void) => (value: string) => {
+    setTrouble(null)
+    onProblemSeen()
+    set(value)
   }
 
   return (
     <StepPage
-      title={c.recover.title}
+      title={c.restore.title}
+      backTo="/join"
       footer={
         <>
           {problem && <ErrorNote>{problem}</ErrorNote>}
-          <Button size="lg" block disabled={!chosen} onClick={() => chosen && onRecover(chosen.id)}>
-            {chosen ? c.recover.letIn(chosen.name) : c.recover.pickFirst}
+          <Button size="lg" block onClick={submit}>
+            {c.restore.submit}
           </Button>
         </>
       }
     >
-      <div className="flex flex-col gap-4 px-4">
-        <div>
-          <h2 className="text-xl">{c.recover.whoTitle}</h2>
-          <p className="mt-1.5 text-sm text-ink-soft">{c.recover.whoLead}</p>
-        </div>
-        <div role="radiogroup" aria-label={c.recover.whoTitle} className="flex flex-col gap-3">
-          {peek.members.map((member) => {
-            const on = member.id === who
-            return (
-              <button
-                key={member.id}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                onClick={() => {
-                  buzz(10)
-                  setWho(member.id)
-                }}
-                className={cx(
-                  'flex min-h-20 w-full items-center gap-4 rounded-card border-[1.5px] bg-surface p-4 text-left transition-colors duration-150 active:translate-y-[2px]',
-                  on ? 'border-ink' : 'border-line-strong',
-                )}
-              >
-                <Avatar avatar={member.avatar} color={member.color} size={56} />
-                <span className="min-w-0 flex-1 truncate font-display text-lg font-bold font-soft">{member.name}</span>
-                <span className={cx('grid size-7 shrink-0 place-items-center rounded-full border-[1.5px]', on ? 'border-ink bg-ink text-ground' : 'border-line-strong text-transparent')} aria-hidden>
-                  <Icon name="check" size={16} />
-                </span>
-              </button>
-            )
-          })}
-        </div>
-        <Button variant="quiet" className="-ml-3 self-start" onClick={onOtherKey}>
-          {c.recover.otherKey}
-        </Button>
+      <div className="flex flex-col gap-5 px-4" data-testid="restore-step">
+        <Card tone="blush" pad={false} className="flex items-center gap-4 px-4 py-4">
+          {who && <Avatar avatar={who.avatar} color={who.color} accessory={who.accessory} size={60} />}
+          <div className="min-w-0">
+            <h2 className="text-xl">{c.restore.hello(who?.name ?? '')}</h2>
+            <p className="mt-1 text-sm">{c.restore.body(peek.kitchenName)}</p>
+          </div>
+        </Card>
+        <NewPinFields pin={pin} again={pinAgain} onPin={typing(onPin)} onAgain={typing(onPinAgain)} trouble={trouble} label={c.restore.pinLabel} onEnter={submit} />
+        <WarningNote>{c.restore.others}</WarningNote>
       </div>
     </StepPage>
   )

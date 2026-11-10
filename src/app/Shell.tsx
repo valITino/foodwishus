@@ -5,7 +5,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { boot, isDemo, leaveDemo, useSyncStatus } from '../data/app'
 import { useMe } from '../data/hooks'
 import { CockpitScreen } from '../features/cockpit'
-import { Onboarding } from '../features/onboarding'
+import { Onboarding, PausedScreen, usePaused } from '../features/onboarding'
 import { PlanningRoutes, TodayScreen, WeekScreen, WishlistScreen } from '../features/planning'
 import { RecipeBookScreen, RecipesRoutes } from '../features/recipes'
 import { SettingsRoutes } from '../features/settings'
@@ -71,6 +71,7 @@ export function Shell() {
   const route = useRoute()
   const me = useMe()
   const status = useSyncStatus()
+  const paused = usePaused()
   const [adding, setAdding] = useState(false)
   const { path } = route
 
@@ -110,6 +111,16 @@ export function Shell() {
     return (
       <>
         <Onboarding route={route} lockedOut={lockedOut} />
+        <Toaster />
+      </>
+    )
+  }
+
+  // The admin has paused this seat: nothing can be read or changed until it is switched on again.
+  if (paused) {
+    return (
+      <>
+        <PausedScreen />
         <Toaster />
       </>
     )

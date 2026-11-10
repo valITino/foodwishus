@@ -4,17 +4,21 @@ import { useEffect, useState } from 'react'
 import { back } from '../../app/router'
 import { updateMyProfile } from '../../data/actions'
 import { useMe } from '../../data/hooks'
+import { usePartner } from '../../data/queries'
 import { useCopy, useT } from '../../i18n'
 import { Button, buzz, SteamLoader, toast } from '../../ui/components'
 import { ErrorNote, StepPage } from '../onboarding/parts'
-import { changesBetween, draftFromMember, isReady, type ProfileDraft } from '../profile/draft'
+import { profileCopy } from '../profile/copy'
+import { changesBetween, draftFromMember, isReady, sameName, type ProfileDraft } from '../profile/draft'
 import { focusNameField, ProfileForm } from '../profile/ProfileForm'
 import { settingsCopy } from './copy'
 
 export function ProfileEdit() {
   const c = useCopy(settingsCopy)
+  const pc = useCopy(profileCopy)
   const t = useT()
   const me = useMe()
+  const partner = usePartner()
   const member = me?.member
   const [draft, setDraft] = useState<ProfileDraft | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
@@ -26,9 +30,11 @@ export function ProfileEdit() {
 
   const save = async () => {
     if (!draft || !member) return
-    if (!isReady(draft)) {
+    // The name is what a person logs in with, so the two of them cannot share one.
+    const taken = partner ? sameName(draft.name, partner.name) : false
+    if (!isReady(draft) || taken) {
       focusNameField()
-      return setProblem(c.profile.nameMissing)
+      return setProblem(taken ? pc.nameTaken(draft.name.trim()) : pc.nameMissing)
     }
     const changes = changesBetween(draftFromMember(member), draft)
     try {

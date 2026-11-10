@@ -1,7 +1,7 @@
-// Small building blocks shared by the onboarding steps and the pairing pages in Settings.
+// Small building blocks shared by the start screens and the pages in Settings.
 
 import type { ReactNode } from 'react'
-import { PageHeader, SteamLoader } from '../../ui/components'
+import { Button, PageHeader, Sheet, SteamLoader } from '../../ui/components'
 import { Icon } from '../../ui/deco/Icon'
 
 interface StepPageProps {
@@ -37,6 +37,54 @@ export function ErrorNote({ children }: { children: ReactNode }) {
       </span>
       <p className="min-w-0 text-sm font-bold leading-snug">{children}</p>
     </div>
+  )
+}
+
+/** A gentle heads-up before something with consequences. */
+export function WarningNote({ children }: { children: ReactNode }) {
+  return (
+    <div role="note" className="flex items-start gap-2.5 rounded-card border-[1.5px] border-butter-ink bg-surface px-3.5 py-3">
+      <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-butter text-xs font-extrabold text-on-rose" aria-hidden>
+        !
+      </span>
+      <p className="min-w-0 text-sm font-bold leading-snug">{children}</p>
+    </div>
+  )
+}
+
+interface ConfirmSheetProps {
+  open: boolean
+  title: string
+  /** What will happen, in plain words. */
+  children: ReactNode
+  confirmLabel: string
+  cancelLabel: string
+  onConfirm: () => void
+  onClose: () => void
+  /** True while the confirmed action is running. */
+  busy?: boolean
+}
+
+/** "Are you sure?" as a bottom sheet: says what happens, one button to do it, one to back out. */
+export function ConfirmSheet({ open, title, children, confirmLabel, cancelLabel, onConfirm, onClose, busy = false }: ConfirmSheetProps) {
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={title}
+      footer={
+        <div className="flex flex-col gap-1.5">
+          <Button block size="lg" disabled={busy} onClick={onConfirm}>
+            {confirmLabel}
+          </Button>
+          <Button variant="quiet" block onClick={onClose}>
+            {cancelLabel}
+          </Button>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-3 pb-1 text-sm leading-relaxed text-ink-soft">{children}</div>
+    </Sheet>
   )
 }
 

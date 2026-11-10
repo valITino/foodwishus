@@ -87,7 +87,7 @@ export function AvatarMaker({ draft, onChange }: Props) {
       </h2>
 
       {/* The stage stays in view while you try things on. */}
-      <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-20 mt-3 scallop-bottom bg-blush [--scallop:10px]">
+      <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top)+var(--banner-h,0px))] z-20 mt-3 scallop-bottom bg-blush [--scallop:10px]">
         <div className="flex items-center justify-center gap-4 px-5 pb-3 pt-6">
           <div className="grid size-[132px] shrink-0 place-items-center rounded-full border border-line bg-surface">
             <motion.div

@@ -1,12 +1,11 @@
-// Invite codes, restore codes and recovery keys: cleaning what was typed or pasted,
-// and showing long codes in readable groups. Pure helpers, unit tested.
+// Invite and restore codes: cleaning what was typed or pasted, showing them in readable
+// groups, and the link that carries one. Pure helpers, unit tested.
 
 export const INVITE_LENGTH = 10
-export const KEY_LENGTH = 20
 const GROUP = 5
 
 /** Letters and digits only, upper case, cut to length. The cloud does the same. */
-export function cleanCode(input: string, max: number): string {
+export function cleanCode(input: string, max = INVITE_LENGTH): string {
   return input
     .replace(/[^A-Za-z0-9]/g, '')
     .toUpperCase()
@@ -19,18 +18,17 @@ export function groupCode(code: string, separator = '-'): string {
 }
 
 /**
- * What someone typed or pasted into the invite field. A whole invite link works too:
- * the code is taken out of it, and a restore link says so.
+ * What someone typed or pasted into the code field. A whole invite link works too:
+ * the code is taken out of it.
  */
-export function readInvite(input: string): { code: string; restore: boolean } {
-  const link = /[?&]code=([A-Za-z0-9-]+)/.exec(input)
-  if (link) return { code: cleanCode(link[1], INVITE_LENGTH), restore: /[?&]restore=1\b/.test(input) }
-  return { code: cleanCode(input, INVITE_LENGTH), restore: false }
+export function readInvite(input: string): string {
+  const link = /\/join\/([A-Za-z0-9-]+)/.exec(input) ?? /[?&]code=([A-Za-z0-9-]+)/.exec(input)
+  return cleanCode(link ? link[1] : input)
 }
 
-/** The route (after the #) that an invite link points to. */
-export function invitePath(code: string, restore: boolean): string {
-  return `/join?code=${code}${restore ? '&restore=1' : ''}`
+/** The route (after the #) that an invite or restore link points to. */
+export function invitePath(code: string): string {
+  return `/join/${code}`
 }
 
 /**

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { profileCopy } from '../../src/features/profile/copy'
-import { changesBetween, clip, defaultDraft, draftFromMember, extrasOf, isReady, nextSuggestion, PLATE_COLORS, STATUS_MAX, toProfileInput, type ProfileDraft } from '../../src/features/profile/draft'
+import { changesBetween, clip, defaultDraft, draftFromMember, isReady, nextSuggestion, PLATE_COLORS, sameName, STATUS_MAX, toProfileInput, withRole, type ProfileDraft } from '../../src/features/profile/draft'
 import { ACCESSORIES, AVATARS } from '../../src/ui/components/Bits'
 
 const mia: ProfileDraft = { name: 'Mia', role: 'chef', avatar: 'whisk', color: 'rose', accessory: 'bow', status: 'Chef mode: on.' }
@@ -14,10 +14,26 @@ describe('profile drafts', () => {
     expect(isReady(mia)).toBe(true)
   })
 
-  it('splits a draft into what pairing carries and what is saved right after', () => {
-    expect(toProfileInput({ ...mia, name: '  Mia  ' })).toEqual({ name: 'Mia', avatar: 'whisk', color: 'rose', defaultRole: 'chef' })
-    expect(extrasOf(mia)).toEqual({ status: 'Chef mode: on.', accessory: 'bow' })
-    expect(extrasOf({ ...mia, status: '   ', accessory: null })).toEqual({ status: null, accessory: null })
+  it('hands the whole profile over in one go when opening or joining a kitchen', () => {
+    expect(toProfileInput({ ...mia, name: '  Mia  ' })).toEqual({ name: 'Mia', avatar: 'whisk', color: 'rose', accessory: 'bow', status: 'Chef mode: on.', defaultRole: 'chef' })
+    expect(toProfileInput({ ...mia, status: '   ', accessory: null })).toMatchObject({ status: null, accessory: null })
+  })
+
+  it('lets the look follow the role until someone has touched it', () => {
+    // Untouched: the Chef's whisk becomes the Taster's Fork, and back.
+    const asTaster = withRole(defaultDraft('chef'), 'taster')
+    expect(asTaster).toMatchObject({ role: 'taster', avatar: 'fork', color: 'sage' })
+    expect(withRole(asTaster, 'chef')).toMatchObject({ role: 'chef', avatar: 'whisk', color: 'rose' })
+    // Touched: only the role changes.
+    expect(withRole({ ...defaultDraft('chef'), avatar: 'cherry' }, 'taster')).toMatchObject({ role: 'taster', avatar: 'cherry', color: 'rose' })
+    expect(withRole({ ...defaultDraft('chef'), accessory: 'crown' }, 'taster')).toMatchObject({ role: 'taster', avatar: 'whisk', accessory: 'crown' })
+    // The name and status always stay.
+    expect(withRole({ ...defaultDraft('chef'), name: 'Mia', status: 'Hi' }, 'taster')).toMatchObject({ name: 'Mia', status: 'Hi' })
+  })
+
+  it('treats two names as the same log-in without capitals and outer spaces', () => {
+    expect(sameName('Leo', '  leo ')).toBe(true)
+    expect(sameName('Leo', 'Leon')).toBe(false)
   })
 
   it('reads a saved profile back into a draft', () => {
@@ -76,5 +92,15 @@ describe('profile copy', () => {
     }
     // The user's own example comes first for the Taster.
     expect(profileCopy.en.suggestions.taster[0]).toBe('Always Huuungryyyyy')
+  })
+
+  it('asks "who are you at the table?" with two different lines per language', () => {
+    for (const c of [profileCopy.en, profileCopy.de]) {
+      expect(c.roleCards.chef.title).not.toBe(c.roleCards.taster.title)
+      expect(c.roleSwap.length).toBeGreaterThan(10)
+      expect(c.nameTaken('Mia')).toContain('Mia')
+    }
+    // German is written for German, not translated word by word.
+    expect(profileCopy.de.roleCards.chef.title).toBe('Ich schwinge den Kochlöffel')
   })
 })
