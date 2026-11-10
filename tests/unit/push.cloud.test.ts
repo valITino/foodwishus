@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { PUSH_TYPES, type PushSubscriptionInput } from '../../src/data/backend'
-import { FakeCloud } from '../../src/data/fake/cloudCore'
+import { FakeCloud, TEST_PUSH_KEY } from '../../src/data/fake/cloudCore'
 import { PushControl, type DeviceSubscription, type Permission, type PushDevice, type PushMemory } from '../../src/data/push'
 import { newId, nowIso, type Review, type Serving } from '../../src/data/types'
 import { HIS_PIN, makeCouple, makePhone, type Phone } from './helpers'
@@ -8,8 +8,12 @@ import { HIS_PIN, makeCouple, makePhone, type Phone } from './helpers'
 // Notifications from end to end against the pretend cloud: a device signs up, the other
 // person does something, and the cloud "sends" what the real one would hand to the
 // browser's push service. Two phones, one kitchen: Mia cooks, Leo eats.
+//
+// The key a browser signs up with comes from the cloud, never from the build.
 
-const KEY = 'BA1Hxzyi1RUM1b5wjxsn7nGxAszw2u61m164i3MrAIxHF6YK5h4SDYic-dRuU_RCPCfA5aq9ojSwk5Y2EmClBPs'
+const KEY = TEST_PUSH_KEY
+/** What the function would make after the owner threw the first pair away. */
+const NEXT_KEY = 'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM'
 
 /** A browser's push side, as far as the app can see it. */
 class FakeDevice implements PushDevice {
@@ -38,7 +42,7 @@ class FakeDevice implements PushDevice {
   }
   async subscribe(vapidPublicKey: string) {
     if (this.state !== 'granted') throw new Error('permission was never given')
-    if (this.failSubscribe || vapidPublicKey !== KEY) throw new Error('push service said no')
+    if (this.failSubscribe || !vapidPublicKey) throw new Error('push service said no')
     if (this.held && this.madeWith !== vapidPublicKey) this.held = null
     this.held ??= { endpoint: `https://push.example.test/${this.name}/${++this.made}`, p256dh: `key-of-${this.name}`, auth: 'secret' }
     this.madeWith = vapidPublicKey
@@ -67,10 +71,10 @@ beforeEach(async () => {
   hisId = (await him.store.memberId()) as string
 })
 
-function notifications(phone: Phone, name: string, key = KEY) {
+function notifications(phone: Phone, name: string) {
   const device = new FakeDevice(name)
   const notes = memory()
-  const control = new PushControl(device, phone.backend, notes, key, `${name} browser`)
+  const control = new PushControl(device, phone.backend, notes, `${name} browser`)
   return { device, notes, control }
 }
 
@@ -120,8 +124,13 @@ const bodies = () => cloud.sentPushes().map((p) => p.message.body)
 describe('signing a device up', () => {
   it('asks for permission only after the tap, then the cloud knows where to send', async () => {
     const leo = notifications(him, 'leo-phone')
-    expect(leo.control.current).toEqual({ status: 'off', muted: [] })
+    // Nothing is known yet, and the start of the app asks nobody anything.
+    expect(leo.control.current).toEqual({ status: 'unknown', muted: [] })
     await leo.control.refresh()
+    expect(leo.control.current.status).toBe('unknown')
+    // The Notifications page opens: the cloud says notifications are set up.
+    await leo.control.refresh(true)
+    expect(leo.control.current).toEqual({ status: 'off', muted: [] })
     expect(leo.device.asked).toBe(0)
     expect(cloud.pushSubscriptions()).toEqual([])
 
@@ -251,7 +260,7 @@ describe('muting', () => {
     expect(cloud.pushSubscriptions()[0].mutedTypes).toEqual(['planned'])
 
     // And it survives closing the app: the next start reads it from the device.
-    const again = new PushControl(leo.device, him.backend, leo.notes, KEY)
+    const again = new PushControl(leo.device, him.backend, leo.notes)
     expect(again.current).toEqual({ status: 'on', muted: ['planned'] })
   })
 
@@ -275,11 +284,44 @@ describe('muting', () => {
 })
 
 describe('when it cannot be turned on', () => {
-  it('says "not set up" while the build has no key, and offers nothing', async () => {
-    const leo = notifications(him, 'leo-phone', '')
+  it('says "not set up" while the cloud has no key, and switches itself on when there is one', async () => {
+    cloud.setPushPublicKey(null)
+    const leo = notifications(him, 'leo-phone')
+    await leo.control.refresh(true)
     expect(leo.control.current.status).toBe('unconfigured')
     expect(await leo.control.turnOn()).toBe('subscribe_failed')
     expect(leo.device.asked).toBe(0)
+    expect(leo.device.held).toBeNull()
+
+    // The owner sets notifications up. The next look at the page offers them.
+    cloud.setPushPublicKey(KEY)
+    await leo.control.refresh(true)
+    expect(leo.control.current.status).toBe('off')
+    expect(await leo.control.turnOn()).toBeNull()
+    expect(leo.device.madeWith).toBe(KEY)
+  })
+
+  it('cannot tell while the cloud has never been reached, and says so instead of guessing', async () => {
+    const leo = notifications(him, 'leo-phone')
+    him.backend.online = false
+    await leo.control.refresh(true)
+    expect(leo.control.current.status).toBe('unknown')
+    expect(await leo.control.turnOn()).toBe('offline')
+    expect(leo.device.asked).toBe(0)
+
+    him.backend.online = true
+    expect(await leo.control.turnOn()).toBeNull()
+    expect(leo.control.current.status).toBe('on')
+  })
+
+  it('remembers the key it last heard of, so an offline start still knows where it stands', async () => {
+    const leo = notifications(him, 'leo-phone')
+    await leo.control.refresh(true)
+    him.backend.online = false
+    const nextStart = new PushControl(leo.device, him.backend, leo.notes)
+    expect(nextStart.current.status).toBe('off')
+    await nextStart.refresh(true)
+    expect(nextStart.current.status).toBe('off')
   })
 
   it('says so when the browser cannot do it', async () => {
@@ -325,6 +367,7 @@ describe('when it cannot be turned on', () => {
 
   it('never ends up half on: if the cloud cannot be told, the browser lets go again', async () => {
     const leo = notifications(him, 'leo-phone')
+    await leo.control.refresh(true)
     him.backend.online = false
     expect(await leo.control.turnOn()).toBe('offline')
     expect(leo.control.current.status).toBe('off')
@@ -345,7 +388,7 @@ describe('keeping the cloud and the browser in step', () => {
     await leo.control.turnOn()
     await him.backend.removePushSubscription('https://push.example.test/leo-phone/1')
 
-    const nextStart = new PushControl(leo.device, him.backend, leo.notes, KEY)
+    const nextStart = new PushControl(leo.device, him.backend, leo.notes)
     expect(nextStart.current.status).toBe('on')
     await nextStart.refresh()
     expect(cloud.pushSubscriptions().map((s) => s.endpoint)).toEqual(['https://push.example.test/leo-phone/1'])
@@ -366,11 +409,18 @@ describe('keeping the cloud and the browser in step', () => {
   it('signs up again when the kitchen got new keys: the old subscription would never ring', async () => {
     const leo = notifications(him, 'leo-phone')
     await leo.control.turnOn()
-    // The subscription the browser holds was made with the key before this one.
-    leo.device.madeWith = 'the-key-before'
+    expect(leo.device.madeWith).toBe(KEY)
 
+    // The owner throws the keys away. Until there are new ones, nothing can be sent.
+    cloud.setPushPublicKey(null)
+    await leo.control.refresh()
+    expect(leo.control.current.status).toBe('unconfigured')
+
+    // The function has made a new pair. The next start of the app picks it up by itself.
+    cloud.setPushPublicKey(NEXT_KEY)
     await leo.control.refresh()
     expect(leo.control.current.status).toBe('on')
+    expect(leo.device.madeWith).toBe(NEXT_KEY)
     expect(leo.device.asked).toBe(1)
     expect(cloud.pushSubscriptions().map((s) => s.endpoint)).toEqual(['https://push.example.test/leo-phone/2'])
   })
@@ -396,15 +446,24 @@ describe('keeping the cloud and the browser in step', () => {
     // (Not even a login may be created for it: the start screen has to stay free of calls.)
     const calls: string[] = []
     const silent = {
+      pushPublicKey: async () => {
+        calls.push('key')
+        return KEY
+      },
       savePushSubscription: async () => void calls.push('save'),
       setPushMuted: async () => void calls.push('mute'),
       removePushSubscription: async () => void calls.push('remove'),
     }
-    const control = new PushControl(new FakeDevice('new-phone'), silent, memory(), KEY)
+    const control = new PushControl(new FakeDevice('new-phone'), silent, memory())
     await control.refresh()
     await control.setMuted('served', true)
     expect(calls).toEqual([])
-    expect(control.current).toEqual({ status: 'off', muted: ['served'] })
+    expect(control.current).toEqual({ status: 'unknown', muted: ['served'] })
+
+    // Only opening the Notifications page asks, and then only for the key.
+    await control.refresh(true)
+    expect(calls).toEqual(['key'])
+    expect(control.current.status).toBe('off')
   })
 
   it('tells whoever is listening when something changes, and only then', async () => {
@@ -413,13 +472,17 @@ describe('keeping the cloud and the browser in step', () => {
     const stop = leo.control.subscribe(() => (heard += 1))
     await leo.control.refresh()
     expect(heard).toBe(0)
-    await leo.control.turnOn()
+    await leo.control.refresh(true)
     expect(heard).toBe(1)
-    await leo.control.setMuted('served', true)
+    await leo.control.refresh(true)
+    expect(heard).toBe(1)
+    await leo.control.turnOn()
     expect(heard).toBe(2)
+    await leo.control.setMuted('served', true)
+    expect(heard).toBe(3)
     stop()
     await leo.control.turnOff()
-    expect(heard).toBe(2)
+    expect(heard).toBe(3)
   })
 })
 
@@ -456,7 +519,7 @@ describe('turning off and logging out', () => {
     await leo.control.forget()
     expect(leo.device.held).toBeNull()
     expect(leo.notes.data.size).toBe(0)
-    expect(leo.control.current).toEqual({ status: 'off', muted: [] })
+    expect(leo.control.current).toEqual({ status: 'unknown', muted: [] })
   })
 
   it('the cloud drops it by itself when the device is logged out from elsewhere', async () => {
@@ -503,6 +566,15 @@ describe('turning off and logging out', () => {
 })
 
 describe("the cloud's rules for subscriptions", () => {
+  it('hands the public key to any device with a login, and null while notifications are not set up', async () => {
+    expect(await him.backend.pushPublicKey()).toBe(KEY)
+    expect(await makePhone(cloud).backend.pushPublicKey()).toBe(KEY)
+    cloud.setPushPublicKey(null)
+    expect(await him.backend.pushPublicKey()).toBeNull()
+    cloud.reset()
+    expect(cloud.pushPublicKey('anyone')).toBe(KEY)
+  })
+
   it('only somebody in the kitchen can sign a device up', async () => {
     const stranger = makePhone(cloud)
     await expect(stranger.backend.savePushSubscription(sub('stranger'))).rejects.toMatchObject({ kind: 'rejected', code: 'not_in_kitchen' })

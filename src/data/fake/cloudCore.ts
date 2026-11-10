@@ -66,6 +66,12 @@ export interface SentPush extends Omit<Delivery, 'device'> {
   memberId: ID
 }
 
+/**
+ * The public key the pretend cloud hands to browsers that want to sign up: the example
+ * key from RFC 8292. Nothing is ever sent with it.
+ */
+export const TEST_PUSH_KEY = 'BA1Hxzyi1RUM1b5wjxsn7nGxAszw2u61m164i3MrAIxHF6YK5h4SDYic-dRuU_RCPCfA5aq9ojSwk5Y2EmClBPs'
+
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const DEFAULT_CRITERIA: [string, string][] = [
   ['Taste', 'tongue'],
@@ -96,6 +102,8 @@ export class FakeCloud {
   /** Devices that asked for notifications, by the address of their push service. */
   private pushRows = new Map<string, PushRow>()
   private sent: SentPush[] = []
+  /** private.push_config.vapid_public: null while notifications are not set up. */
+  private pushKey: string | null = TEST_PUSH_KEY
   private listeners = new Set<(householdId: ID) => void>()
   private clock = 0
 
@@ -113,6 +121,7 @@ export class FakeCloud {
     this.blobs.clear()
     this.pushRows.clear()
     this.sent = []
+    this.pushKey = TEST_PUSH_KEY
   }
 
   /** A strictly increasing server clock, like clock_timestamp() in Postgres. */
@@ -406,6 +415,19 @@ export class FakeCloud {
   }
 
   // ----------------------------------------------------------- notifications --
+
+  /** For any device with a login, like public.push_public_key(). */
+  pushPublicKey(_userId: string): string | null {
+    return this.pushKey
+  }
+
+  /**
+   * Test hook: what the owner does from the SQL editor. Null is "not set up yet" (or the
+   * keys were thrown away); another key is what the function made after that.
+   */
+  setPushPublicKey(key: string | null): void {
+    this.pushKey = key
+  }
 
   savePushSubscription(userId: string, subscription: PushSubscriptionInput): void {
     const me = this.memberOf(userId) ?? reject('not_in_kitchen')

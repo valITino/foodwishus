@@ -193,28 +193,24 @@ const SLOTS: Record<Lang, Record<string, string>> = {
   de: { breakfast: 'zum Frühstück', lunch: 'zum Mittagessen', dinner: 'zum Abendessen', dessert: 'zum Dessert' },
 }
 
-function daysBetween(from: string, to: string): number {
-  return Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / (24 * HOUR))
-}
-
 /** "for dinner tomorrow", "für Freitag zum Abendessen". Empty when the day is unknown. */
 export function whenWords(plannedDate: string | null, plannedSlot: string | null, today: string, lang: Lang): string {
-  if (!plannedDate || Number.isNaN(Date.parse(`${plannedDate}T12:00:00Z`))) return ''
-  const date = new Date(`${plannedDate}T12:00:00Z`)
-  const away = daysBetween(today, plannedDate)
+  const noon = plannedDate ? Date.parse(`${plannedDate}T12:00:00Z`) : Number.NaN
+  if (Number.isNaN(noon)) return ''
+  const away = Math.round((noon - Date.parse(`${today}T12:00:00Z`)) / (24 * HOUR))
   const slot = plannedSlot ? SLOTS[lang][plannedSlot] : undefined
-  const weekday = new Intl.DateTimeFormat(lang === 'de' ? 'de-CH' : 'en-GB', { weekday: 'long', timeZone: 'UTC' }).format(date)
-  const dayMonth = new Intl.DateTimeFormat(lang === 'de' ? 'de-CH' : 'en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(date)
+  const locale = lang === 'de' ? 'de-CH' : 'en-GB'
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: 'long', timeZone: 'UTC' }).format(noon)
+  const dayMonth = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(noon)
+  const soon = away > 1 && away < 7
   if (lang === 'de') {
-    const day = away === 0 ? 'heute' : away === 1 ? 'morgen' : away > 1 && away < 7 ? weekday : `den ${dayMonth}`
+    const day = away === 0 ? 'heute' : away === 1 ? 'morgen' : soon ? weekday : `den ${dayMonth}`
     return `für ${day}${slot ? ` ${slot}` : ''}`
   }
-  if (away === 0 || away === 1) {
-    const day = away === 0 ? 'today' : 'tomorrow'
-    return slot ? `for ${slot} ${day}` : `for ${day}`
-  }
-  const day = away > 1 && away < 7 ? weekday : dayMonth
-  return slot ? `for ${slot} on ${day}` : `for ${day}`
+  const on = away === 0 ? 'today' : away === 1 ? 'tomorrow' : soon ? weekday : dayMonth
+  // "for dinner today", but "for dinner on Friday".
+  const link = away === 0 || away === 1 ? ' ' : ' on '
+  return slot ? `for ${slot}${link}${on}` : `for ${on}`
 }
 
 export interface Facts {
@@ -318,7 +314,7 @@ export function plan(event: PushEvent, kitchen: Kitchen, now: Date): Delivery[] 
 
   return audience(event, kitchen.people, kitchen.devices).map(({ person, device }) => {
     const readerCooks = meal.cookId === person.id
-    const text = words(event.type, person.lang, {
+    const said = words(event.type, person.lang, {
       actor: actor.name,
       dish: meal.name,
       readerCooks,
@@ -327,7 +323,7 @@ export function plan(event: PushEvent, kitchen: Kitchen, now: Date): Delivery[] 
     })
     return {
       device,
-      message: { type: event.type, ...text, tag: `meal-${event.servingId}`, url: routeFor(event.type, event.servingId, readerCooks) },
+      message: { type: event.type, ...said, tag: `meal-${event.servingId}`, url: routeFor(event.type, event.servingId, readerCooks) },
       urgency: event.type === 'served' ? 'high' : 'normal',
       topic: event.servingId.replaceAll('-', ''),
       ttl: TTL_HOURS[event.type] * 3600,

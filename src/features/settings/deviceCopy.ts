@@ -16,6 +16,7 @@ export const deviceCopy = {
       rowHints: {
         on: 'On for this device.',
         off: 'Off on this device.',
+        unknown: 'Off on this device.',
         blocked: 'Blocked in the browser.',
         unconfigured: 'Not set up yet.',
         unsupported: 'Not possible in this browser.',
@@ -33,6 +34,7 @@ export const deviceCopy = {
       turnOff: 'Turn off notifications',
       turnedOff: 'Notifications turned off',
       unconfigured: 'Notifications are not set up for this kitchen yet. There is nothing to do here for now.',
+      cannotAsk: 'The cloud cannot be reached right now, so this page cannot tell whether notifications are set up. Come back when you are online.',
       unsupported: 'This browser cannot show notifications. Open FoodwishUs in Chrome on your phone.',
       blocked: unblockEn,
       problems: {
@@ -68,6 +70,7 @@ export const deviceCopy = {
       rowHints: {
         on: 'Auf diesem Gerät an.',
         off: 'Auf diesem Gerät aus.',
+        unknown: 'Auf diesem Gerät aus.',
         blocked: 'Im Browser blockiert.',
         unconfigured: 'Noch nicht eingerichtet.',
         unsupported: 'In diesem Browser nicht möglich.',
@@ -85,6 +88,7 @@ export const deviceCopy = {
       turnOff: 'Benachrichtigungen ausschalten',
       turnedOff: 'Benachrichtigungen ausgeschaltet',
       unconfigured: 'Benachrichtigungen sind für diese Küche noch nicht eingerichtet. Hier gibt es im Moment nichts zu tun.',
+      cannotAsk: 'Die Cloud ist gerade nicht erreichbar. Darum weiss diese Seite noch nicht, ob Benachrichtigungen eingerichtet sind. Komm wieder, sobald du online bist.',
       unsupported: 'Dieser Browser kann keine Benachrichtigungen anzeigen. Öffne FoodwishUs in Chrome auf deinem Handy.',
       blocked: unblockDe,
       problems: {

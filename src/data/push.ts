@@ -1,9 +1,11 @@
 // Notifications on this device: on or off, and which kinds are muted.
 //
-// Two parties are involved. The browser holds the subscription (an address at its push
+// Three parties are involved. The browser holds the subscription (an address at its push
 // service plus keys) and the permission. The cloud holds a copy of the address, so it
-// knows where to send, and the list of muted kinds. PushControl keeps the two in step
-// and remembers on the device what was chosen, so a choice made offline is not lost.
+// knows where to send, and the list of muted kinds. And the cloud has the kitchen's
+// public key, which a browser needs to sign up; without one, notifications are not set
+// up yet. PushControl keeps all of this in step and remembers on the device what was
+// chosen and which key it last saw, so a choice made offline is not lost.
 //
 // The browser's side sits behind PushDevice, so the logic here can be unit-tested and
 // the end-to-end tests can stand in for a push service.
@@ -37,7 +39,9 @@ export interface PushDevice {
 }
 
 export type PushStatus =
-  /** The build has no key to subscribe with: notifications are not set up for this kitchen yet. */
+  /** This device has not been able to ask the cloud yet whether notifications are set up. */
+  | 'unknown'
+  /** The cloud has no key to sign up with: notifications are not set up for this kitchen yet. */
   | 'unconfigured'
   /** This browser cannot do it, or the app runs without a service worker. */
   | 'unsupported'
@@ -64,7 +68,7 @@ export type PushProblem =
   /** The cloud said no (logged out, paused). */
   | 'refused'
 
-/** Somewhere to keep two small facts between visits. localStorage in the app. */
+/** Somewhere to keep a few small facts between visits. localStorage in the app. */
 export interface PushMemory {
   getItem(key: string): string | null
   setItem(key: string, value: string): void
@@ -77,6 +81,11 @@ interface Remembered {
   /** The address the cloud knows this device by, or null while notifications are off. */
   endpoint: string | null
   muted: PushType[]
+  /**
+   * The kitchen's public key as last heard from the cloud. Null: the cloud said there is
+   * none yet. Undefined: never asked.
+   */
+  key?: string | null
 }
 
 const knownTypes = (types: unknown): PushType[] => PUSH_TYPES.filter((type) => Array.isArray(types) && types.includes(type))
@@ -86,13 +95,13 @@ export class PushControl {
   private remembered: Remembered
   private listeners = new Set<() => void>()
   private refreshing: Promise<void> | null = null
+  /** True while the refresh that is running includes asking the cloud for the key. */
+  private asking = false
 
   constructor(
     private readonly device: PushDevice,
-    private readonly backend: Pick<Backend, 'savePushSubscription' | 'setPushMuted' | 'removePushSubscription'>,
+    private readonly backend: Pick<Backend, 'pushPublicKey' | 'savePushSubscription' | 'setPushMuted' | 'removePushSubscription'>,
     private readonly memory: PushMemory,
-    /** The public VAPID key the build was given. Empty when notifications are not set up. */
-    private readonly vapidKey: string,
     private readonly userAgent = '',
   ) {
     this.remembered = this.recall()
@@ -120,7 +129,8 @@ export class PushControl {
   private recall(): Remembered {
     try {
       const raw = JSON.parse(this.memory.getItem(KEY) ?? '{}') as Partial<Remembered>
-      return { endpoint: typeof raw.endpoint === 'string' ? raw.endpoint : null, muted: knownTypes(raw.muted) }
+      const key = typeof raw.key === 'string' && raw.key ? raw.key : raw.key === null ? null : undefined
+      return { endpoint: typeof raw.endpoint === 'string' ? raw.endpoint : null, muted: knownTypes(raw.muted), key }
     } catch {
       return { endpoint: null, muted: [] }
     }
@@ -135,10 +145,11 @@ export class PushControl {
     }
   }
 
-  /** What can be said without asking the browser anything slow. */
+  /** What can be said without asking anybody anything slow. */
   private quickStatus(): PushStatus {
-    if (!this.vapidKey) return 'unconfigured'
     if (!this.device.supported()) return 'unsupported'
+    if (this.remembered.key === undefined) return 'unknown'
+    if (this.remembered.key === null) return 'unconfigured'
     if (this.device.permission() === 'denied') return 'blocked'
     return this.remembered.endpoint ? 'on' : 'off'
   }
@@ -147,29 +158,45 @@ export class PushControl {
 
   /**
    * Compare what this device remembers with what the browser really holds, and tell the
-   * cloud again. Called when the app starts, when it comes back online and when the
-   * Notifications page opens. Never asks for permission, and never fails loudly.
+   * cloud again. Called when the app starts, when it comes back online and, with `ask`,
+   * when the Notifications page opens. Never asks for permission, and never fails loudly.
+   *
+   * The kitchen's key is fetched when the page asks, and at a start only if notifications
+   * are on here: a device that never turned them on asks the cloud nothing.
    */
-  refresh(): Promise<void> {
-    return (this.refreshing ??= this.refreshOnce().finally(() => {
+  refresh(ask = false): Promise<void> {
+    if (ask && this.refreshing && !this.asking) return this.refreshing.then(() => this.refresh(true))
+    this.asking = this.asking || ask
+    return (this.refreshing ??= this.refreshOnce(ask).finally(() => {
       this.refreshing = null
+      this.asking = false
     }))
   }
 
-  private async refreshOnce(): Promise<void> {
+  private async refreshOnce(ask: boolean): Promise<void> {
+    if (!this.device.supported()) return this.show('unsupported')
+    if (ask || this.remembered.endpoint) {
+      try {
+        const key = await this.backend.pushPublicKey()
+        if (key !== this.remembered.key) this.remember({ key })
+      } catch {
+        /* offline: go by the key last heard of */
+      }
+    }
     const quick = this.quickStatus()
     if (quick !== 'on') {
       // Blocked in the browser's settings since last time: the subscription is dead.
       if (quick === 'blocked' && this.remembered.endpoint) this.remember({ endpoint: null })
       return this.show(quick)
     }
+    const key = this.remembered.key as string
     const was = this.remembered.endpoint as string
     let now: DeviceSubscription | null = null
     try {
-      now = await this.device.current(this.vapidKey)
+      now = await this.device.current(key)
       // The browser dropped the subscription (it does that now and then), or the kitchen
       // got new keys. Permission is still there, so signing up again asks nobody anything.
-      if (!now && this.device.permission() === 'granted') now = await this.device.subscribe(this.vapidKey)
+      if (!now && this.device.permission() === 'granted') now = await this.device.subscribe(key)
     } catch {
       now = null
     }
@@ -195,9 +222,13 @@ export class PushControl {
 
   /** After a tap on "Turn on notifications". Resolves with what went wrong, or null. */
   async turnOn(): Promise<PushProblem | null> {
+    // Signing up needs the kitchen's key. If this device never heard of it, ask now.
+    if (this.quickStatus() === 'unknown') await this.refresh(true)
     const quick = this.quickStatus()
+    if (quick === 'unknown') return 'offline'
     if (quick === 'unconfigured' || quick === 'unsupported') return 'subscribe_failed'
     if (quick === 'blocked') return 'blocked'
+    const key = this.remembered.key as string
 
     let permission = this.device.permission()
     if (permission !== 'granted') {
@@ -215,7 +246,7 @@ export class PushControl {
 
     let subscription: DeviceSubscription
     try {
-      subscription = await this.device.subscribe(this.vapidKey)
+      subscription = await this.device.subscribe(key)
     } catch {
       this.show(this.quickStatus())
       return 'subscribe_failed'
@@ -272,7 +303,7 @@ export class PushControl {
 
   /** Before logging out: the cloud forgets this device's address while it still knows who is asking. */
   async removeFromCloud(): Promise<void> {
-    const endpoint = this.remembered.endpoint ?? (await this.device.current(this.vapidKey).catch(() => null))?.endpoint
+    const endpoint = this.remembered.endpoint
     if (endpoint) await this.backend.removePushSubscription(endpoint)
   }
 
@@ -283,7 +314,7 @@ export class PushControl {
     } catch {
       /* ignore */
     }
-    this.remembered = { endpoint: null, muted: [] }
+    this.remembered = { endpoint: null, muted: [], key: undefined }
     if (this.device.supported()) await this.device.unsubscribe().catch(() => undefined)
     this.show(this.quickStatus())
   }
@@ -298,16 +329,15 @@ export const deviceMemory: PushMemory = {
   removeItem: (key) => localStorage.removeItem(key),
 }
 
-/** Development only: end-to-end tests stand in for the browser's push service and the build's key. */
+/** Development only: end-to-end tests stand in for the browser's push service. */
 export interface PushRig {
-  vapidKey?: string
   device?: PushDevice
 }
 
-/** The browser's side and the key to subscribe with, as this build has them. */
-export function pushSetup(): { device: PushDevice; vapidKey: string } {
+/** The browser's side, as this build has it. */
+export function pushDevice(): PushDevice {
   const rig = import.meta.env.DEV ? (globalThis as { __foodwishusPush?: PushRig }).__foodwishusPush : undefined
-  return { device: rig?.device ?? browserPushDevice(), vapidKey: rig?.vapidKey ?? import.meta.env.VITE_VAPID_PUBLIC_KEY ?? '' }
+  return rig?.device ?? browserPushDevice()
 }
 
 function keyBytes(base64url: string): Uint8Array<ArrayBuffer> {

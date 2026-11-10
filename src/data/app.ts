@@ -5,7 +5,7 @@ import type { Backend, Membership, ProfileInput } from './backend'
 import { AppDB, META } from './db'
 import { HttpFakeBackend } from './fake/httpBackend'
 import { getPref, setPref } from './prefs'
-import { deviceMemory, PushControl, pushSetup } from './push'
+import { deviceMemory, PushControl, pushDevice } from './push'
 import { takeSeat } from './seat'
 import { Store } from './store'
 import { SupabaseBackend } from './supabaseBackend'
@@ -31,9 +31,8 @@ export const store = new Store(db, isDemo)
 export const sync = new SyncEngine(db, backend, store)
 sync.disabled = isDemo
 
-const pushRig = pushSetup()
-/** Notifications on this device (push.ts). The demo kitchen has no cloud that could send any. */
-export const push = new PushControl(pushRig.device, backend, deviceMemory, isDemo ? '' : pushRig.vapidKey, typeof navigator === 'undefined' ? '' : navigator.userAgent)
+/** Notifications on this device (push.ts). The demo kitchen has no cloud, so there nothing ever starts it. */
+export const push = new PushControl(pushDevice(), backend, deviceMemory, typeof navigator === 'undefined' ? '' : navigator.userAgent)
 
 export function useSyncStatus(): SyncStatus {
   return useSyncExternalStore(

@@ -68,6 +68,9 @@ export class MemoryBackend implements Backend {
       if (changed === householdId && this.online) queueMicrotask(onChange)
     })
   }
+  async pushPublicKey() {
+    return this.cloud.pushPublicKey(this.user())
+  }
   async savePushSubscription(subscription: PushSubscriptionInput) {
     this.cloud.savePushSubscription(this.user(), structuredClone(subscription))
   }

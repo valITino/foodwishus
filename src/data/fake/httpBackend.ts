@@ -79,6 +79,9 @@ export class HttpFakeBackend implements Backend {
   pull(since: ISO | null) {
     return this.call<PullResult>('pull', since)
   }
+  pushPublicKey() {
+    return this.call<string | null>('pushPublicKey')
+  }
   async savePushSubscription(subscription: PushSubscriptionInput) {
     await this.call<null>('savePushSubscription', subscription)
   }
