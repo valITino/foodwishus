@@ -7,7 +7,8 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
       photo queue, pairing rules. Proven with unit tests and a two-phone end-to-end test.
 - [x] **M2 Design system.** Tokens for light and candlelight, fonts, components, deco kit, Fork the
       mascot, `/#/styleguide`. **Waiting for your feedback before screens are built.**
-- [ ] **M3 Core.** Onboarding and pairing (QR code, invite link, recovery key), profiles (avatar maker
+- [ ] **M3 Core.** A step-by-step start (open or join by QR code or link, role, avatar, status, PIN),
+      PIN log-in from any device, an admin with a People page, profiles (avatar maker
       and a status line the partner sees, like "Always Huuungryyyyy"), dishes with full
       recipes and calories, cook mode, menus, Wishlist with craving and drag order, planning, Our Week.
 - [ ] **M4 Serve and review.** Served state, push notifications, proof photo, emoji reactions,

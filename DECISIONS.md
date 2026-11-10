@@ -25,27 +25,57 @@ Wishlist order uses fractional indexes. Rows are never hard-deleted, only marked
 A change made while a sync pass is running is re-applied on top of what the pass brings in.
 
 **Refused changes.** If the cloud rejects a change three times it is set aside (not dropped) and
-the queue moves on. If the rejection is because the phone was unpaired, nothing is set aside:
-the phone shows "needs pairing again" and keeps its unsent work.
+the queue moves on. If the rejection is because the device was logged out or its profile
+paused, nothing is set aside: the device says so and keeps its unsent work. Every pull tells
+the device whether it still has its seat, and before sending anything it asks first.
 
-## 2. Sign-in: invisible phone logins and pairing codes, not email
+## 2. Sign-in: a name and a PIN, not email
 
 The original plan was an emailed one-time code. Supabase's built-in email service only
 delivers to members of the Supabase project team and is tightly rate-limited, so a partner's
 address would simply never receive the code without setting up a separate email provider.
 
-Instead each phone signs in anonymously (no email, no password) and joins the kitchen with a
-10-character invite code, shown as a QR code or link. This is also closer to the original
-wish: "pairing like Bring!, ideally no email and password".
+Instead each device signs in anonymously (no email, no password). That invisible login is
+then tied to a person's profile, and one profile can have several devices.
 
-- **New phone:** the partner creates a restore code; the profile moves to the new phone and
-  the old phone is locked out.
-- **Both phones lost:** a 20-character recovery key, shown once when the kitchen is created.
-  Only its hash is stored.
-- **Cost:** clearing the browser's site data signs the phone out. Recovery is one of the two
-  paths above. The app asks Android to keep its storage (`navigator.storage.persist()`).
+- **First time:** the first person opens the kitchen; the second joins with a 10-character
+  invite code, shown as a QR code or link. Both choose a six-digit PIN.
+- **Any other device:** name and PIN. The profile, its settings and the kitchen come along.
+- **Forgotten PIN:** the admin makes a one-time restore code. Using it sets a new PIN and
+  logs the profile's other devices out (one of them may be the lost phone).
+- **Everything lost, including the admin's PIN:** the owner of the Supabase project runs
+  `select private.rescue_code('Name')` in the SQL editor. It cannot be reached from the app.
+- **Cost:** clearing the browser's site data logs the device out. Name and PIN bring it back.
+
+This replaced a 20-character recovery key that had to be written down. The users asked for
+something lighter, and for being recognised on every device.
+
+**Why six digits, and why a lock.** The app's address and its public key are public, so the
+PIN is the only thing between a stranger and the kitchen. Wrong tries are counted per typed
+name, whether that name exists or not: five tries, then a pause of 15 minutes that doubles
+up to a day. That leaves a guesser about five tries a day against a million PINs. A wrong PIN
+and an unknown name give the same answer and take the same time, so strangers cannot find out
+who lives here. The obvious PINs (000000, 123456, 121212 and the like) are refused. PINs are
+stored as bcrypt hashes in a schema the API cannot see.
+
+Known and accepted: somebody who knows a name can keep that name paused for new log-ins.
+Devices that are already logged in are not affected, and a restore code lifts the pause.
+
+**Settings follow the person.** Language, candlelight and the calorie switch are saved on the
+profile and applied when a device logs in (`src/app/settingsSync.ts`).
 
 Needs one switch in Supabase: Authentication → Sign In / Providers → Allow anonymous sign-ins.
+
+## 2b. One admin
+
+Whoever opens the kitchen is its admin. Only the admin can invite the second person, make a
+restore code, pause the partner's profile and log the partner out everywhere. The partner
+can do none of that to the admin. Pausing shuts the profile out of every rule at once (it
+simply stops counting as a member) and deletes nothing; switching it back on needs no new
+log-in, and the paused device delivers what it wrote in the meantime.
+
+The admin flag and the paused flag cannot be edited by the app at all. They change only
+through database functions that check who is asking.
 
 ## 3. One kitchen, two seats
 
@@ -54,13 +84,17 @@ against the project. That login can do nothing:
 
 - Row-level security limits every row and photo to kitchen members.
 - `create_household` works only while no kitchen exists. `join_household` needs a valid,
-  unused, unexpired code, and a kitchen has at most two members.
-- A nightly job deletes anonymous logins that never paired.
+  unused, unexpired code, and a kitchen has at most two members. Logging in needs a name and
+  its PIN (see above).
+- A nightly job deletes anonymous logins that belong to no profile, and old wrong-try counters.
+
+Because the first person to open the kitchen becomes its admin, open it yourself right
+after the first deploy.
 
 The security test in `supabase/tests/security_test.sql` plays a stranger against the real
-database. Known and accepted: Supabase's advisor flags the pairing functions as "security
-definer functions callable by signed-in users". They are the pairing API and check the
-caller themselves. It also flags `public.rls_auto_enable()`, which came with the project.
+database. Known and accepted: Supabase's advisor flags the log-in and admin functions as
+"security definer functions callable by signed-in users". They are the log-in API and check
+the caller themselves. It also flags `public.rls_auto_enable()`, which came with the project.
 
 ## 4. Photos
 
@@ -130,7 +164,8 @@ Things added beyond the written spec. Keep or veto.
 - **Stitched notes:** her notes to him look embroidered.
 - **Candy buttons** that squash when pressed, with a small vibration on Android.
 - **A sync line** on Today: "All synced", "2 changes waiting", "Offline. Saved on this phone."
-- **Recovery key and restore codes** (the spec asked for a recovery path; this is it, in full).
-- **Lock-out protection:** an unpaired phone never throws away unsent work.
+- **PIN log-in on any device, an admin, restore codes and an owner's master key** (the spec
+  asked for a recovery path; this is it, in full).
+- **Lock-out protection:** a logged-out or paused device never throws away unsent work.
 - **Quote of the day:** the same quote all day, a new one tomorrow.
 - **`/#/lab`** in development: a workbench to watch sync between two browser windows.

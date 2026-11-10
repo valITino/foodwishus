@@ -28,8 +28,12 @@ config and the screenshot tool read the same variable).
 - **Writing:** screens call functions from `src/data/actions.ts`. Never write to Dexie
   directly from a screen. Photos go through `src/data/photos.ts`.
 - `src/data/sync.ts` pushes the outbox and pulls changes. Screens never talk to the backend,
-  except pairing, which goes through `startKitchen` / `joinKitchen` / `recoverKitchen` and
-  `backend` in `src/data/app.ts`.
+  except logging in and the admin's tools, which go through `startKitchen` / `joinKitchen` /
+  `logIn` / `logOut` and `backend` in `src/data/app.ts`.
+- **People:** a person is a profile (`members`), a device is a login. One profile can be
+  logged in on many devices; name + PIN logs in (`src/data/pin.ts`). Whoever opened the
+  kitchen is the admin (`Member.isAdmin`). A paused profile has `disabledAt` set. Language,
+  theme and calories live in `Member.prefs` and follow the person (`src/app/settingsSync.ts`).
 - `src/app/router.ts`: hash routes. `navigate('/recipes/new')`, `back('/recipes')`,
   `useRoute()`, `matchPath('/recipes/:id', path)`.
 - `src/app/Shell.tsx` owns tabs, the add sheet, toasts and the demo banner.

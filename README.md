@@ -22,22 +22,40 @@ Once deployed, the app lives at `https://valitino.github.io/foodwishus/`:
 1. **GitHub, make the repository public:** Settings → General → Danger Zone → Change visibility.
    Only the code becomes visible. Meals and photos stay private in Supabase.
 2. **GitHub, turn on hosting:** Settings → Pages → Build and deployment → Source: **GitHub Actions**.
-3. **Supabase, allow phone logins:** Authentication → Sign In / Providers → turn on
-   **Allow anonymous sign-ins**. The app has no email or password: each phone gets its own
-   invisible login, and you pair the two phones with a code.
+3. **Supabase, allow device logins:** Authentication → Sign In / Providers → turn on
+   **Allow anonymous sign-ins**. The app has no email or password: each device gets its own
+   invisible login, and people are recognised by their name and a six-digit PIN.
 
 ## Installing on Android
 
 Open the app link in Chrome, tap the menu (three dots), then **Install app** (or
 **Add to Home screen**). It then opens like any other app.
 
-## Pairing and recovery (from milestone 3)
+## Getting in, and getting back in
 
-- The first person taps **Start our kitchen** and shows a QR code or invite link.
-- The partner scans it. Done: both phones now share one kitchen.
-- New phone? The partner creates a **restore** code in Settings, and the old profile moves over.
-- Both phones gone? The **recovery key**, shown once when the kitchen is created, gets you back in.
-  Write it down.
+- **The first person opens the kitchen** and becomes its **admin**: pick a role ("I rule the
+  stove" or "I'm here to eat"), an avatar, a status line and a six-digit PIN.
+- **The partner joins** with the admin's link, QR code or code, and picks the same things.
+- **Another phone or a tablet?** Tap **Back to the kitchen**, type your name and your PIN.
+  Your profile, your settings (language, candlelight, calories) and the whole kitchen come along.
+  You can be logged in on several devices at once.
+- **Five wrong PINs** pause that name for 15 minutes, then longer each time (at most a day).
+- **Forgot your PIN?** The admin opens Settings → People → "Let back in" and sends a one-time
+  code. You pick a new PIN; your other devices are logged out.
+- **The admin** can also pause the partner's profile (no log-in, nothing is deleted) and log
+  the partner out everywhere, for example after losing a phone.
+
+### The master key (for the owner of the Supabase project)
+
+If the admin forgets their PIN and has no logged-in device left, nobody in the app can help.
+You, the owner of the Supabase project, can: open the Supabase dashboard → SQL Editor and run
+
+```sql
+select private.rescue_code('Leo');   -- the name of the profile to get back into
+```
+
+It answers with a one-time code (valid for 48 hours). Type it on the app's start screen under
+"I have a code" and choose a new PIN. This command cannot be reached from the app.
 
 ## Running costs
 
@@ -53,7 +71,7 @@ press **Restore project**. Nothing is lost.
 ```bash
 npm install
 npm run dev        # http://localhost:5173, with a pretend cloud built into the dev server
-npm test           # unit tests: sync engine, pairing rules, conflict handling
+npm test           # unit tests: sync engine, log-in and admin rules, conflict handling
 npm run e2e        # two simulated Android phones syncing, one of them offline
 npm run build      # production build (talks to Supabase)
 npm run icons      # regenerate app icons from the mascot
