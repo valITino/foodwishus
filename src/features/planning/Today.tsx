@@ -11,6 +11,7 @@ import { zurichHour } from '../../lib/dates'
 import { AwningHeader, Avatar, Button, Card, EmptyState, HeartMeter, Screen, Stat, StatusBubble, SyncPill, Tag, toast } from '../../ui/components'
 import { Mascot } from '../../ui/deco/Deco'
 import { Icon } from '../../ui/deco/Icon'
+import { EarlyProof, EatenToday, PhotoWallCard } from '../review'
 import { planningCopy } from './copy'
 import { cookOf, currentStreak, dayPart, eatenDay, eatenInWeek, isOpen, onTheTable, plannedFor, roleIn, upNext } from './logic'
 import { MealThumb, nameOf, NoteBox, TextAction, useKitchen, useMealInfo, useWhen, type Kitchen } from './shared'
@@ -55,7 +56,7 @@ function ServedCard({ serving, kitchen, main }: { serving: Serving; kitchen: Kit
       {serving.note && <NoteBox className="mx-4 mb-4" label={noteLabel(serving, kitchen, c.shared)} note={serving.note} />}
       <div className="px-4 pb-5">
         {taster ? (
-          <Button size="lg" block variant={main ? 'primary' : 'secondary'} icon={<Icon name="camera" size={22} />} onClick={() => openServing(serving)}>
+          <Button size="lg" block variant={main ? 'primary' : 'secondary'} icon={<Icon name="camera" size={22} />} onClick={() => navigate(`/review/${serving.id}`)}>
             {t.actions.takeProof}
           </Button>
         ) : (
@@ -117,12 +118,14 @@ function HeroCard({ serving, kitchen, main }: { serving: Serving; kitchen: Kitch
         <MealThumb info={info} seed={serving.id} size={72} />
       </div>
       {serving.note && <NoteBox className="mx-4 mb-4" label={noteLabel(serving, kitchen, c.shared)} note={serving.note} />}
-      {cooking && (
+      {cooking ? (
         <div className="px-4 pb-5">
           <Button size="lg" block variant={main ? 'primary' : 'secondary'} disabled={busy} onClick={() => void serve()}>
             {t.actions.served}
           </Button>
         </div>
+      ) : (
+        <EarlyProof servingId={serving.id} className="mx-4 mb-2" />
       )}
     </Card>
   )
@@ -150,7 +153,6 @@ export function TodayScreen() {
   const c = useCopy(planningCopy)
   const kitchen = useKitchen()
   const status = useSyncStatus()
-  const info = useMealInfo()
 
   if (!kitchen) return <Screen tabs>{null}</Screen>
 
@@ -195,25 +197,7 @@ export function TodayScreen() {
           <HeroCard key={serving.id} serving={serving} kitchen={kitchen} main={serving.id === serveId} />
         ))}
 
-        {eaten.length > 0 && (
-          <Card pad={false} className="divide-y divide-line">
-            {eaten.map((serving) => {
-              const meal = info(serving, kitchen)
-              return (
-                <button key={serving.id} type="button" onClick={() => openServing(serving)} className="flex w-full items-center gap-3 p-3 text-left">
-                  <MealThumb info={meal} seed={serving.id} size={48} />
-                  <span className="min-w-0 flex-1">
-                    <span className="line-clamp-2 text-sm font-extrabold leading-snug">{meal.name}</span>
-                    <span className="block text-xs text-ink-soft">{c.today.eatenToday}</span>
-                  </span>
-                  <span className="grid size-7 shrink-0 place-items-center rounded-full bg-sage text-on-rose">
-                    <Icon name="check" size={16} />
-                  </span>
-                </button>
-              )
-            })}
-          </Card>
-        )}
+        <EatenToday servings={eaten} kitchen={kitchen} />
 
         {nothingToday && (
           <Card pad={false} data-testid="today-empty">
@@ -253,6 +237,8 @@ export function TodayScreen() {
           <Stat value={week} label={c.today.statWeek(week)} />
           <Stat value={streak} unit={c.today.statDays(streak)} label={c.today.statStreak} />
         </Card>
+
+        <PhotoWallCard kitchen={kitchen} />
       </main>
     </Screen>
   )

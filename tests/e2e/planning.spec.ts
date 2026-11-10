@@ -594,7 +594,7 @@ test.describe('Today', () => {
     expect(await serving(page, id)).toMatchObject({ status: 'served', cookedBy: people.leo })
   })
 
-  test('the Taster is asked for proof and lands on the meal page', async ({ page }) => {
+  test('the Taster is asked for proof and lands at the camera', async ({ page }) => {
     const people = await openKitchen(page)
     const id = await wish(page, people, 'Lasagne al forno', { note: 'With the crispy corners' })
     await act(page, 'planServing', id, today(), 'lunch')
@@ -608,10 +608,9 @@ test.describe('Today', () => {
     await expect(served).toContainText('Lasagne al forno is on the table. Proof, please.')
     await served.getByRole('button', { name: 'Take the proof photo' }).click()
 
-    await expect(page).toHaveURL(new RegExp(`#/serving/${id}$`))
-    await expect(page.getByRole('heading', { level: 1, name: 'Served' })).toBeVisible()
-    // The proof flow is the next milestone: its place is marked, nothing is faked.
-    await expect(page.locator('[data-reserved="proof-and-review"]')).toContainText('Proof photo and review')
+    // The proof flow takes over from here (tests/e2e/review.spec.ts).
+    await expect(page).toHaveURL(new RegExp(`#/review/${id}$`))
+    await expect(page.getByRole('heading', { level: 1, name: 'Proof and verdict' })).toBeVisible()
   })
 
   test('counts eaten meals and the streak', async ({ page }) => {

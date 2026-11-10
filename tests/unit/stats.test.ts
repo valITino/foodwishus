@@ -296,6 +296,37 @@ describe('the numbers on the tiles', () => {
     expect(skipRate(data, { from: '2025-01-01', to: '2025-12-31' })).toBeNull()
   })
 
+  it('skip rate agrees with the other tiles under every filter', () => {
+    const menu: Menu = { ...row('menu'), name: 'Menu', description: null, courses: [{ dishId: 'soup', order: 0 }, { dishId: 'roast', order: 1 }], createdBy: mia, archived: false }
+    const data = kitchen({
+      dishes: [dish('soup', { course: 'starter' }), dish('roast'), dish('curry', { tags: ['spicy'], nutrition: { kcalPerServing: 650 } })],
+      menus: [menu],
+      servings: [
+        eaten('e1', 'curry', '2026-11-02'),
+        eaten('e2', 'curry', '2026-11-03'),
+        eaten('e3', 'roast', '2026-11-04', { cookedBy: leo }),
+        serving('k1', { dishId: 'curry', status: 'skipped', plannedDate: '2026-11-05' }),
+        serving('k2', { menuId: 'menu', status: 'skipped', plannedDate: '2026-11-06' }),
+        serving('k3', { dishId: 'roast', status: 'skipped', plannedDate: '2026-11-07', cookedBy: leo }),
+      ],
+      reviews: [rated('e1', 'curry', 5, 6), rated('e2', 'curry', 2, 2), rated('e3', 'roast', 4, 5)],
+    })
+    const tiles = (filter: Parameters<typeof skipRate>[1]) => ({ eaten: kpis(data, filter ?? {}, '2026-11-10').mealsEaten, rate: skipRate(data, filter) })
+
+    expect(tiles({})).toEqual({ eaten: 3, rate: { rate: 0.5, skipped: 3, eaten: 3 } })
+    expect(tiles({ dishIds: ['curry'] })).toEqual({ eaten: 2, rate: { rate: 1 / 3, skipped: 1, eaten: 2 } })
+    // A skipped menu counts for each of its courses.
+    expect(tiles({ courses: ['starter'] })).toEqual({ eaten: 0, rate: { rate: 1, skipped: 1, eaten: 0 } })
+    expect(tiles({ dishIds: ['roast'] })).toEqual({ eaten: 1, rate: { rate: 2 / 3, skipped: 2, eaten: 1 } })
+    expect(tiles({ tags: ['spicy'] }).rate).toEqual({ rate: 1 / 3, skipped: 1, eaten: 2 })
+    expect(tiles({ kcalPerServing: [600, 700] }).rate).toEqual({ rate: 1 / 3, skipped: 1, eaten: 2 })
+    expect(tiles({ cookedBy: leo }).rate).toEqual({ rate: 0.5, skipped: 1, eaten: 1 })
+    expect(tiles({ menuId: 'menu' }).rate).toEqual({ rate: 1, skipped: 1, eaten: 0 })
+    // Skipped meals have no verdict: with a rating or reaction filter there is no honest rate.
+    expect(tiles({ overall: [4, 5] })).toEqual({ eaten: 2, rate: null })
+    expect(tiles({ reactions: [6] })).toEqual({ eaten: 1, rate: null })
+  })
+
   it('days to eat: from proposing to eating', () => {
     const data = kitchen({
       dishes: [dish('x')],
@@ -432,7 +463,10 @@ describe('the filter bar', () => {
   it('knows the presets', () => {
     expect(rangeFor('week', '2026-11-10')).toEqual({ from: '2026-11-09', to: '2026-11-15' })
     expect(rangeFor('month', '2026-11-10')).toEqual({ from: '2026-11-01', to: '2026-11-10' })
-    expect(rangeFor('quarter', '2026-11-10')).toEqual({ from: '2026-08-12', to: '2026-11-10' })
+    expect(rangeFor('quarter', '2026-11-10')).toEqual({ from: '2026-08-10', to: '2026-11-10' })
+    // Three calendar months back, also across a year end and from a long month into a short one.
+    expect(rangeFor('quarter', '2027-01-15').from).toBe('2026-10-15')
+    expect(rangeFor('quarter', '2026-05-31').from).toBe('2026-02-28')
     expect(rangeFor('year', '2026-11-10')).toEqual({ from: '2026-01-01', to: '2026-11-10' })
     expect(rangeFor('all', '2026-11-10')).toEqual({})
   })

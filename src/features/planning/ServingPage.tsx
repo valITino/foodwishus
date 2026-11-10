@@ -9,6 +9,7 @@ import { formatDay, toDay } from '../../lib/dates'
 import { Button, Card, Chip, cx, EmptyState, Field, HeartMeter, PageHeader, Screen, Sheet, TextArea, toast } from '../../ui/components'
 import { Heart } from '../../ui/deco/Deco'
 import { Icon, type IconName } from '../../ui/deco/Icon'
+import { EarlyProof, MealReview, ProofCard } from '../review'
 import { planningCopy } from './copy'
 import { canServe, cookOf, defaultSlot, eatenDay, isOpen, linkedDay, nextDays, roleIn, upcomingDays } from './logic'
 import { DayStrip, MealThumb, nameOf, NoteBox, SlotChips, TextAction, useKitchen, useMealInfo, useWhen, type Kitchen, type MealInfo } from './shared'
@@ -238,20 +239,6 @@ function Planner({ serving, kitchen, info, title, preferred, onDone, onCancel }:
   )
 }
 
-/**
- * M4 (serve and review): the proof photo, the emoji reaction and the review sheet move
- * in here. Until then this is an honest, clearly marked placeholder. Nothing is faked.
- */
-function ReservedSpot({ title, body }: { title: string; body: string }) {
-  return (
-    <div data-reserved="proof-and-review" className="flex flex-col items-center rounded-card border-2 border-dashed border-line-strong px-5 py-6 text-center">
-      <Icon name="camera" size={28} className="text-ink-soft" />
-      <p className="mt-2 text-sm font-extrabold">{title}</p>
-      <p className="mt-1 text-sm text-ink-soft">{body}</p>
-    </div>
-  )
-}
-
 function SkipSheet({ open, name, onClose, onSkip }: { open: boolean; name: string; onClose: () => void; onSkip: (reason: string | undefined) => void }) {
   const c = useCopy(planningCopy).serving
   const [reason, setReason] = useState<keyof typeof c.reasons | null>(null)
@@ -359,7 +346,10 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
         )}
 
         {serving.status === 'planned' && !iCook && serving.plannedDate !== null && serving.plannedDate <= kitchen.today && (
-          <p className="px-1 text-sm text-ink-soft">{c.serving.waitsForCook(nameOf(kitchen, cookOf(serving)))}</p>
+          <div className="px-1">
+            <p className="text-sm text-ink-soft">{c.serving.waitsForCook(nameOf(kitchen, cookOf(serving)))}</p>
+            <EarlyProof servingId={serving.id} />
+          </div>
         )}
 
         {serving.status === 'served' &&
@@ -377,12 +367,12 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
               </TextAction>
             </Card>
           ) : (
-            <ReservedSpot title={c.serving.proofTitle} body={c.serving.proofBody} />
+            <ProofCard serving={serving} kitchen={kitchen} />
           ))}
 
         {serving.status === 'eaten' && (
           <>
-            <ReservedSpot title={c.serving.proofTitle} body={c.serving.reviewBody} />
+            <MealReview serving={serving} kitchen={kitchen} />
             <Button
               size="lg"
               block

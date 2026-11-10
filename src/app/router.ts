@@ -34,11 +34,73 @@ let blocker: (() => boolean) | null = null
 
 /**
  * While set, the phone's own back button asks before leaving the page: the function is
- * called, and if it returns true the page stays (nothing typed is lost). Used by forms
- * with unsaved changes through useLeaveGuard. navigate() and back() are never blocked.
+ * called, and if it returns true the page stays (nothing typed is lost). One per page:
+ * forms with unsaved changes (useLeaveGuard) and the step-by-step start use it.
+ * navigate() and back() are never blocked. Sheets close on back by themselves (see layers).
  */
 export function setBlocker(fn: (() => boolean) | null): void {
   blocker = fn
+}
+
+// ---- layers: sheets that lie on top of a page ----
+//
+// Opening a sheet adds one step to the phone's history (same address). Android's back
+// button or swipe then takes that step back and the sheet closes, instead of the page
+// or the whole app going away. Every other way of closing has to take the step back
+// itself, and navigate() and back() have to step over it. All of that lives here.
+
+interface Layer {
+  id: number
+  onBack: () => void
+  /** Closed already. Its step may still be in the history until the layers above it are gone. */
+  done: boolean
+}
+
+/** The steps above the current page, oldest first. */
+const layers: Layer[] = []
+let layerCount = 0
+/** True while we are taking steps back ourselves: the next history event is ours. */
+let collapsing = false
+const afterCollapse: (() => void)[] = []
+
+/** Take the closed layers at the top of the pile out of the history. */
+function dropClosedLayers(): void {
+  let count = 0
+  while (layers.length > 0 && layers[layers.length - 1].done) {
+    layers.pop()
+    count += 1
+  }
+  if (count === 0) return
+  collapsing = true
+  window.history.go(-count)
+}
+
+/**
+ * Call when a sheet opens. onBack is called when the phone's back button closes it.
+ * Returns a function to call when the sheet closes for any other reason.
+ */
+export function pushLayer(onBack: () => void): () => void {
+  const layer: Layer = { id: ++layerCount, onBack, done: false }
+  layers.push(layer)
+  window.history.pushState({ ...(window.history.state as object | null), layer: layer.id }, '')
+  return () => {
+    if (layer.done) return
+    // Closing a sheet and moving on often happen in the same breath. Wait a moment:
+    // navigate() and back() deal with the step themselves and mark the layer done.
+    setTimeout(() => {
+      if (layer.done) return
+      layer.done = true
+      if (!collapsing) dropClosedLayers()
+    }, 0)
+  }
+}
+
+/** Forget every layer: the page is moving on. Returns how many steps they took up. */
+function abandonLayers(): number {
+  const count = layers.length
+  for (const layer of layers) layer.done = true
+  layers.length = 0
+  return count
 }
 
 function remember(): void {
@@ -46,7 +108,40 @@ function remember(): void {
   shownDepth = depth()
 }
 
+/** The layer whose step is on top of the history right now, if any. */
+const layerOnTop = (): number | undefined => (window.history.state as { layer?: number } | null)?.layer
+
 function onHistoryEvent(): void {
+  // Going back fires two events (popstate, then hashchange a moment later), and the second
+  // can arrive after a sheet has opened. So never guess from the event alone: compare the
+  // history's top step with the pile of layers.
+  const top = layers.length > 0 ? layers[layers.length - 1].id : undefined
+
+  if (collapsing) {
+    // Steps we are taking back ourselves. Not landed yet: this event is an echo of something older.
+    if (layerOnTop() !== top) return
+    collapsing = false
+    remember()
+    notify()
+    const todo = afterCollapse.splice(0)
+    for (const run of todo) run()
+    if (!collapsing) dropClosedLayers()
+    return
+  }
+  if (layers.length > 0 && window.location.hash === shownHash) {
+    if (layerOnTop() === top) return // nothing moved
+    // The phone's back button took a sheet's step back: that sheet closes.
+    while (layers.length > 0 && layers[layers.length - 1].id !== layerOnTop()) {
+      const layer = layers.pop() as Layer
+      if (!layer.done) {
+        layer.done = true
+        layer.onBack()
+      }
+    }
+    dropClosedLayers()
+    remember()
+    return
+  }
   if (window.location.hash !== shownHash && blocker?.()) {
     window.history.pushState({ depth: shownDepth }, '', shownHash || '#/')
     return
@@ -84,16 +179,45 @@ function depth(): number {
 }
 
 export function navigate(to: string, options: { replace?: boolean } = {}): void {
-  if (options.replace) window.history.replaceState({ depth: depth() }, '', `#${to}`)
-  else window.history.pushState({ depth: depth() + 1 }, '', `#${to}`)
+  if (collapsing) {
+    // We are in the middle of stepping back over a closed sheet. Go once that has landed.
+    afterCollapse.push(() => navigate(to, options))
+    return
+  }
+  const here = depth()
+  const open = abandonLayers()
+  if (open > 1) {
+    // Sheets on sheets: step back to the lowest one first, then move on from there.
+    layers.push({ id: 0, onBack: () => {}, done: false })
+    collapsing = true
+    afterCollapse.push(() => navigate(to, options))
+    window.history.go(-(open - 1))
+    return
+  }
+  // A sheet that is still open gives its step in the history to the new page.
+  if (open === 1) window.history.replaceState({ depth: here + 1 }, '', `#${to}`)
+  else if (options.replace) window.history.replaceState({ depth: here }, '', `#${to}`)
+  else window.history.pushState({ depth: here + 1 }, '', `#${to}`)
   remember()
   notify()
 }
 
 /** Go back one step, or to the fallback when the app was opened directly on this page. */
 export function back(fallback = '/'): void {
-  if (depth() > 0) window.history.back()
-  else navigate(fallback, { replace: true })
+  if (collapsing) {
+    afterCollapse.push(() => back(fallback))
+    return
+  }
+  const here = depth()
+  const open = abandonLayers()
+  if (here > 0) {
+    if (open > 0) collapsing = true
+    window.history.go(-(open + 1))
+  } else if (open > 0) {
+    collapsing = true
+    afterCollapse.push(() => navigate(fallback, { replace: true }))
+    window.history.go(-open)
+  } else navigate(fallback, { replace: true })
 }
 
 /** matchPath('/recipes/:id/edit', '/recipes/abc/edit') → { id: 'abc' } */

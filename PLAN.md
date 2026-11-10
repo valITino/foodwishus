@@ -12,11 +12,14 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
       status line the partner sees, like "Always Huuungryyyyy"), settings that follow the person,
       dishes with full recipes and calories, cook mode, menus, Wishlist with craving and drag
       order, planning, Our Week, a demo kitchen with three months of sample menus.
-- [ ] **M4 Serve and review.** Served state, push notifications, proof photo, emoji reactions,
-      review sheet, wax seal, photo wall. *The data side is done and tested; the screens are next.*
-- [ ] **M5 Cockpit.** Stats library with unit tests, filters, charts (ratings, calories, eating
-      times, reactions), drill-down, Hall of Fame. *The stats library is done and tested; the screens are next.*
-- [ ] **M6 Polish.** Service worker (offline app shell, install prompt), remaining animations,
+- [x] **M4 Serve and review.** Served state, proof photo (camera or gallery, as a developing
+      polaroid), emoji reactions with extras, review sheet, one verdict per course for menus,
+      wax seal, the Chef's guess and answer, photo wall. *Push notifications move to M6: they
+      need the service worker that is built there.*
+- [x] **M5 Cockpit.** Stats library with unit tests, filter bar, eleven tiles, sixteen charts
+      (ratings, criteria, craving against reality, calendar of hearts, calories, eating times,
+      reactions, recipes), dish in numbers, Hall of Fame, fun facts.
+- [ ] **M6 Polish.** Service worker (offline app shell, install prompt), push notifications, remaining animations,
       40+ quotes, empty states, full German copy, accessibility pass.
 - [ ] **M7 Ship.** Export and import, sync diagnostics screen, Lighthouse, full end-to-end suite, final README.
 
@@ -26,8 +29,8 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
 | --- | --- |
 | Database rules (strangers locked out, two seats, PIN log-in and its lock, admin-only powers, pause, restore, master key, sealed reviews) | `supabase/tests/security_test.sql`, run against the real project on 10 Nov 2026: 55 checks pass |
 | The app calls only database functions that exist, with the right parameter names | `tests/unit/supabaseContract.test.ts` reads the signatures out of `supabase/migrations` |
-| Sync, log-in, admin, proof and review logic, and every Cockpit number | 301 unit tests against a pretend cloud that follows the same rules |
-| Every user flow so far: the start, joining, logging in on a second device, the admin's tools, the Recipe Book, cook mode, the Wishlist, planning, Our Week, and two devices syncing while one is offline | 39 tests in real browsers at Android size (`tests/e2e`) |
+| Sync, log-in, admin, proof and review logic, and every Cockpit number | 416 unit tests against a pretend cloud that follows the same rules |
+| Every user flow so far: the start, joining, logging in on a second device, the admin's tools, the Recipe Book, cook mode, the Wishlist, planning, Our Week, proof photo and review, the Chef's answer, the photo wall, the Cockpit with its filters, the back button closing sheets, and two devices syncing while one is offline | 82 tests in real browsers at Android size (`tests/e2e`) |
 | Design in light and candlelight, English and German | Screenshots at 412 and 360 wide, looked at one by one |
 
 ## Not verified yet
@@ -39,4 +42,6 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
   under Sync: send me that text.
 - **A real Android phone.** The number pad for the PIN, long-press dragging, vibration and
   installing to the home screen were only tried in an Android-sized desktop browser.
-- **Push notifications and the camera** need real phones too (M4).
+- **The camera** was tried only by handing the app a picture file. Opening the real camera from
+  the button, and photos travelling between two phones through the real cloud, need your phones.
+- **Push notifications** are not built yet (M6).

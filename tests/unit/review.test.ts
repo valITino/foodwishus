@@ -193,6 +193,20 @@ describe('finishing a meal', () => {
     expect((await db.reviews.toArray()).find((r) => r.dishId === roast.id)?.overall).toBe(5)
   })
 
+  it('wants a picture of the whole table for a menu, not only of one course', async () => {
+    const soup = await createDish({ name: 'Pumpkin soup', course: 'starter' })
+    const roast = await createDish({ name: 'Roast chicken' })
+    const menu = await createMenu({ name: 'Sunday roast', courses: [{ dishId: soup.id, order: 0 }, { dishId: roast.id, order: 1 }] })
+    const serving = await proposeServing({ menuId: menu.id, cookedBy: mia })
+    await reactToMeal(serving.id, 5)
+
+    await addProofPhoto(serving.id, { image: picture(), source: 'camera', courseDishId: soup.id })
+    await expect(finishMeal(serving.id)).rejects.toMatchObject({ code: 'proof_missing' })
+    await addProofPhoto(serving.id, { image: picture(), source: 'camera' })
+    await finishMeal(serving.id)
+    expect((await db.servings.get(serving.id))?.status).toBe('eaten')
+  })
+
   it('says so when the meal does not exist', async () => {
     await expect(reactToMeal(newId(), 5)).rejects.toBeInstanceOf(ActionError)
   })

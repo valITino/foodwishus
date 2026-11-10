@@ -145,7 +145,7 @@ export interface StatsFilter {
 
 export type RangePreset = 'week' | 'month' | 'quarter' | 'year' | 'all'
 
-/** Date ranges for the filter bar. "week" is Monday to Sunday, "quarter" the last three months. */
+/** Date ranges for the filter bar. "week" is Monday to Sunday, "quarter" the last three calendar months. */
 export function rangeFor(preset: RangePreset, today: Day): Pick<StatsFilter, 'from' | 'to'> {
   switch (preset) {
     case 'week': {
@@ -155,12 +155,21 @@ export function rangeFor(preset: RangePreset, today: Day): Pick<StatsFilter, 'fr
     case 'month':
       return { from: `${today.slice(0, 8)}01`, to: today }
     case 'quarter':
-      return { from: addDays(today, -90), to: today }
+      return { from: monthsBefore(today, 3), to: today }
     case 'year':
       return { from: `${today.slice(0, 4)}-01-01`, to: today }
     case 'all':
       return {}
   }
+}
+
+/** The same day of the month, that many months earlier (the last day when that month is shorter). */
+function monthsBefore(day: Day, months: number): Day {
+  const [year, month, date] = day.split('-').map(Number)
+  const first = new Date(Date.UTC(year, month - 1 - months, 1))
+  const daysInMonth = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate()
+  first.setUTCDate(Math.min(date, daysInMonth))
+  return first.toISOString().slice(0, 10)
 }
 
 const inDays = (day: Day, filter: StatsFilter) => (!filter.from || day >= filter.from) && (!filter.to || day <= filter.to)
@@ -321,28 +330,31 @@ export function reactionCounts(meals: Meal[]): number[] {
 }
 
 /**
- * Skipped / (eaten + skipped) within the range. A skipped meal belongs to the day it was
- * planned for, or else to the day it was skipped.
+ * Skipped / (eaten + skipped) within the filter. "Eaten" is the same count the other
+ * tiles show. A skipped meal belongs to the day it was planned for, or else to the day
+ * it was skipped, and matches a dish filter when any of its dishes does. A skipped meal
+ * has no verdict, so with a rating or reaction filter the rate cannot be told: null.
  */
 export function skipRate(data: KitchenData, filter: StatsFilter = {}): { rate: number; skipped: number; eaten: number } | null {
-  const dishes = new Map(data.dishes.map((d) => [d.id, d]))
-  const fits = (serving: Serving, day: Day) => {
-    if (!inDays(day, filter)) return false
-    if (filter.cookedBy && serving.cookedBy !== filter.cookedBy) return false
-    if (filter.menuId && serving.menuId !== filter.menuId) return false
-    if (filter.dishIds?.length && !(serving.dishId && filter.dishIds.includes(serving.dishId))) return false
-    const dish = serving.dishId ? dishes.get(serving.dishId) : undefined
-    if (filter.courses?.length && !(dish && filter.courses.includes(dish.course))) return false
-    if (filter.tags?.length && !(dish && dish.tags.some((t) => filter.tags?.includes(t)))) return false
-    return true
-  }
+  if (filter.overall || filter.reactions?.length) return null
+  const dishes = new Map(alive(data.dishes).map((d) => [d.id, d]))
+  const menus = new Map(data.menus.map((m) => [m.id, m]))
+  const dishFilter = Boolean(filter.dishIds?.length || filter.courses?.length || filter.tags?.length || filter.kcalPerServing)
+
   let skipped = 0
-  let eaten = 0
   for (const serving of alive(data.servings)) {
-    if (serving.status === 'skipped' && fits(serving, serving.plannedDate ?? toDay(serving.updatedAt))) skipped += 1
-    const day = eatenDay(serving)
-    if (day && fits(serving, day)) eaten += 1
+    if (serving.status !== 'skipped') continue
+    if (!inDays(serving.plannedDate ?? toDay(serving.updatedAt), filter)) continue
+    if (filter.cookedBy && serving.cookedBy !== filter.cookedBy) continue
+    if (filter.menuId && serving.menuId !== filter.menuId) continue
+    if (dishFilter) {
+      const dishIds = serving.dishId ? [serving.dishId] : (menus.get(serving.menuId ?? '')?.courses ?? []).map((c) => c.dishId)
+      const blank = { servingId: serving.id, review: null, overall: null, reaction: null, portions: 1, kcal: null }
+      if (!dishIds.some((dishId) => plateMatches({ ...blank, dishId, dish: dishes.get(dishId) }, filter))) continue
+    }
+    skipped += 1
   }
+  const eaten = filterMeals(eatenMeals(data), filter).length
   return skipped + eaten === 0 ? null : { rate: skipped / (skipped + eaten), skipped, eaten }
 }
 
