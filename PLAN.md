@@ -21,8 +21,8 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
       reactions, recipes), dish in numbers, Hall of Fame, fun facts.
 - [x] **M6 Polish.** Service worker (the app opens offline, a "new version" note with Reload),
       an install card, push notifications with a switch per kind, an accessibility pass over
-      every screen with a guard test. *Push still has to be switched on in the live Supabase
-      project (owner's decision); no real notification has been delivered yet.*
+      every screen with a guard test. *Push is switched on in the live Supabase project
+      (10 Nov 2026); a real notification on a real phone is still to be seen.*
 - [x] **M7 Ship.** Backup (export and import), review criteria in Settings, the Sync page
       with refused changes, Lighthouse measured, final README. *Open:* Lighthouse performance
       is around 80, the goal is 90 (the first load carries everything in one piece of JavaScript).
@@ -50,9 +50,10 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
   installing to the home screen were only tried in an Android-sized desktop browser.
 - **The camera** was tried only by handing the app a picture file. Opening the real camera from
   the button, and photos travelling between two phones through the real cloud, need your phones.
-- **Push notifications reaching a real phone.** The whole chain is tested in pieces (the
-  database triggers on a local Postgres, the function under Node, the service worker with the
-  browser's dev tools), but no real notification has been delivered yet, and the function has
-  not run on Supabase.
+- **Push notifications reaching a real phone.** The server side is live: the function runs on
+  Supabase, refuses calls without the secret and made its keys. The triggers and the words
+  are tested on a local Postgres and under Node. What nobody has seen yet is a notification
+  arriving on a phone: that needs the app from this milestone on both phones and
+  "Turn on notifications" tapped.
 - **The first real contact with Supabase happened on 10 Nov 2026:** opening the kitchen,
   joining by link and syncing between the two phones worked.

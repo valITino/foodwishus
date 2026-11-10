@@ -178,6 +178,23 @@ signs up again by itself the next time the app is opened; until then it gets not
 Copies of the function that are already running may keep using the old pair for up to
 five minutes.
 
+## What is deployed right now
+
+Switched on for the live project on 10 Nov 2026: migration `push` applied, the function
+`push` deployed (JWT verification off), `private.push_setup` run and the keys made. The
+function answered `401 wrong_secret` to a call without the secret and `200` to `init`.
+
+The deployed function is a one-line loader that imports this folder's `index.ts` from GitHub
+at one fixed commit, so what runs is exactly what was tested and nothing had to be copied by
+hand:
+
+```ts
+import 'https://raw.githubusercontent.com/valITino/foodwishus/<commit>/supabase/functions/push/index.ts'
+```
+
+To ship a change to the function: commit and push it, then deploy the loader again with the
+new commit in the address. Pasting the single file from `npm run build:push` works too.
+
 ## What is in this folder
 
 | File | What it does |
