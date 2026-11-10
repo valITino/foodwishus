@@ -19,8 +19,9 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
 - [x] **M5 Cockpit.** Stats library with unit tests, filter bar, eleven tiles, sixteen charts
       (ratings, criteria, craving against reality, calendar of hearts, calories, eating times,
       reactions, recipes), dish in numbers, Hall of Fame, fun facts.
-- [ ] **M6 Polish.** Service worker (offline app shell, install prompt), push notifications, remaining animations,
-      40+ quotes, empty states, full German copy, accessibility pass.
+- [ ] **M6 Polish.** Service worker (the app opens offline, a "new version" note with Reload),
+      an install card, push notifications with a switch per kind. *Built and tested here.
+      Push still has to be switched on in the live Supabase project (owner's decision).*
 - [ ] **M7 Ship.** Export and import, sync diagnostics screen, Lighthouse, full end-to-end suite, final README.
 
 ## What is verified so far, and how
@@ -44,4 +45,9 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
   installing to the home screen were only tried in an Android-sized desktop browser.
 - **The camera** was tried only by handing the app a picture file. Opening the real camera from
   the button, and photos travelling between two phones through the real cloud, need your phones.
-- **Push notifications** are not built yet (M6).
+- **Push notifications reaching a real phone.** The whole chain is tested in pieces (the
+  database triggers on a local Postgres, the function under Node, the service worker with the
+  browser's dev tools), but no real notification has been delivered yet, and the function has
+  not run on Supabase.
+- **The first real contact with Supabase happened on 10 Nov 2026:** opening the kitchen,
+  joining by link and syncing between the two phones worked.

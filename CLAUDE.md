@@ -13,7 +13,9 @@ npm run dev         # dev server with a pretend cloud (never touches real data)
 npm run typecheck
 npm test            # vitest unit tests
 npm run e2e         # Playwright, Android viewport, against the dev server
-npm run build       # production build (talks to Supabase)
+npm run build       # production build (talks to Supabase), also writes dist/sw.js
+npm run e2e:pwa     # offline, update note, install and push tests against the production build
+npm run build:push  # bundles the push Edge Function into one file for deploying
 node tools/shots.mjs <outDir> [scale]   # screenshots; needs the dev server running
 ```
 
@@ -41,6 +43,11 @@ config and the screenshot tool read the same variable).
   sample content (`src/data/demo`). Handy for screenshots: set
   `localStorage['foodwishus.prefs'] = '{"demoData":true}'` before loading. Add
   `"demoEmpty":true` for the same kitchen without sample content (tests that need a clean table).
+- **Offline and push:** the service worker is `src/sw/sw.ts` (production build only). Push:
+  `src/data/push.ts` on the device, `supabase/functions/push` on the server, triggers in
+  `0007_push.sql`. Setting it up is described in `supabase/functions/push/README.md`.
+- The database is live with the users' real kitchen. Never run tests or experiments against
+  it; schema changes go through a migration the owner approves.
 - The real backend is Supabase (`supabaseBackend.ts`); rules live in `supabase/migrations`.
   The pretend cloud in `src/data/fake` must follow the same rules. Never point tests at
   the real project.

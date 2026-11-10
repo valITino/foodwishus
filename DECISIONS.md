@@ -125,8 +125,32 @@ back with all data.
 - **A tiny typed i18n instead of a library.** Messages are plain objects, so a missing German
   string is a compile error.
 - **Hand-drawn SVG for all artwork.** No icon font, no stock art, nothing to license.
-- **Service worker: later (M6), probably `vite-plugin-pwa`.** Until then the app needs a
-  connection to open, though data already survives offline once open.
+- **No chart library.** The Cockpit's sixteen charts are small SVG components drawn with the
+  design tokens, so they look like the rest of the app and add little to the download.
+- **A hand-written service worker** (`src/sw/sw.ts`, file list made at build time by
+  `tools/serviceWorkerPlugin.ts`) instead of a plugin with the Workbox tree: push and the
+  update rules need a custom worker anyway. The page is fetched fresh when online (three
+  seconds at most, then the saved copy), built files come from the cache. A new version waits
+  and the app offers "Reload"; it never reloads by itself.
+- **Web Push without a library.** The encryption (RFC 8291) and the signing (RFC 8292) are
+  written on Web Crypto and checked against the RFC's worked example.
+
+## 7b. Push notifications: nobody copies a secret
+
+A database trigger notices the five events worth telling (proposed, planned, served, verdict
+handed in, the cook's answer) and calls the Edge Function `push` through `pg_net`. The
+function works out who should hear about it, writes the words in their language and sends.
+
+Everything the function needs lives in one row in the private schema: where it is, a shared
+secret the triggers send along (made inside the database), and the VAPID key pair (made by the
+function the first time it is asked). The function itself only has what Supabase gives every
+function, and fetches the rest with the service role. So setting push up is three SQL
+statements and one deploy, with no key ever typed, pasted or seen by anyone
+(`supabase/functions/push/README.md`).
+
+A subscription belongs to the device login that made it, so any log-out (own, by the admin,
+by a restore code) stops that device's notifications at once. A notification is a nicety:
+triggers never make a write fail, nothing is retried, and stale news is dropped.
 
 ## 8. Built where Supabase cannot be reached
 
@@ -135,7 +159,8 @@ The workspace used to build this cannot connect to Supabase from its shell or br
 - Database rules were applied and tested through the Supabase connector.
 - All sync logic runs against a pretend cloud (`src/data/fake`) with the same rules and error
   codes. Keep it in step with `supabase/migrations`.
-- `src/data/supabaseBackend.ts` is deliberately thin. Its first real run is on your phones.
+- `src/data/supabaseBackend.ts` is deliberately thin. Its first real run was on the users'
+  phones on 10 Nov 2026: opening the kitchen, joining by link and syncing worked.
 
 ## 9. If Supabase ever goes away
 
