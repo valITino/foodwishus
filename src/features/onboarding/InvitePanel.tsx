@@ -1,6 +1,6 @@
-// An invite (or a restore code) as something you can hand over: a QR code of the link,
-// the code in big letters, Share and Copy link. Used after starting a kitchen and from
-// Settings.
+// A code as something the admin can hand over: a QR code of the link, the code in big
+// letters, Share and Copy link. "join" invites the second person; "restore" lets the
+// partner back in with a new PIN. Used after opening a kitchen and from Settings.
 
 import { motion } from 'motion/react'
 import { useEffect, useState } from 'react'
@@ -13,8 +13,8 @@ import { useCopy, useT } from '../../i18n'
 import { Avatar, Button, buzz, Card, SteamLoader, toast } from '../../ui/components'
 import { INVITE_LENGTH, invitePath } from './codes'
 import { pairingCopy } from './copy'
-import { errorCopy, explain } from './errors'
 import { copyText, ErrorNote } from './parts'
+import { useExplain } from './useExplain'
 import { QrCode } from './QrCode'
 
 type InviteState = { status: 'loading' } | { status: 'ready'; invite: Invite } | { status: 'error'; error: unknown }
@@ -54,13 +54,13 @@ function useInvite(kind: 'join' | 'restore', memberId: ID | undefined, wanted: b
 
 interface Props {
   kind: 'join' | 'restore'
-  /** For a restore code: whose profile moves. */
+  /** For a restore code: who is let back in. */
   memberId?: ID
 }
 
 export function InvitePanel({ kind, memberId }: Props) {
   const c = useCopy(pairingCopy)
-  const errors = useCopy(errorCopy)
+  const explain = useExplain()
   const t = useT()
   const partner = usePartner()
   // An invite is only asked for once we know the partner's seat is free.
@@ -91,7 +91,7 @@ export function InvitePanel({ kind, memberId }: Props) {
   if (state.status === 'error') {
     return (
       <div className="flex flex-col items-start gap-3">
-        <ErrorNote>{explain(state.error, errors)}</ErrorNote>
+        <ErrorNote>{explain(state.error)}</ErrorNote>
         <Button variant="secondary" onClick={retry}>
           {c.invite.retry}
         </Button>
@@ -100,7 +100,7 @@ export function InvitePanel({ kind, memberId }: Props) {
   }
 
   const { code } = state.invite
-  const link = publicUrl(invitePath(code, kind === 'restore'))
+  const link = publicUrl(invitePath(code))
   const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
 
   const copyLink = async () => {

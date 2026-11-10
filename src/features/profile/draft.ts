@@ -1,8 +1,9 @@
-// A profile while it is being edited: the same shape in onboarding and in Settings.
+// A profile while it is being edited: the same shape in the start wizard and in Settings.
 // Pure helpers only, so they can be unit tested without a browser.
 
 import type { ProfileChanges } from '../../data/actions'
 import type { ProfileInput } from '../../data/backend'
+import { nameKey } from '../../data/pin'
 import type { Member, Role } from '../../data/types'
 
 export const PLATE_COLORS = ['rose', 'sage', 'butter', 'sky'] as const
@@ -45,15 +46,31 @@ export function clip(text: string, max: number): string {
   return cut
 }
 
-/** The part of a profile the pairing calls accept. Status and accessory are saved right after. */
+/** The whole profile, as opening or joining a kitchen takes it. */
 export function toProfileInput(draft: ProfileDraft): ProfileInput {
-  return { name: clip(draft.name.trim(), NAME_MAX), avatar: draft.avatar, color: draft.color, defaultRole: draft.role }
+  return {
+    name: clip(draft.name.trim(), NAME_MAX),
+    avatar: draft.avatar,
+    color: draft.color,
+    accessory: draft.accessory,
+    status: clip(draft.status.trim(), STATUS_MAX) || null,
+    defaultRole: draft.role,
+  }
 }
 
-/** What pairing cannot carry: saved with updateMyProfile once the phone is in the kitchen. */
-export function extrasOf(draft: ProfileDraft): ProfileChanges {
-  return { status: clip(draft.status.trim(), STATUS_MAX) || null, accessory: draft.accessory }
+/**
+ * Change the role in a draft. As long as the look is still the one the old role started
+ * with, it follows along: the Chef starts with the whisk, the Taster with Fork.
+ */
+export function withRole(draft: ProfileDraft, role: Role): ProfileDraft {
+  const was = defaultDraft(draft.role)
+  const untouched = draft.avatar === was.avatar && draft.color === was.color && draft.accessory === null
+  const next = defaultDraft(role)
+  return untouched ? { ...draft, role, avatar: next.avatar, color: next.color } : { ...draft, role }
 }
+
+/** Two names are the same log-in when they match without capitals and outer spaces. */
+export const sameName = (a: string, b: string): boolean => nameKey(a) === nameKey(b)
 
 /** Only the fields that differ from the saved profile, so a save sends as little as possible. */
 export function changesBetween(saved: ProfileDraft, draft: ProfileDraft): ProfileChanges {

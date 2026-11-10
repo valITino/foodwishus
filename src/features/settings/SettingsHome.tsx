@@ -1,5 +1,5 @@
-// The Settings page: my profile, our kitchen and pairing, this phone's choices, sync,
-// the demo kitchen and a little "about".
+// The Settings page: my profile, our kitchen and its people, my own settings (they follow
+// me to every device), log-in, sync, the demo kitchen and a little "about".
 
 import { useState, type ReactNode } from 'react'
 import { version } from '../../../package.json'
@@ -14,7 +14,6 @@ import { Avatar, Button, buzz, Card, Field, PageHeader, Screen, Segmented, Sheet
 import { Mascot } from '../../ui/deco/Deco'
 import { Icon } from '../../ui/deco/Icon'
 import { setTheme, useTheme } from '../../ui/theme'
-import { useKeyOwed, usePendingKey } from '../onboarding/handoff'
 import { ErrorNote } from '../onboarding/parts'
 import { ProfileBubble } from '../profile/ProfileBubble'
 import { settingsCopy } from './copy'
@@ -99,8 +98,6 @@ export function SettingsHome() {
   // What is on screen right now: the phone's own setting while "follow phone" is on.
   const showing = theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme
   const showCalories = usePref('showCalories')
-  const waitingKey = usePendingKey()
-  const keyOwed = useKeyOwed()
   const [renaming, setRenaming] = useState(false)
   const member = me?.member
 
@@ -138,18 +135,6 @@ export function SettingsHome() {
         {/* Our kitchen */}
         <Section id="kitchen" title={c.kitchen.title}>
           <div className="flex flex-col gap-3">
-            {(waitingKey || keyOwed) && !isDemo && (
-              <Card tone="blush" pad={false} className="flex items-center gap-3 px-4 py-3" data-testid={waitingKey ? 'key-waiting' : 'key-missing'}>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-extrabold">{waitingKey ? c.kitchen.keyWaitingTitle : c.kitchen.keyMissingTitle}</p>
-                  <p className="mt-0.5 text-xs leading-snug">{waitingKey ? c.kitchen.keyWaitingBody : c.kitchen.keyMissingBody}</p>
-                </div>
-                <Button variant="secondary" onClick={() => navigate('/settings/key')} className="shrink-0 px-4">
-                  {waitingKey ? c.kitchen.keyWaitingAction : c.kitchen.keyMissingAction}
-                </Button>
-              </Card>
-            )}
-
             {partner ? (
               <Card data-testid="partner-card">
                 <div className="mb-2.5 flex items-center justify-between gap-3">
@@ -170,7 +155,7 @@ export function SettingsHome() {
                 <div className="min-w-0 flex-1">
                   <h3 className="text-base">{c.kitchen.aloneTitle}</h3>
                   <p className="mt-1 text-xs leading-snug text-ink-soft">{isDemo ? c.kitchen.demoNote : c.kitchen.aloneBody}</p>
-                  {!isDemo && (
+                  {!isDemo && member?.isAdmin && (
                     <Button variant="secondary" className="mt-3" onClick={() => navigate('/settings/invite')}>
                       {c.kitchen.invite}
                     </Button>
@@ -190,20 +175,20 @@ export function SettingsHome() {
                 </span>
                 <span className="shrink-0 text-xs font-extrabold text-rose-ink">{c.kitchen.rename}</span>
               </button>
-              {!isDemo && <LinkRow title={c.kitchen.move} hint={c.kitchen.moveHint} onClick={() => navigate('/settings/move')} />}
-              {!isDemo && <LinkRow title={c.kitchen.newKey} hint={c.kitchen.newKeyHint} onClick={() => navigate('/settings/key')} />}
+              {!isDemo && <LinkRow title={c.kitchen.people} hint={member?.isAdmin ? c.kitchen.peopleHintAdmin : c.kitchen.peopleHint} onClick={() => navigate('/settings/people')} />}
             </Card>
             {isDemo && partner && <p className="px-1 text-xs text-ink-soft">{c.kitchen.demoNote}</p>}
           </div>
         </Section>
 
-        {/* This phone */}
-        <Section id="phone" title={c.phone.title}>
+        {/* My settings: they live on the profile and follow the person */}
+        <Section id="mine" title={c.mine.title}>
+          {!isDemo && <p className="-mt-1 mb-2.5 px-1 text-xs text-ink-soft">{c.mine.follow}</p>}
           <Card pad={false} className="divide-y divide-line px-4">
             <div className="py-3.5">
-              <p className="mb-2 text-sm font-bold">{c.phone.language}</p>
+              <p className="mb-2 text-sm font-bold">{c.mine.language}</p>
               <Segmented<Lang>
-                label={c.phone.language}
+                label={c.mine.language}
                 value={lang}
                 options={[
                   { value: 'en', label: 'English' },
@@ -217,26 +202,34 @@ export function SettingsHome() {
             </div>
             {/* Three choices: light, candlelight, or whatever the phone is set to. */}
             <div className="pb-1 pt-3.5">
-              <p className="mb-2 text-sm font-bold">{c.phone.theme}</p>
+              <p className="mb-2 text-sm font-bold">{c.mine.theme}</p>
               <Segmented<'light' | 'dark'>
-                label={c.phone.theme}
+                label={c.mine.theme}
                 value={showing}
                 options={[
-                  { value: 'light', label: c.phone.light },
-                  { value: 'dark', label: c.phone.candle },
+                  { value: 'light', label: c.mine.light },
+                  { value: 'dark', label: c.mine.candle },
                 ]}
                 onChange={(next) => {
                   buzz(8)
                   setTheme(next)
                 }}
               />
-              <Toggle label={c.phone.auto} checked={theme === 'auto'} onChange={(on) => setTheme(on ? 'auto' : showing)} />
+              <Toggle label={c.mine.auto} checked={theme === 'auto'} onChange={(on) => setTheme(on ? 'auto' : showing)} />
             </div>
             <div className="py-1">
-              <Toggle label={c.phone.calories} checked={showCalories} onChange={(on) => setPref('showCalories', on)} />
+              <Toggle label={c.mine.calories} checked={showCalories} onChange={(on) => setPref('showCalories', on)} />
             </div>
           </Card>
         </Section>
+
+        {!isDemo && (
+          <Section id="access" title={c.access.title}>
+            <Card pad={false} className="overflow-hidden">
+              <LinkRow title={c.access.pin} hint={c.access.pinHint} onClick={() => navigate('/settings/pin')} />
+            </Card>
+          </Section>
+        )}
 
         <SyncSection />
 

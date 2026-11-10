@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { finderCorners, inLogo, logoModules, modulesPath, qrMatrix } from '../../src/features/onboarding/qr'
 
 const LINKS = [
-  'http://127.0.0.1:5173/#/join?code=ABCDEFGHJK',
+  'http://127.0.0.1:5173/#/join/ABCDEFGHJK',
+  'https://valitino.github.io/foodwishus/#/join/ABCDEFGHJK',
   'https://valitino.github.io/foodwishus/#/join?code=ABCDEFGHJK',
-  'https://valitino.github.io/foodwishus/#/join?code=ABCDEFGHJK&restore=1',
 ]
 
 /** The 7 x 7 corner square every QR code carries three times. */

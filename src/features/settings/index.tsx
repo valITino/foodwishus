@@ -1,36 +1,50 @@
 // Settings and everything behind it.
 //
-//   /settings            the Settings page
-//   /settings/profile    my profile: avatar maker and status line
-//   /settings/invite     the invite again, while the partner's seat is free
-//   /settings/move       move a profile to a new phone (restore code)
-//   /settings/key        a new recovery key
-//   /settings/welcome    first steps right after starting a kitchen: recovery key, then invite
+//   /settings                  the Settings page
+//   /settings/profile          my profile: name, avatar maker and status line
+//   /settings/people           both profiles; the admin's controls for the partner's seat
+//   /settings/people/back-in   the one-time code that lets the partner back in
+//   /settings/invite           the invite again, while the second seat is free
+//   /settings/pin              PIN and devices: change PIN, log out other devices, log out
+//   /settings/welcome          right after opening a kitchen: you are the admin, then the invite
 
 import { MotionConfig } from 'motion/react'
 import type { Route } from '../../app/router'
 import { isDemo } from '../../data/app'
-import { FirstSteps, InvitePage, MovePage, NewKeyPage } from './PairingPages'
+import { useMe } from '../../data/hooks'
+import { BackInPage, FirstSteps, InvitePage } from './PairingPages'
+import { PeoplePage } from './PeoplePage'
+import { PinPage } from './PinPage'
 import { ProfileEdit } from './ProfileEdit'
 import { SettingsHome } from './SettingsHome'
 
-/** Pairing talks to the cloud, and the demo kitchen has none. */
-const PAIRING_PAGES = ['/settings/invite', '/settings/move', '/settings/key', '/settings/welcome']
+/** These talk to the cloud, and the demo kitchen has none. */
+const CLOUD_PAGES = ['/settings/invite', '/settings/people', '/settings/people/back-in', '/settings/pin', '/settings/welcome']
+/** Only the admin hands out codes. */
+const ADMIN_PAGES = ['/settings/invite', '/settings/people/back-in', '/settings/welcome']
 
 export function SettingsRoutes({ route }: { route: Route }) {
+  const me = useMe()
+  let path = route.path
+  if (isDemo && CLOUD_PAGES.includes(path)) path = '/settings'
+  if (ADMIN_PAGES.includes(path) && me?.member && !me.member.isAdmin) path = '/settings/people'
+
   let page
-  switch (isDemo && PAIRING_PAGES.includes(route.path) ? '/settings' : route.path) {
+  switch (path) {
     case '/settings/profile':
       page = <ProfileEdit />
+      break
+    case '/settings/people':
+      page = <PeoplePage />
+      break
+    case '/settings/people/back-in':
+      page = <BackInPage />
       break
     case '/settings/invite':
       page = <InvitePage />
       break
-    case '/settings/move':
-      page = <MovePage />
-      break
-    case '/settings/key':
-      page = <NewKeyPage />
+    case '/settings/pin':
+      page = <PinPage />
       break
     case '/settings/welcome':
       page = <FirstSteps />
