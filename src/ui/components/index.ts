@@ -1,5 +1,5 @@
 export { AwningHeader } from './AwningHeader'
-export { Avatar, AVATARS, EmptyState, Stat, StatusBubble, SteamLoader, SyncPill } from './Bits'
+export { ACCESSORIES, Avatar, AVATARS, EmptyState, Stat, StatusBubble, SteamLoader, SyncPill } from './Bits'
 export { Button } from './Button'
 export { Card } from './Card'
 export { Chip, Tag } from './Chip'
