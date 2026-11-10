@@ -147,10 +147,31 @@ describe('the app and the database agree on every function', () => {
     await b.setMemberPaused('m2', true)
     await b.signOutMember('m2')
     await b.pull(null)
+    await b.savePushSubscription({ endpoint: 'https://push.example.test/send/abc', p256dh: 'BPublicKey', auth: 'AuthSecret', mutedTypes: ['served'], userAgent: 'Test browser' })
+    await b.savePushSubscription({ endpoint: 'https://push.example.test/send/abc', p256dh: 'BPublicKey', auth: 'AuthSecret', mutedTypes: [] })
+    await b.setPushMuted('https://push.example.test/send/abc', ['proposed', 'replied'])
+    await b.removePushSubscription('https://push.example.test/send/abc')
 
     const used = new Set(calls.map((c) => c.fn))
     expect([...used].sort()).toEqual(
-      ['create_household', 'create_invite', 'join_household', 'kitchen_exists', 'my_membership', 'peek_invite', 'set_member_paused', 'set_pin', 'sign_in_with_pin', 'sign_out_device', 'sign_out_member', 'sign_out_other_devices', 'sync_pull'].sort(),
+      [
+        'create_household',
+        'create_invite',
+        'join_household',
+        'kitchen_exists',
+        'my_membership',
+        'peek_invite',
+        'remove_push_subscription',
+        'save_push_subscription',
+        'set_member_paused',
+        'set_pin',
+        'set_push_muted',
+        'sign_in_with_pin',
+        'sign_out_device',
+        'sign_out_member',
+        'sign_out_other_devices',
+        'sync_pull',
+      ].sort(),
     )
     for (const { fn, args } of calls) {
       const signature = defined.get(fn)
@@ -161,6 +182,20 @@ describe('the app and the database agree on every function', () => {
     }
     // Nothing the app could call is left over from the recovery-key days.
     expect([...defined.keys()].filter((name) => /recover/.test(name))).toEqual([])
+  })
+
+  it('signs a device up for notifications with the names the database expects', async () => {
+    const b = backend()
+    await b.savePushSubscription({ endpoint: 'https://push.example.test/send/abc', p256dh: 'BPublicKey', auth: 'AuthSecret', mutedTypes: ['served', 'replied'], userAgent: 'Test browser' })
+    await b.setPushMuted('https://push.example.test/send/abc', [])
+    await b.removePushSubscription('https://push.example.test/send/abc')
+    expect(calls).toEqual([
+      { fn: 'save_push_subscription', args: { p_endpoint: 'https://push.example.test/send/abc', p_p256dh: 'BPublicKey', p_auth: 'AuthSecret', p_muted_types: ['served', 'replied'], p_user_agent: 'Test browser' } },
+      { fn: 'set_push_muted', args: { p_endpoint: 'https://push.example.test/send/abc', p_muted_types: [] } },
+      { fn: 'remove_push_subscription', args: { p_endpoint: 'https://push.example.test/send/abc' } },
+    ])
+    // The table itself is closed to the app (0007): nothing may go around the functions.
+    expect(patches).toEqual([])
   })
 
   it('sends the profile in the database\'s spelling', async () => {
@@ -202,6 +237,12 @@ describe('the app understands the database\'s answers', () => {
       answers = { set_member_paused: refuse(code) }
       await expect(b.setMemberPaused('m2', true), code).rejects.toMatchObject({ kind: 'rejected', code })
     }
+    for (const code of ['not_in_kitchen', 'push_invalid']) {
+      answers = { save_push_subscription: refuse(code) }
+      await expect(b.savePushSubscription({ endpoint: 'https://push.example.test/x', p256dh: 'k', auth: 'a', mutedTypes: [] }), code).rejects.toMatchObject({ kind: 'rejected', code })
+    }
+    answers = { set_push_muted: refuse('push_missing') }
+    await expect(b.setPushMuted('https://push.example.test/x', ['served'])).rejects.toMatchObject({ kind: 'rejected', code: 'push_missing' })
   })
 
   it('shows who invites before the code is used', async () => {

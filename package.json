@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "e2e:pwa": "playwright test --config playwright.pwa.config.ts",
     "icons": "node tools/make-icons.mjs"
   },
   "dependencies": {

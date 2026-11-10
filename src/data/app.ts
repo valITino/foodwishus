@@ -5,6 +5,7 @@ import type { Backend, Membership, ProfileInput } from './backend'
 import { AppDB, META } from './db'
 import { HttpFakeBackend } from './fake/httpBackend'
 import { getPref, setPref } from './prefs'
+import { deviceMemory, PushControl, pushSetup } from './push'
 import { takeSeat } from './seat'
 import { Store } from './store'
 import { SupabaseBackend } from './supabaseBackend'
@@ -29,6 +30,10 @@ export const backend = createBackend()
 export const store = new Store(db, isDemo)
 export const sync = new SyncEngine(db, backend, store)
 sync.disabled = isDemo
+
+const pushRig = pushSetup()
+/** Notifications on this device (push.ts). The demo kitchen has no cloud that could send any. */
+export const push = new PushControl(pushRig.device, backend, deviceMemory, isDemo ? '' : pushRig.vapidKey, typeof navigator === 'undefined' ? '' : navigator.userAgent)
 
 export function useSyncStatus(): SyncStatus {
   return useSyncExternalStore(
@@ -82,6 +87,9 @@ export async function resumeKitchen(): Promise<boolean> {
  * `sync.status.pending` first and warn. The page reloads to the start screen.
  */
 export async function logOut(): Promise<void> {
+  // No more notifications for this device. Asked first, while the cloud still knows who
+  // is asking; the cloud also drops them by itself when the device is logged out.
+  await push.removeFromCloud().catch(() => undefined)
   await backend.signOutDevice()
   await forgetThisDevice()
 }
@@ -89,6 +97,8 @@ export async function logOut(): Promise<void> {
 /** The cloud already logged this device out: wipe the local copy and start over. */
 export async function forgetThisDevice(): Promise<void> {
   sync.stop()
+  // The browser lets go of its subscription too: nothing arrives for a kitchen this device left.
+  await push.forget().catch(() => undefined)
   await backend.signOut().catch(() => undefined)
   // The copy is deleted on the way back in, before anything reads from it (wipe.ts).
   wipeOnNextStart(db.name)

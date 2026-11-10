@@ -1,0 +1,116 @@
+import type { CDPSession, Page } from '@playwright/test'
+import { expect, test, theWorker, workerInCharge } from './fixtures'
+
+// What the service worker does with a push: show it, and open the right page on a tap.
+// A real push service cannot be reached from a test, so its last step is played by the
+// browser's own developer tools: they hand the worker a push message as the push service
+// would. The message is what supabase/functions/push writes (tests/unit/push.*.test.ts).
+
+const MEAL = '0f8fad5b-d9cb-469f-a165-70867728950e'
+
+interface Shown {
+  title: string
+  body: string
+  tag: string
+  icon: string
+  data: unknown
+}
+
+async function openApp(page: Page): Promise<CDPSession> {
+  await page.context().grantPermissions(['notifications'])
+  // The demo kitchen: a full app with tabs and pages, and no cloud to talk to.
+  await page.addInitScript(() => localStorage.setItem('foodwishus.prefs', '{"demoData":true,"demoEmpty":true}'))
+  await page.goto('./')
+  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
+  await workerInCharge(page)
+  const tools = await page.context().newCDPSession(page)
+  return tools
+}
+
+/** Hand the worker a push message, the way the push service does. */
+async function push(page: Page, tools: CDPSession, data: unknown): Promise<void> {
+  const registration = new Promise<string>((resolve) => {
+    tools.on('ServiceWorker.workerRegistrationUpdated', (event: { registrations: { registrationId: string; scopeURL: string }[] }) => {
+      const mine = event.registrations.find((r) => page.url().startsWith(r.scopeURL))
+      if (mine) resolve(mine.registrationId)
+    })
+  })
+  await tools.send('ServiceWorker.enable')
+  await tools.send('ServiceWorker.deliverPushMessage', { origin: new URL(page.url()).origin, registrationId: await registration, data: typeof data === 'string' ? data : JSON.stringify(data) })
+  await tools.send('ServiceWorker.disable')
+}
+
+const shown = (page: Page): Promise<Shown[]> =>
+  page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.ready
+    return (await registration.getNotifications()).map((n) => ({ title: n.title, body: n.body, tag: n.tag, icon: n.icon, data: n.data as unknown }))
+  })
+
+/** Tap the notification with this tag (the tap itself is played inside the worker). */
+async function tap(page: Page, tag: string): Promise<void> {
+  const worker = await theWorker(page)
+  await worker.evaluate(async (wanted) => {
+    const scope = self as unknown as ServiceWorkerGlobalScope
+    const [notification] = await scope.registration.getNotifications({ tag: wanted })
+    scope.dispatchEvent(new NotificationEvent('notificationclick', { notification }))
+  }, tag)
+}
+
+test('a push becomes a notification with title, words, icon and one tag per meal', async ({ page }) => {
+  const tools = await openApp(page)
+  const home = new URL('./', page.url()).href
+
+  await push(page, tools, { type: 'planned', title: "It's a date", body: 'Mia planned Älplermagronen for dinner on Friday. Bring your appetite.', tag: `meal-${MEAL}`, url: `/serving/${MEAL}` })
+  await expect.poll(() => shown(page)).toEqual([
+    { title: "It's a date", body: 'Mia planned Älplermagronen for dinner on Friday. Bring your appetite.', tag: `meal-${MEAL}`, icon: `${home}icons/icon-192.png`, data: { route: `/serving/${MEAL}` } },
+  ])
+
+  // News about the same meal replaces what is on screen; another meal gets its own.
+  await push(page, tools, { type: 'served', title: 'Served!', body: 'Mia served Älplermagronen. Proof needed!', tag: `meal-${MEAL}`, url: `/review/${MEAL}` })
+  await expect.poll(async () => (await shown(page)).map((n) => n.title)).toEqual(['Served!'])
+  await push(page, tools, { type: 'proposed', title: 'New on the wishlist', body: 'Mia put Rösti on the wishlist. How much do you want it?', tag: 'meal-another', url: '/serving/another' })
+  await expect.poll(async () => (await shown(page)).map((n) => n.title).sort()).toEqual(['New on the wishlist', 'Served!'])
+
+  // The icons it points to are part of the app.
+  for (const icon of ['icons/icon-192.png', 'icons/badge-96.png']) {
+    expect(await page.evaluate(async (url) => (await fetch(url)).headers.get('content-type'), `${home}${icon}`)).toBe('image/png')
+  }
+})
+
+test('a message it cannot read still shows something, and opens the app at home', async ({ page }) => {
+  const tools = await openApp(page)
+  await push(page, tools, 'not json at all')
+  await expect.poll(() => shown(page)).toMatchObject([{ title: 'FoodwishUs', body: 'U cook. I eat.', data: { route: '/' } }])
+  await push(page, tools, { title: 'Hi', body: 'There', tag: 'x', url: 'https://evil.example/' })
+  await expect.poll(async () => (await shown(page)).find((n) => n.title === 'Hi')?.data).toEqual({ route: '/' })
+})
+
+test('tapping the notification takes the open app to the right page and puts the notification away', async ({ page }) => {
+  const tools = await openApp(page)
+  const mealId = await page.evaluate(async () => {
+    // A real meal in the demo kitchen, so the page has something to show.
+    const request = indexedDB.open('foodwishus-demo')
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const rows = await new Promise<{ id: string }[]>((resolve) => {
+      const all = db.transaction('servings').objectStore('servings').getAll()
+      all.onsuccess = () => resolve(all.result as { id: string }[])
+    })
+    db.close()
+    return rows[0]?.id ?? null
+  })
+
+  const route = mealId ? `/serving/${mealId}` : '/week'
+  await push(page, tools, { type: 'planned', title: "It's a date", body: 'Mia planned something.', tag: 'meal-tap', url: route })
+  await expect.poll(async () => (await shown(page)).length).toBe(1)
+
+  await tap(page, 'meal-tap')
+  await expect(page).toHaveURL(new RegExp(`#${route}$`))
+  await expect.poll(async () => (await shown(page)).length).toBe(0)
+  // The app got there by itself: its own "back" still leads home.
+  await page.goBack()
+  await expect(page).toHaveURL(/\/(#\/)?$/)
+  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
+})
