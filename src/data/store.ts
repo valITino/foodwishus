@@ -14,7 +14,13 @@ export class Store {
   /** seq of the outbox entry being sent right now. It must not be merged into. */
   inFlightSeq: number | null = null
 
-  constructor(readonly db: AppDB) {}
+  /**
+   * @param localOnly The demo kitchen: changes stay on this phone and are never queued for the cloud.
+   */
+  constructor(
+    readonly db: AppDB,
+    private readonly localOnly = false,
+  ) {}
 
   async householdId(): Promise<ID | undefined> {
     return this.db.getMeta<ID>(META.householdId)
@@ -59,6 +65,7 @@ export class Store {
   }
 
   private async enqueue(op: Pick<OutboxOp, 'table' | 'rowId' | 'kind' | 'data'>): Promise<void> {
+    if (this.localOnly) return
     // Rapid edits to the same row (typing, dragging) collapse into one entry. Only the
     // very last entry in the queue may absorb a change, which keeps cause before effect.
     const last = await this.db.outbox.orderBy('seq').last()

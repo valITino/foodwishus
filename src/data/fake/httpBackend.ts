@@ -1,7 +1,7 @@
 // Browser-side client for the pretend cloud that lives inside the dev server
 // (tools/fakeCloudPlugin.ts). Used by `npm run dev` and the end-to-end tests.
 
-import { BackendError, type Backend, type BackendErrorKind, type Invite, type Membership, type ProfileInput, type PullResult, type PushOp, type RecoveryPeek } from '../backend'
+import { BackendError, type Backend, type BackendErrorDetails, type BackendErrorKind, type Invite, type InvitePeek, type Membership, type ProfileInput, type PullResult, type PushOp } from '../backend'
 import type { ID, ISO } from '../types'
 
 const BASE = '/__cloud'
@@ -24,8 +24,8 @@ export class HttpFakeBackend implements Backend {
       throw new BackendError('network', 'offline')
     }
     if (res.status >= 500) throw new BackendError('network', `server_${res.status}`)
-    const body = (await res.json()) as { result?: T; kind?: BackendErrorKind; code?: string }
-    if (!res.ok) throw new BackendError(body.kind ?? 'rejected', body.code ?? 'error')
+    const body = (await res.json()) as { result?: T; kind?: BackendErrorKind; code?: string; details?: BackendErrorDetails }
+    if (!res.ok) throw new BackendError(body.kind ?? 'rejected', body.code ?? 'error', undefined, body.details)
     return body.result as T
   }
 
@@ -40,23 +40,38 @@ export class HttpFakeBackend implements Backend {
   membership() {
     return this.call<Membership | null>('membership')
   }
-  createHousehold(name: string, me: ProfileInput) {
-    return this.call<Membership & { recoveryKey: string }>('createHousehold', name, me)
+  kitchenExists() {
+    return this.call<boolean>('kitchenExists')
+  }
+  createHousehold(name: string, me: ProfileInput, pin: string) {
+    return this.call<Membership>('createHousehold', name, me, pin)
   }
   createInvite(kind: 'join' | 'restore', memberId?: ID) {
     return this.call<Invite>('createInvite', kind, memberId)
   }
-  joinHousehold(code: string, me: ProfileInput) {
-    return this.call<Membership>('joinHousehold', code, me)
+  peekInvite(code: string) {
+    return this.call<InvitePeek>('peekInvite', code)
   }
-  recoveryPeek(key: string) {
-    return this.call<RecoveryPeek>('recoveryPeek', key)
+  joinHousehold(code: string, me: ProfileInput, pin: string) {
+    return this.call<Membership & { kind: 'join' | 'restore' }>('joinHousehold', code, me, pin)
   }
-  recoverMember(key: string, memberId: ID) {
-    return this.call<Membership>('recoverMember', key, memberId)
+  signInWithPin(name: string, pin: string) {
+    return this.call<Membership>('signInWithPin', name, pin)
   }
-  rotateRecoveryKey() {
-    return this.call<string>('rotateRecoveryKey')
+  async setPin(pin: string) {
+    await this.call<null>('setPin', pin)
+  }
+  async signOutDevice() {
+    await this.call<null>('signOutDevice')
+  }
+  signOutOtherDevices() {
+    return this.call<number>('signOutOtherDevices')
+  }
+  async setMemberPaused(memberId: ID, paused: boolean) {
+    await this.call<null>('setMemberPaused', memberId, paused)
+  }
+  signOutMember(memberId: ID) {
+    return this.call<number>('signOutMember', memberId)
   }
   async push(op: PushOp) {
     await this.call<null>('push', op)

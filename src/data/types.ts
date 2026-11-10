@@ -42,6 +42,16 @@ export interface Household {
   deletedAt: ISO | null
 }
 
+/**
+ * A person's own settings. They live on the profile, so they follow the person to every
+ * phone and tablet they log in on.
+ */
+export interface MemberPrefs {
+  theme?: 'auto' | 'light' | 'dark'
+  lang?: 'en' | 'de'
+  showCalories?: boolean
+}
+
 export interface Member extends SyncRow {
   name: string
   /** Which character the avatar shows, for example "fork" or "whisk". */
@@ -53,6 +63,11 @@ export interface Member extends SyncRow {
   /** A short line the partner sees, for example "Always Huuungryyyyy". At most 60 characters. */
   status: string | null
   defaultRole: Role
+  prefs: MemberPrefs
+  /** The person who opened the kitchen. Invites, pauses and lets the partner back in. */
+  isAdmin: boolean
+  /** Set while the admin has paused this profile: no log-in, no reading, no writing. */
+  disabledAt: ISO | null
 }
 
 export interface Ingredient {

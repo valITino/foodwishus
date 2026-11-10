@@ -1,6 +1,7 @@
-import { AppDB, META } from '../../src/data/db'
+import { AppDB } from '../../src/data/db'
 import type { FakeCloud } from '../../src/data/fake/cloudCore'
 import { MemoryBackend } from '../../src/data/fake/memoryBackend'
+import { takeSeat } from '../../src/data/seat'
 import { Store } from '../../src/data/store'
 import { SyncEngine } from '../../src/data/sync'
 import { newId, nowIso, type Dish, type ID } from '../../src/data/types'
@@ -31,8 +32,7 @@ export function makePhone(cloud: FakeCloud): Phone {
     store,
     engine,
     async adopt(m) {
-      await db.setMeta(META.householdId, m.householdId)
-      await db.setMeta(META.memberId, m.memberId)
+      await takeSeat(db, m)
     },
     async dish(overrides = {}) {
       const at = nowIso()
@@ -61,15 +61,17 @@ export function makePhone(cloud: FakeCloud): Phone {
   }
 }
 
-/** Two paired phones: she started the kitchen, he joined with her invite code. */
-export async function makeCouple(cloud: FakeCloud): Promise<{ her: Phone; him: Phone; recoveryKey: string }> {
+export const HER_PIN = '271828'
+export const HIS_PIN = '314159'
+
+/** Two phones in one kitchen: she opened it (so she is the admin), he joined with her invite code. */
+export async function makeCouple(cloud: FakeCloud): Promise<{ her: Phone; him: Phone }> {
   const her = makePhone(cloud)
   const him = makePhone(cloud)
-  const kitchen = await her.backend.createHousehold('Our kitchen', { name: 'Mia', defaultRole: 'chef' })
-  await her.adopt(kitchen)
+  await her.adopt(await her.backend.createHousehold('Our kitchen', { name: 'Mia', defaultRole: 'chef' }, HER_PIN))
   const invite = await her.backend.createInvite('join')
-  await him.adopt(await him.backend.joinHousehold(invite.code, { name: 'Leo', defaultRole: 'taster' }))
+  await him.adopt(await him.backend.joinHousehold(invite.code, { name: 'Leo', defaultRole: 'taster' }, HIS_PIN))
   await her.engine.sync()
   await him.engine.sync()
-  return { her, him, recoveryKey: kitchen.recoveryKey }
+  return { her, him }
 }

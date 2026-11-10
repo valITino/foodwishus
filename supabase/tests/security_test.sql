@@ -1,21 +1,23 @@
 -- Security test for the FoodwishUs database.
--- Run it in the Supabase SQL editor. It creates three throwaway users, plays through
--- pairing, outsider attacks, restore and recovery, then ROLLS EVERYTHING BACK by
--- ending with an exception whose message is the report. "FAIL" lines mean a hole.
+-- Run it in the Supabase SQL editor. It creates four throwaway logins, plays through
+-- opening the kitchen, outsider attacks, PIN login, the admin's powers and the master
+-- key, then ROLLS EVERYTHING BACK by ending with an exception whose message is the
+-- report. "FAIL" lines mean a hole.
 -- Only run it while no real kitchen exists yet (the single-kitchen lock would trip).
 
 do $$
 declare
-  u1 uuid := gen_random_uuid();
-  u2 uuid := gen_random_uuid();
-  u3 uuid := gen_random_uuid();
+  u1 uuid := gen_random_uuid(); -- Ana's phone (she opens the kitchen, so she is the admin)
+  u2 uuid := gen_random_uuid(); -- Ben's phone
+  u3 uuid := gen_random_uuid(); -- a stranger, later Ben's tablet
+  u4 uuid := gen_random_uuid(); -- a fresh device
   r jsonb;
   hh uuid;
   m1 uuid;
   m2 uuid;
   code text;
-  key text;
   n integer;
+  b boolean;
   dish uuid := gen_random_uuid();
   serving uuid := gen_random_uuid();
   review uuid := gen_random_uuid();
@@ -28,174 +30,353 @@ begin
   insert into auth.users (id, aud, role, is_anonymous, created_at, updated_at) values
     (u1, 'authenticated', 'authenticated', true, now(), now()),
     (u2, 'authenticated', 'authenticated', true, now(), now()),
-    (u3, 'authenticated', 'authenticated', true, now(), now());
+    (u3, 'authenticated', 'authenticated', true, now(), now()),
+    (u4, 'authenticated', 'authenticated', true, now(), now());
 
   execute 'set local role authenticated';
 
-  -- ---- person 1 starts the kitchen
+  -- ---- person 1 opens the kitchen
   perform set_config('request.jwt.claims', json_build_object('sub', u1, 'role', 'authenticated')::text, true);
-  r := public.create_household('Test kitchen', '{"name":"Ana","default_role":"chef"}');
+  begin
+    perform public.create_household('Test kitchen', '{"name":"Ana"}', '123456');
+    report := report || text 'FAIL 01 a kitchen could be opened with the PIN 123456';
+  exception when others then
+    report := report || format('%s 01 too simple PIN refused (%s)', case when sqlerrm = 'pin_too_simple' then 'ok  ' else 'FAIL' end, sqlerrm);
+  end;
+  select public.kitchen_exists() into b;
+  r := public.create_household('Test kitchen', '{"name":"Ana","default_role":"chef","status":"Stove queen","accessory":"bow"}', '271828');
   hh := (r ->> 'household_id')::uuid;
   m1 := (r ->> 'member_id')::uuid;
-  key := r ->> 'recovery_key';
-  report := report || format('%s 01 kitchen created, recovery key has %s chars', case when length(key) = 20 then 'ok  ' else 'FAIL' end, length(key));
+  select is_admin, status into b, txt from public.members where id = m1;
+  report := report || format('%s 02 kitchen opened, the opener is the admin (%s) with her status (%s)', case when b and txt = 'Stove queen' then 'ok  ' else 'FAIL' end, b, txt);
 
   insert into public.dishes (id, household_id, name, created_by) values (dish, hh, 'Lasagne', m1);
   select count(*) into n from public.dishes;
-  report := report || format('%s 02 owner sees own dish (%s)', case when n = 1 then 'ok  ' else 'FAIL' end, n);
+  report := report || format('%s 03 owner sees own dish (%s)', case when n = 1 then 'ok  ' else 'FAIL' end, n);
   select count(*) into n from public.criteria;
-  report := report || format('%s 03 six default criteria (%s)', case when n = 6 then 'ok  ' else 'FAIL' end, n);
+  report := report || format('%s 04 six default criteria (%s)', case when n = 6 then 'ok  ' else 'FAIL' end, n);
 
   r := public.create_invite('join');
   code := r ->> 'code';
-  report := report || format('%s 04 invite code created (%s chars)', case when length(code) = 10 then 'ok  ' else 'FAIL' end, length(code));
+  report := report || format('%s 05 invite code created (%s chars)', case when length(code) = 10 then 'ok  ' else 'FAIL' end, length(code));
 
   -- ---- a stranger with a valid anonymous login
   perform set_config('request.jwt.claims', json_build_object('sub', u3, 'role', 'authenticated')::text, true);
 
   select (select count(*) from public.dishes) + (select count(*) from public.households)
        + (select count(*) from public.members) + (select count(*) from public.criteria) into n;
-  report := report || format('%s 05 stranger reads nothing (%s rows)', case when n = 0 then 'ok  ' else 'FAIL' end, n);
+  report := report || format('%s 06 stranger reads nothing (%s rows)', case when n = 0 then 'ok  ' else 'FAIL' end, n);
 
   begin
     insert into public.dishes (household_id, name) values (hh, 'Hack');
-    report := report || text 'FAIL 06 stranger could insert a dish';
+    report := report || text 'FAIL 07 stranger could insert a dish';
   exception when others then
-    report := report || format('ok   06 stranger insert blocked (%s)', sqlstate);
+    report := report || format('ok   07 stranger insert blocked (%s)', sqlstate);
   end;
 
   update public.dishes set name = 'Hacked' where id = dish;
   get diagnostics n = row_count;
-  report := report || format('%s 07 stranger update touches %s rows', case when n = 0 then 'ok  ' else 'FAIL' end, n);
+  report := report || format('%s 08 stranger update touches %s rows', case when n = 0 then 'ok  ' else 'FAIL' end, n);
 
   begin
-    perform public.create_household('Evil kitchen', '{}');
-    report := report || text 'FAIL 08 stranger could create a second kitchen';
+    perform public.create_household('Evil kitchen', '{}', '271828');
+    report := report || text 'FAIL 09 stranger could open a second kitchen';
   exception when others then
-    report := report || format('%s 08 second kitchen refused (%s)', case when sqlerrm = 'kitchen_already_exists' then 'ok  ' else 'FAIL' end, sqlerrm);
+    report := report || format('%s 09 second kitchen refused (%s)', case when sqlerrm = 'kitchen_already_exists' then 'ok  ' else 'FAIL' end, sqlerrm);
   end;
 
   begin
-    perform public.join_household('WRONGCODE1');
-    report := report || text 'FAIL 09 stranger joined with a wrong code';
+    perform public.join_household('WRONGCODE1', '{}', '271828');
+    report := report || text 'FAIL 10 stranger joined with a wrong code';
   exception when others then
-    report := report || format('%s 09 wrong invite refused (%s)', case when sqlerrm = 'invite_invalid' then 'ok  ' else 'FAIL' end, sqlerrm);
+    report := report || format('%s 10 wrong invite refused (%s)', case when sqlerrm = 'invite_invalid' then 'ok  ' else 'FAIL' end, sqlerrm);
   end;
 
   begin
-    perform public.recovery_peek('AAAAAAAAAAAAAAAAAAAA');
-    report := report || text 'FAIL 10 wrong recovery key accepted';
+    perform public.peek_invite('WRONGCODE1');
+    report := report || text 'FAIL 11 a wrong code could be looked at';
   exception when others then
-    report := report || format('%s 10 wrong recovery key refused (%s)', case when sqlerrm = 'recovery_key_invalid' then 'ok  ' else 'FAIL' end, sqlerrm);
+    report := report || format('%s 11 looking at a wrong code refused (%s)', case when sqlerrm = 'invite_invalid' then 'ok  ' else 'FAIL' end, sqlerrm);
   end;
 
   r := public.sync_pull(null);
   n := jsonb_array_length(r -> 'dishes') + jsonb_array_length(r -> 'members') + jsonb_array_length(r -> 'households');
-  report := report || format('%s 11 stranger sync_pull is empty (%s rows)', case when n = 0 then 'ok  ' else 'FAIL' end, n);
+  report := report || format('%s 12 stranger sync_pull is empty (%s rows) and says the seat is %s', case when n = 0 and r ->> 'seat' = 'gone' then 'ok  ' else 'FAIL' end, n, r ->> 'seat');
 
   begin
     select count(*) into n from public.invites;
-    report := report || text 'FAIL 12 invites table is readable';
+    report := report || text 'FAIL 13 invites table is readable';
   exception when others then
-    report := report || format('ok   12 invites table locked (%s)', sqlstate);
+    report := report || format('ok   13 invites table locked (%s)', sqlstate);
   end;
 
   begin
-    select count(*) into n from private.household_secrets;
-    report := report || text 'FAIL 13 recovery hashes are readable';
+    select count(*) into n from private.member_pins;
+    report := report || text 'FAIL 14 PIN hashes are readable';
   exception when others then
-    report := report || format('ok   13 recovery hashes locked (%s)', sqlstate);
+    report := report || format('ok   14 PIN hashes locked (%s)', sqlstate);
+  end;
+
+  begin
+    insert into private.member_devices (user_id, member_id) values (u3, m1);
+    report := report || text 'FAIL 15 stranger could log a device in by hand';
+  exception when others then
+    report := report || format('ok   15 device list locked (%s)', sqlstate);
+  end;
+
+  begin
+    delete from private.login_attempts;
+    report := report || text 'FAIL 16 stranger could wipe the wrong-try counters';
+  exception when others then
+    report := report || format('ok   16 wrong-try counters locked (%s)', sqlstate);
+  end;
+
+  begin
+    perform private.rescue_code('Ana');
+    report := report || text 'FAIL 17 the master key is reachable from the app';
+  exception when others then
+    report := report || format('%s 17 master key not reachable from the app (%s)', case when sqlstate = '42501' then 'ok  ' else 'FAIL' end, sqlstate);
+  end;
+
+  begin
+    perform private.set_pin_for(m1, '864209');
+    report := report || text 'FAIL 18 stranger could set somebody else''s PIN';
+  exception when others then
+    report := report || format('%s 18 PIN helper not reachable from the app (%s)', case when sqlstate = '42501' then 'ok  ' else 'FAIL' end, sqlstate);
   end;
 
   begin
     insert into storage.objects (bucket_id, name) values ('photos', hh::text || '/stolen.jpg');
-    report := report || text 'FAIL 14 stranger could upload into the kitchen folder';
+    report := report || text 'FAIL 19 stranger could upload into the kitchen folder';
   exception when others then
-    report := report || format('ok   14 stranger photo upload blocked (%s)', sqlstate);
+    report := report || format('ok   19 stranger photo upload blocked (%s)', sqlstate);
   end;
 
   -- ---- person 2 joins with the code
   perform set_config('request.jwt.claims', json_build_object('sub', u2, 'role', 'authenticated')::text, true);
-  r := public.join_household(lower(code), '{"name":"Ben"}');
+  r := public.peek_invite(lower(code));
+  report := report || format('%s 20 the code shows who invites (%s to %s) before it is used', case when r ->> 'kind' = 'join' and r -> 'host' ->> 'name' = 'Ana' and r -> 'profile' = 'null'::jsonb then 'ok  ' else 'FAIL' end, r -> 'host' ->> 'name', r ->> 'kitchen_name');
+
+  begin
+    perform public.join_household(code, '{"name":"Ben"}', '12');
+    report := report || text 'FAIL 21 joined with a two-digit PIN';
+  exception when others then
+    report := report || format('%s 21 malformed PIN refused (%s)', case when sqlerrm = 'pin_invalid' then 'ok  ' else 'FAIL' end, sqlerrm);
+  end;
+
+  begin
+    perform public.join_household(code, '{"name":"  ana "}', '314159');
+    report := report || text 'FAIL 22 joined under the partner''s name';
+  exception when others then
+    report := report || format('%s 22 the partner''s name is taken (%s)', case when sqlerrm = 'name_taken' then 'ok  ' else 'FAIL' end, sqlerrm);
+  end;
+
+  r := public.join_household(lower(code), '{"name":"Ben"}', '314159');
   m2 := (r ->> 'member_id')::uuid;
   select count(*) into n from public.dishes;
-  report := report || format('%s 15 partner joined and sees the dish (%s)', case when n = 1 then 'ok  ' else 'FAIL' end, n);
+  select is_admin into b from public.members where id = m2;
+  report := report || format('%s 23 partner joined, sees the dish (%s) and is not an admin', case when n = 1 and not b then 'ok  ' else 'FAIL' end, n);
 
   select updated_at into t1 from public.dishes where id = dish;
   update public.dishes set name = 'Lasagne al forno' where id = dish;
   get diagnostics n = row_count;
   select updated_at into t2 from public.dishes where id = dish;
-  report := report || format('%s 16 partner edits the dish, updated_at moves forward', case when n = 1 and t2 > t1 then 'ok  ' else 'FAIL' end);
+  report := report || format('%s 24 partner edits the dish, updated_at moves forward', case when n = 1 and t2 > t1 then 'ok  ' else 'FAIL' end);
 
   update public.members set name = 'Not Ana' where id = m1;
   get diagnostics n = row_count;
-  report := report || format('%s 17 cannot edit partner profile (%s rows)', case when n = 0 then 'ok  ' else 'FAIL' end, n);
+  report := report || format('%s 25 cannot edit partner profile (%s rows)', case when n = 0 then 'ok  ' else 'FAIL' end, n);
 
-  update public.members set name = 'Benny' where id = m2;
+  update public.members set name = 'Benny', status = 'Always hungry', prefs = '{"lang":"de","theme":"dark"}' where id = m2;
   get diagnostics n = row_count;
-  report := report || format('%s 18 can edit own profile (%s rows)', case when n = 1 then 'ok  ' else 'FAIL' end, n);
+  report := report || format('%s 26 can edit own profile and settings (%s rows)', case when n = 1 then 'ok  ' else 'FAIL' end, n);
 
   begin
-    update public.members set user_id = u3 where id = m2;
-    report := report || text 'FAIL 19 member could hand their seat to someone else';
+    update public.members set is_admin = true where id = m2;
+    report := report || text 'FAIL 27 a member could make themselves admin';
   exception when others then
-    report := report || format('ok   19 seat reassignment blocked (%s)', sqlstate);
+    report := report || format('ok   27 admin flag cannot be edited (%s)', sqlstate);
+  end;
+
+  begin
+    update public.members set disabled_at = now() where id = m1;
+    report := report || text 'FAIL 28 a member could pause a profile by hand';
+  exception when others then
+    report := report || format('ok   28 paused flag cannot be edited (%s)', sqlstate);
+  end;
+
+  begin
+    update public.members set name = 'ANA' where id = m2;
+    report := report || text 'FAIL 29 a member could take the partner''s name';
+  exception when others then
+    report := report || format('%s 29 renaming to the partner''s name blocked (%s)', case when sqlstate = '23505' then 'ok  ' else 'FAIL' end, sqlstate);
   end;
 
   begin
     delete from public.dishes where id = dish;
-    report := report || text 'FAIL 20 hard delete allowed';
+    report := report || text 'FAIL 30 hard delete allowed';
   exception when others then
-    report := report || format('ok   20 hard delete blocked (%s)', sqlstate);
+    report := report || format('ok   30 hard delete blocked (%s)', sqlstate);
   end;
 
   begin
     insert into storage.objects (bucket_id, name) values ('photos', hh::text || '/' || gen_random_uuid()::text || '.jpg');
-    report := report || text 'ok   21 member can add a photo to the kitchen folder';
+    report := report || text 'ok   31 member can add a photo to the kitchen folder';
   exception when others then
-    report := report || format('FAIL 21 member photo upload blocked (%s %s)', sqlstate, sqlerrm);
+    report := report || format('FAIL 31 member photo upload blocked (%s %s)', sqlstate, sqlerrm);
   end;
 
-  begin
-    perform public.create_invite('join');
-    report := report || text 'FAIL 22 third seat could be invited';
-  exception when others then
-    report := report || format('%s 22 kitchen is full at two (%s)', case when sqlerrm = 'kitchen_full' then 'ok  ' else 'FAIL' end, sqlerrm);
-  end;
+  -- ---- only the admin has the keys
+  txt := '';
+  begin perform public.create_invite('join'); txt := txt || ' invite'; exception when others then if sqlerrm <> 'admin_only' then txt := txt || ' invite:' || sqlerrm; end if; end;
+  begin perform public.create_invite('restore', m1); txt := txt || ' restore'; exception when others then if sqlerrm <> 'admin_only' then txt := txt || ' restore:' || sqlerrm; end if; end;
+  begin perform public.set_member_paused(m1, true); txt := txt || ' pause'; exception when others then if sqlerrm <> 'admin_only' then txt := txt || ' pause:' || sqlerrm; end if; end;
+  begin perform public.sign_out_member(m1); txt := txt || ' logout'; exception when others then if sqlerrm <> 'admin_only' then txt := txt || ' logout:' || sqlerrm; end if; end;
+  report := report || format('%s 32 the partner cannot invite, let back in, pause or log out the admin%s', case when txt = '' then 'ok  ' else 'FAIL' end, txt);
+
+  perform set_config('request.jwt.claims', json_build_object('sub', u1, 'role', 'authenticated')::text, true);
+  txt := '';
+  begin perform public.create_invite('join'); txt := txt || ' third-seat'; exception when others then if sqlerrm <> 'kitchen_full' then txt := txt || ' full:' || sqlerrm; end if; end;
+  begin perform public.set_member_paused(m1, true); txt := txt || ' self-pause'; exception when others then if sqlerrm <> 'not_yourself' then txt := txt || ' self:' || sqlerrm; end if; end;
+  begin perform public.create_invite('restore', m1); txt := txt || ' self-restore'; exception when others then if sqlerrm <> 'not_yourself' then txt := txt || ' selfrestore:' || sqlerrm; end if; end;
+  report := report || format('%s 33 the kitchen is full at two, and the admin cannot pause herself%s', case when txt = '' then 'ok  ' else 'FAIL' end, txt);
 
   -- ---- review sealing
+  perform set_config('request.jwt.claims', json_build_object('sub', u2, 'role', 'authenticated')::text, true);
   insert into public.servings (id, household_id, dish_id, proposed_by, status) values (serving, hh, dish, m1, 'eaten');
   insert into public.reviews (id, household_id, serving_id, dish_id, reviewer_id, overall, sealed_at)
   values (review, hh, serving, dish, m2, 4, now() - interval '1 minute');
   update public.reviews set overall = 1, chef_reply = 'Glad you liked it' where id = review;
   select overall, chef_reply into v, txt from public.reviews where id = review;
-  report := report || format('%s 23 sealed review keeps its rating (%s) but takes the chef reply (%s)',
+  report := report || format('%s 34 sealed review keeps its rating (%s) but takes the chef reply (%s)',
     case when v = 4 and txt = 'Glad you liked it' then 'ok  ' else 'FAIL' end, v, txt);
 
-  -- ---- restore: person 1 moves person 2 onto a new phone (u3)
-  perform set_config('request.jwt.claims', json_build_object('sub', u1, 'role', 'authenticated')::text, true);
-  r := public.create_invite('restore', m2);
+  -- ---- PIN login from another device (u3 is Ben's tablet now)
   perform set_config('request.jwt.claims', json_build_object('sub', u3, 'role', 'authenticated')::text, true);
-  r := public.join_household(r ->> 'code');
+  r := public.sign_in_with_pin('Benny', '864209');
+  txt := r::text;
+  r := public.sign_in_with_pin('Nobody', '864209');
+  report := report || format('%s 35 a wrong PIN and an unknown name get the same answer (%s)', case when txt = r::text and r ->> 'reason' = 'wrong' and (r ->> 'tries_left')::int = 4 then 'ok  ' else 'FAIL' end, txt);
+
+  for i in 1 .. 3 loop
+    r := public.sign_in_with_pin(' BENNY ', '864209');
+  end loop;
+  report := report || format('%s 36 one try left after four wrong ones (%s)', case when (r ->> 'tries_left')::int = 1 then 'ok  ' else 'FAIL' end, r ->> 'tries_left');
+  r := public.sign_in_with_pin('benny', '864209');
+  report := report || format('%s 37 the fifth wrong try pauses the name for 15 minutes (%s)', case when r ->> 'reason' = 'locked' and (r ->> 'retry_at')::timestamptz between now() + interval '14 minutes' and now() + interval '16 minutes' then 'ok  ' else 'FAIL' end, r ->> 'reason');
+  r := public.sign_in_with_pin('Benny', '314159');
   select count(*) into n from public.dishes;
-  report := report || format('%s 24 restore invite moves the profile to the new phone (%s dish)', case when n = 1 and (r ->> 'member_id')::uuid = m2 then 'ok  ' else 'FAIL' end, n);
+  report := report || format('%s 38 while paused even the right PIN is refused (%s, sees %s dishes)', case when r ->> 'reason' = 'locked' and n = 0 then 'ok  ' else 'FAIL' end, r ->> 'reason', n);
+
+  -- the pause runs out
+  execute 'reset role';
+  update private.login_attempts set locked_until = now() - interval '1 second' where name_key = 'benny';
+  execute 'set local role authenticated';
+  perform set_config('request.jwt.claims', json_build_object('sub', u3, 'role', 'authenticated')::text, true);
+  r := public.sign_in_with_pin('benny', '314159');
+  select count(*) into n from public.dishes;
+  select prefs ->> 'lang' into txt from public.members where id = m2;
+  report := report || format('%s 39 name and PIN log a second device in: same profile, %s dish, settings came along (%s)', case when (r ->> 'ok')::boolean and (r ->> 'member_id')::uuid = m2 and n = 1 and txt = 'de' then 'ok  ' else 'FAIL' end, n, txt);
 
   perform set_config('request.jwt.claims', json_build_object('sub', u2, 'role', 'authenticated')::text, true);
   select count(*) into n from public.dishes;
-  report := report || format('%s 25 the old phone is locked out (%s rows)', case when n = 0 then 'ok  ' else 'FAIL' end, n);
+  report := report || format('%s 40 the first device stays logged in (%s dish)', case when n = 1 then 'ok  ' else 'FAIL' end, n);
 
-  -- ---- recovery key: the old phone (u2) gets back in as person 1
-  r := public.recovery_peek(lower(substr(key, 1, 5)) || '-' || substr(key, 6));
-  n := jsonb_array_length(r -> 'members');
-  r := public.recover_member(key, m1);
-  select count(*) into n from public.dishes;
-  report := report || format('%s 26 recovery key restores access (%s dish)', case when n = 1 then 'ok  ' else 'FAIL' end, n);
+  -- ---- own devices and own PIN
+  perform set_config('request.jwt.claims', json_build_object('sub', u3, 'role', 'authenticated')::text, true);
+  n := public.sign_out_other_devices();
+  perform set_config('request.jwt.claims', json_build_object('sub', u2, 'role', 'authenticated')::text, true);
+  r := public.sync_pull(null);
+  report := report || format('%s 41 "log out my other devices" logged out %s; that device now reads nothing (seat %s)', case when n = 1 and jsonb_array_length(r -> 'dishes') = 0 and r ->> 'seat' = 'gone' then 'ok  ' else 'FAIL' end, n, r ->> 'seat');
+
+  perform set_config('request.jwt.claims', json_build_object('sub', u3, 'role', 'authenticated')::text, true);
+  perform public.set_pin('864209');
+  perform set_config('request.jwt.claims', json_build_object('sub', u2, 'role', 'authenticated')::text, true);
+  r := public.sign_in_with_pin('Benny', '314159');
+  txt := r ->> 'reason';
+  r := public.sign_in_with_pin('Benny', '864209');
+  report := report || format('%s 42 after a PIN change the old PIN is %s and the new one works (%s)', case when txt = 'wrong' and (r ->> 'ok')::boolean then 'ok  ' else 'FAIL' end, txt, r ->> 'ok');
+
+  -- ---- the admin pauses the partner
+  perform set_config('request.jwt.claims', json_build_object('sub', u1, 'role', 'authenticated')::text, true);
+  perform public.set_member_paused(m2, true);
+  perform set_config('request.jwt.claims', json_build_object('sub', u3, 'role', 'authenticated')::text, true);
+  r := public.sync_pull(null);
+  update public.members set status = 'Still here' where id = m2;
+  get diagnostics n = row_count;
+  report := report || format('%s 43 a paused profile reads nothing (%s dishes, seat %s) and writes nothing (%s rows)', case when jsonb_array_length(r -> 'dishes') = 0 and r ->> 'seat' = 'paused' and n = 0 then 'ok  ' else 'FAIL' end, jsonb_array_length(r -> 'dishes'), r ->> 'seat', n);
+  r := public.my_membership();
+  report := report || format('%s 44 the device learns it is paused, not logged out (%s)', case when (r ->> 'paused')::boolean and (r ->> 'member_id')::uuid = m2 then 'ok  ' else 'FAIL' end, r ->> 'paused');
+  begin
+    insert into public.dishes (household_id, name) values (hh, 'Sneaked in');
+    report := report || text 'FAIL 45 a paused profile could add a dish';
+  exception when others then
+    report := report || format('ok   45 a paused profile cannot add a dish (%s)', sqlstate);
+  end;
+  perform set_config('request.jwt.claims', json_build_object('sub', u4, 'role', 'authenticated')::text, true);
+  r := public.sign_in_with_pin('Benny', '864209');
+  report := report || format('%s 46 a paused profile cannot log in on a new device (%s)', case when r ->> 'reason' = 'paused' then 'ok  ' else 'FAIL' end, r ->> 'reason');
 
   perform set_config('request.jwt.claims', json_build_object('sub', u1, 'role', 'authenticated')::text, true);
+  select disabled_at is not null into b from public.members where id = m2;
+  perform public.set_member_paused(m2, false);
+  perform set_config('request.jwt.claims', json_build_object('sub', u3, 'role', 'authenticated')::text, true);
   select count(*) into n from public.dishes;
-  report := report || format('%s 27 the replaced login is locked out (%s rows)', case when n = 0 then 'ok  ' else 'FAIL' end, n);
+  report := report || format('%s 47 the admin saw the pause (%s) and switched it off: the partner reads again (%s dish)', case when b and n = 1 then 'ok  ' else 'FAIL' end, b, n);
+
+  -- ---- the admin logs the partner out everywhere, then lets him back in
+  perform set_config('request.jwt.claims', json_build_object('sub', u1, 'role', 'authenticated')::text, true);
+  n := public.sign_out_member(m2);
+  perform set_config('request.jwt.claims', json_build_object('sub', u3, 'role', 'authenticated')::text, true);
+  r := public.sync_pull(null);
+  report := report || format('%s 48 "log out everywhere" logged out %s devices; they read nothing (seat %s)', case when n = 2 and jsonb_array_length(r -> 'dishes') = 0 and r ->> 'seat' = 'gone' then 'ok  ' else 'FAIL' end, n, r ->> 'seat');
+
+  perform set_config('request.jwt.claims', json_build_object('sub', u1, 'role', 'authenticated')::text, true);
+  r := public.create_invite('restore', m2);
+  code := r ->> 'code';
+  perform set_config('request.jwt.claims', json_build_object('sub', u4, 'role', 'authenticated')::text, true);
+  r := public.peek_invite(code);
+  txt := r -> 'profile' ->> 'name';
+  r := public.join_household(code, '{"name":"ignored"}', '975310');
+  select count(*) into n from public.dishes;
+  report := report || format('%s 49 a restore code lets %s back in as the same profile with a new PIN (%s dish)', case when txt = 'Benny' and r ->> 'kind' = 'restore' and (r ->> 'member_id')::uuid = m2 and n = 1 then 'ok  ' else 'FAIL' end, txt, n);
+
+  begin
+    perform public.join_household(code, '{}', '975310');
+    report := report || text 'FAIL 50 a restore code worked twice';
+  exception when others then
+    report := report || format('%s 50 the code works once (%s)', case when sqlerrm in ('invite_invalid', 'already_in_kitchen') then 'ok  ' else 'FAIL' end, sqlerrm);
+  end;
+
+  perform set_config('request.jwt.claims', json_build_object('sub', u3, 'role', 'authenticated')::text, true);
+  r := public.sign_in_with_pin('Benny', '864209');
+  report := report || format('%s 51 the forgotten PIN no longer works (%s)', case when r ->> 'reason' = 'wrong' then 'ok  ' else 'FAIL' end, r ->> 'reason');
+
+  -- ---- logging out
+  perform set_config('request.jwt.claims', json_build_object('sub', u4, 'role', 'authenticated')::text, true);
+  perform public.sign_out_device();
+  select count(*) into n from public.dishes;
+  r := public.my_membership();
+  report := report || format('%s 52 after logging out the device reads nothing (%s rows) and has no seat', case when n = 0 and r is null then 'ok  ' else 'FAIL' end, n);
+
+  -- ---- the owner's master key (only from the SQL editor)
+  execute 'reset role';
+  code := private.rescue_code('ana');
+  execute 'set local role authenticated';
+  perform set_config('request.jwt.claims', json_build_object('sub', u4, 'role', 'authenticated')::text, true);
+  r := public.join_household(code, '{}', '135791');
+  select is_admin into b from public.members where id = m1;
+  report := report || format('%s 53 the master key gets the admin back in on a fresh device (%s, still admin: %s)', case when (r ->> 'member_id')::uuid = m1 and r ->> 'kind' = 'restore' and b then 'ok  ' else 'FAIL' end, r ->> 'kind', b);
+
+  perform public.create_invite('restore', m2);
+  perform set_config('request.jwt.claims', json_build_object('sub', u1, 'role', 'authenticated')::text, true);
+  select count(*) into n from public.dishes;
+  report := report || format('%s 54 her old device is logged out by that (%s rows), and the new one has the admin''s keys', case when n = 0 then 'ok  ' else 'FAIL' end, n);
 
   execute 'reset role';
+  select count(*) into n from private.login_attempts where failed > 0 or locked_until > now();
+  report := report || format('%s 55 no wrong-try counters are left for people who got in (%s left: only the made-up name and the one stale PIN try)', case when n <= 2 then 'ok  ' else 'FAIL' end, n);
+
   raise exception E'SECURITY REPORT (rolled back)\n%', array_to_string(report, E'\n');
 end
 $$;

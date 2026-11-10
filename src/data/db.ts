@@ -100,5 +100,4 @@ export const META = {
   memberId: 'me.memberId',
   lastSyncAt: 'sync.lastSyncAt',
   lastError: 'sync.lastError',
-  recoveryKeyShown: 'me.recoveryKeyShown',
 } as const

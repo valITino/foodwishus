@@ -11,7 +11,11 @@ import { META, type AppDB } from './db'
 import type { Store } from './store'
 import { nowIso, SYNC_TABLES, type ID, type ISO, type Photo } from './types'
 
-export type SyncState = 'idle' | 'syncing' | 'offline' | 'error' | 'locked-out'
+/**
+ * locked-out: this device is no longer logged in. paused: the admin has paused the profile;
+ * the engine keeps asking and carries on by itself once it is switched on again.
+ */
+export type SyncState = 'idle' | 'syncing' | 'offline' | 'error' | 'locked-out' | 'paused'
 
 export interface SyncStatus {
   state: SyncState
@@ -40,6 +44,9 @@ const MISSING_RETRY_MS = 5 * 60_000
 export class SyncEngine {
   status: SyncStatus = { state: 'idle', pending: 0, uploads: 0, stuck: 0, lastSyncAt: null, lastError: null }
 
+  /** True in the demo kitchen: nothing is ever sent or fetched. */
+  disabled = false
+
   private listeners = new Set<(s: SyncStatus) => void>()
   private current: Promise<void> | null = null
   private again = false
@@ -48,6 +55,8 @@ export class SyncEngine {
   private unsubscribe: (() => void) | null = null
   private detach: (() => void) | null = null
   private missingBlobs = new Map<ID, number>()
+  /** Whether the cloud has confirmed, since the app opened, that this phone still has its seat. */
+  private seatConfirmed = false
   private readonly opts: Required<SyncOptions>
 
   constructor(
@@ -74,9 +83,12 @@ export class SyncEngine {
   /** Begin syncing in the background. Call once the phone is paired. */
   async start(): Promise<void> {
     this.stop()
+    if (this.disabled) return
+    this.seatConfirmed = false
     const householdId = await this.db.getMeta<ID>(META.householdId)
     if (!householdId) return
-    this.status = { ...this.status, lastSyncAt: (await this.db.getMeta<ISO>(META.lastSyncAt)) ?? null }
+    // Starting fresh also clears a lock-out: the phone has just been paired (again).
+    this.status = { ...this.status, state: 'idle', lastError: null, lastSyncAt: (await this.db.getMeta<ISO>(META.lastSyncAt)) ?? null }
     this.unsubscribe = this.backend.subscribe(householdId, () => this.kick(150))
     this.interval = setInterval(() => this.kick(), this.opts.intervalMs)
 
@@ -109,6 +121,7 @@ export class SyncEngine {
 
   /** Ask for a pass soon. Many kicks in a row become one pass. */
   kick(delayMs = 30): void {
+    if (this.disabled) return
     if (this.kickTimer) clearTimeout(this.kickTimer)
     this.kickTimer = setTimeout(() => {
       this.kickTimer = null
@@ -118,6 +131,7 @@ export class SyncEngine {
 
   /** Run a pass now. Resolves once it, and any pass requested meanwhile, has finished. */
   sync(): Promise<void> {
+    if (this.disabled) return Promise.resolve()
     if (this.current) {
       this.again = true
       return this.current
@@ -138,8 +152,13 @@ export class SyncEngine {
   private async pass(): Promise<void> {
     const householdId = await this.db.getMeta<ID>(META.householdId)
     if (!householdId || this.status.state === 'locked-out') return
-    this.setStatus({ state: 'syncing' })
+    // A paused seat stays "paused" while it asks again, so its screen does not flicker.
+    if (this.status.state !== 'paused') this.setStatus({ state: 'syncing' })
     try {
+      // Ask the cloud whether this device still has its seat: once after opening the app,
+      // and before every pass that has something to send. A device that was logged out or
+      // paused must keep its changes instead of sending them into the void.
+      if (!this.seatConfirmed || this.status.state === 'paused' || (await this.db.outbox.count()) > 0) await this.confirmSeat()
       await this.pushOutbox()
       if (await this.uploadBlobs(householdId)) await this.pushOutbox()
       await this.pull()
@@ -150,6 +169,8 @@ export class SyncEngine {
     } catch (e) {
       if (isLockedOut(e)) {
         this.setStatus({ state: 'locked-out', lastError: null })
+      } else if (e instanceof Paused) {
+        this.setStatus({ state: 'paused', lastError: null })
       } else if (isBackendError(e) && e.kind === 'network') {
         this.setStatus({ state: 'offline', lastError: null })
       } else {
@@ -160,6 +181,14 @@ export class SyncEngine {
     } finally {
       await this.refreshCounts()
     }
+  }
+
+  private async confirmSeat(): Promise<void> {
+    this.seatConfirmed = false
+    const seat = await this.backend.membership()
+    if (seat === null) throw new LockedOut()
+    if (seat.paused) throw new Paused()
+    this.seatConfirmed = true
   }
 
   // ---------------------------------------------------------------- 1. push --
@@ -180,7 +209,7 @@ export class SyncEngine {
         // A refusal can mean this phone was unpaired. Never throw data away in that case.
         if (!membershipChecked) {
           membershipChecked = true
-          if ((await this.backend.membership()) === null) throw new LockedOut()
+          await this.confirmSeat()
         }
 
         const attempts = op.attempts + 1
@@ -232,6 +261,9 @@ export class SyncEngine {
   private async pull(): Promise<void> {
     const since = (await this.db.getMeta<ISO>(META.cursor)) ?? null
     const result = await this.backend.pull(since)
+    // An idle device learns here that it was logged out or paused from somewhere else.
+    if (result.seat === 'gone') throw new LockedOut()
+    if (result.seat === 'paused') throw new Paused()
 
     const tables = SYNC_TABLES.map((t) => this.db.table(t))
     await this.db.transaction('rw', [...tables, this.db.outbox, this.db.meta], async () => {
@@ -317,6 +349,12 @@ export class SyncEngine {
 class LockedOut extends Error {
   constructor() {
     super('locked_out')
+  }
+}
+
+class Paused extends Error {
+  constructor() {
+    super('paused')
   }
 }
 

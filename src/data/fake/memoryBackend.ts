@@ -24,23 +24,38 @@ export class MemoryBackend implements Backend {
   async membership() {
     return this.cloud.membership(this.user())
   }
-  async createHousehold(name: string, me: ProfileInput) {
-    return this.cloud.createHousehold(this.user(), name, me)
+  async kitchenExists() {
+    return this.cloud.kitchenExists(this.user())
+  }
+  async createHousehold(name: string, me: ProfileInput, pin: string) {
+    return this.cloud.createHousehold(this.user(), name, me, pin)
   }
   async createInvite(kind: 'join' | 'restore', memberId?: ID) {
     return this.cloud.createInvite(this.user(), kind, memberId)
   }
-  async joinHousehold(code: string, me: ProfileInput) {
-    return this.cloud.joinHousehold(this.user(), code, me)
+  async peekInvite(code: string) {
+    return this.cloud.peekInvite(this.user(), code)
   }
-  async recoveryPeek(key: string) {
-    return this.cloud.recoveryPeek(this.user(), key)
+  async joinHousehold(code: string, me: ProfileInput, pin: string) {
+    return this.cloud.joinHousehold(this.user(), code, me, pin)
   }
-  async recoverMember(key: string, memberId: ID) {
-    return this.cloud.recoverMember(this.user(), key, memberId)
+  async signInWithPin(name: string, pin: string) {
+    return this.cloud.signInWithPin(this.user(), name, pin)
   }
-  async rotateRecoveryKey() {
-    return this.cloud.rotateRecoveryKey(this.user())
+  async setPin(pin: string) {
+    this.cloud.setPin(this.user(), pin)
+  }
+  async signOutDevice() {
+    this.cloud.signOutDevice(this.user())
+  }
+  async signOutOtherDevices() {
+    return this.cloud.signOutOtherDevices(this.user())
+  }
+  async setMemberPaused(memberId: ID, paused: boolean) {
+    this.cloud.setMemberPaused(this.user(), memberId, paused)
+  }
+  async signOutMember(memberId: ID) {
+    return this.cloud.signOutMember(this.user(), memberId)
   }
   async push(op: PushOp) {
     this.cloud.push(this.user(), structuredClone(op))

@@ -8,12 +8,17 @@ import { FakeCloud } from '../src/data/fake/cloudCore.ts'
 
 const METHODS = new Set([
   'membership',
+  'kitchenExists',
   'createHousehold',
   'createInvite',
+  'peekInvite',
   'joinHousehold',
-  'recoveryPeek',
-  'recoverMember',
-  'rotateRecoveryKey',
+  'signInWithPin',
+  'setPin',
+  'signOutDevice',
+  'signOutOtherDevices',
+  'setMemberPaused',
+  'signOutMember',
   'push',
   'pull',
 ])
@@ -43,6 +48,12 @@ export function fakeCloud(): Plugin {
       if (url.pathname === '/reset' && req.method === 'POST') {
         cloud.reset()
         return json(res, 200, { result: null })
+      }
+
+      // The owner's master key. In the real cloud it is run from the Supabase dashboard;
+      // here the tests reach it directly.
+      if (url.pathname === '/rescue' && req.method === 'POST') {
+        return json(res, 200, { result: cloud.rescueCode(url.searchParams.get('name') ?? '') })
       }
 
       if (url.pathname === '/events') {
@@ -83,7 +94,7 @@ export function fakeCloud(): Plugin {
 
       json(res, 404, { kind: 'rejected', code: 'not_found' })
     } catch (e) {
-      if (e instanceof BackendError) return json(res, 400, { kind: e.kind, code: e.code })
+      if (e instanceof BackendError) return json(res, 400, { kind: e.kind, code: e.code, details: e.details })
       json(res, 500, { kind: 'network', code: 'fake_cloud_crashed', message: String(e) })
     }
   }

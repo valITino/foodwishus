@@ -4,7 +4,7 @@ import { chromium } from '@playwright/test'
 
 const out = process.argv[2] ?? 'shots'
 const scale = Number(process.argv[3] ?? 1)
-const base = process.env.SHOTS_URL ?? 'http://127.0.0.1:5173'
+const base = process.env.SHOTS_URL ?? `http://127.0.0.1:${process.env.FOODWISHUS_PORT ?? 5173}`
 const pages = [
   ['today', '/#/preview/today', false],
   ['styleguide', '/#/styleguide', true],

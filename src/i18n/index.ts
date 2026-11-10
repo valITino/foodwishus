@@ -42,6 +42,9 @@ function subscribe(fn: () => void): () => void {
   return () => listeners.delete(fn)
 }
 
+/** Hear about every change. Returns a function that stops listening. */
+export const onLangChange = subscribe
+
 export function useLang(): Lang {
   return useSyncExternalStore(subscribe, getLang)
 }
@@ -49,6 +52,16 @@ export function useLang(): Lang {
 /** The messages for the current language. */
 export function useT(): Messages {
   return dictionaries[useLang()]
+}
+
+/**
+ * Copy that belongs to one feature. Keep it next to the feature:
+ *   const copy = { en: { title: 'Wishlist' }, de: { title: 'Wünsche' } }
+ *   const c = useCopy(copy)
+ * Both languages must have the same shape, or it will not compile.
+ */
+export function useCopy<T>(copy: { en: T; de: NoInfer<T> }): T {
+  return copy[useLang()]
 }
 
 export type { Messages }
