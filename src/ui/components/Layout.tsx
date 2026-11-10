@@ -23,7 +23,7 @@ interface PageHeaderProps {
 export function PageHeader({ title, backTo = '/', action }: PageHeaderProps) {
   const t = useT()
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-ground">
+    <header className="sticky top-[var(--banner-h,0px)] z-30 border-b border-line bg-ground">
       <div className="app-column flex min-h-14 items-center gap-1 px-2 pt-[env(safe-area-inset-top)]">
         <IconButton icon="back" label={t.common.back} onClick={() => back(backTo)} />
         <h1 className="min-w-0 flex-1 truncate text-lg">{title}</h1>
@@ -52,7 +52,7 @@ export function Segmented<T extends string>({ label, value, options, onChange }:
           aria-checked={value === option.value}
           onClick={() => onChange(option.value)}
           className={cx(
-            'min-h-10 flex-1 rounded-full px-3 text-xs font-extrabold transition-colors duration-150',
+            'min-h-11 flex-1 rounded-full px-3 text-xs font-extrabold transition-colors duration-150',
             value === option.value ? 'bg-ink text-ground' : 'text-ink-soft',
           )}
         >

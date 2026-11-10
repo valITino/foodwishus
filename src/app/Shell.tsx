@@ -75,7 +75,13 @@ export function Shell() {
 
   useEffect(() => {
     void boot()
+    // Page headers stick below the demo banner instead of hiding under it.
+    if (isDemo) document.documentElement.style.setProperty('--banner-h', '2.5rem')
   }, [])
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [path])
 
   // Pages that work without a kitchen.
   if (path.startsWith('/styleguide')) return <Styleguide />

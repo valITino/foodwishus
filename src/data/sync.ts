@@ -51,6 +51,8 @@ export class SyncEngine {
   private unsubscribe: (() => void) | null = null
   private detach: (() => void) | null = null
   private missingBlobs = new Map<ID, number>()
+  /** Whether the cloud has confirmed, since the app opened, that this phone still has its seat. */
+  private seatConfirmed = false
   private readonly opts: Required<SyncOptions>
 
   constructor(
@@ -78,6 +80,7 @@ export class SyncEngine {
   async start(): Promise<void> {
     this.stop()
     if (this.disabled) return
+    this.seatConfirmed = false
     const householdId = await this.db.getMeta<ID>(META.householdId)
     if (!householdId) return
     // Starting fresh also clears a lock-out: the phone has just been paired (again).
@@ -147,6 +150,10 @@ export class SyncEngine {
     if (!householdId || this.status.state === 'locked-out') return
     this.setStatus({ state: 'syncing' })
     try {
+      if (!this.seatConfirmed) {
+        if ((await this.backend.membership()) === null) throw new LockedOut()
+        this.seatConfirmed = true
+      }
       await this.pushOutbox()
       if (await this.uploadBlobs(householdId)) await this.pushOutbox()
       await this.pull()

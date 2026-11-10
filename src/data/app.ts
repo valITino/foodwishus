@@ -65,6 +65,17 @@ export async function joinKitchen(code: string, me: ProfileInput): Promise<'join
   return result.kind
 }
 
+/**
+ * This login already has a seat in the cloud but the phone does not know it (the reply
+ * to "start" or "join" was lost on the way). Take the seat. Returns false when there is none.
+ */
+export async function resumeKitchen(): Promise<boolean> {
+  const membership = await backend.membership()
+  if (!membership) return false
+  await adopt(membership)
+  return true
+}
+
 /** Get back in with the recovery key, as one of the kitchen's existing members. */
 export async function recoverKitchen(recoveryKey: string, memberId: string): Promise<void> {
   await adopt(await backend.recoverMember(recoveryKey, memberId))

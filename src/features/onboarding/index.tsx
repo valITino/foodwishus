@@ -15,7 +15,7 @@
 import { MotionConfig } from 'motion/react'
 import { useEffect, useState } from 'react'
 import { navigate, type Route } from '../../app/router'
-import { backend, enterDemo, joinKitchen, recoverKitchen, startKitchen } from '../../data/app'
+import { backend, enterDemo, joinKitchen, recoverKitchen, resumeKitchen, startKitchen } from '../../data/app'
 import { isBackendError, type RecoveryPeek } from '../../data/backend'
 import type { ID } from '../../data/types'
 import { setLang, useCopy, useLang, useT, type Lang } from '../../i18n'
@@ -121,6 +121,14 @@ export function Onboarding({ route, lockedOut }: { route: Route; lockedOut: bool
     } catch (e) {
       setStarting(false)
       oweKey(false)
+      // The kitchen may exist already: the first try reached the cloud but its answer got lost.
+      // The recovery key from that try is gone, so go straight to making a new one.
+      if (isBackendError(e) && e.code === 'already_in_kitchen' && (await resumeKitchen().catch(() => false))) {
+        await applyParkedProfile().catch(() => undefined)
+        setBusy(null)
+        navigate('/settings/key', { replace: true })
+        return
+      }
       fail('start', e, '/start')
     }
   }

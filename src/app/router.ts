@@ -12,8 +12,7 @@ export interface Route {
 
 let cachedHash: string | null = null
 let cachedRoute: Route = { path: '/', segments: [], query: new URLSearchParams() }
-/** How many in-app steps we can go back before leaving the app. */
-let depth = 0
+const listeners = new Set<() => void>()
 
 function current(): Route {
   const hash = window.location.hash
@@ -26,32 +25,40 @@ function current(): Route {
   return cachedRoute
 }
 
+const notify = () => listeners.forEach((fn) => fn())
+if (typeof window !== 'undefined') {
+  window.addEventListener('hashchange', notify)
+  window.addEventListener('popstate', notify)
+}
+
 function subscribe(onChange: () => void): () => void {
-  window.addEventListener('hashchange', onChange)
-  return () => window.removeEventListener('hashchange', onChange)
+  listeners.add(onChange)
+  return () => listeners.delete(onChange)
 }
 
 export function useRoute(): Route {
   return useSyncExternalStore(subscribe, current)
 }
 
+/**
+ * How many in-app steps lie behind the current page. It is stored on the history
+ * entry itself, so it stays right when the Android back button is used.
+ */
+function depth(): number {
+  const state = window.history.state as { depth?: number } | null
+  return state?.depth ?? 0
+}
+
 export function navigate(to: string, options: { replace?: boolean } = {}): void {
-  if (options.replace) {
-    window.location.replace(`#${to}`)
-  } else {
-    depth += 1
-    window.location.hash = to
-  }
+  if (options.replace) window.history.replaceState({ depth: depth() }, '', `#${to}`)
+  else window.history.pushState({ depth: depth() + 1 }, '', `#${to}`)
+  notify()
 }
 
 /** Go back one step, or to the fallback when the app was opened directly on this page. */
 export function back(fallback = '/'): void {
-  if (depth > 0) {
-    depth -= 1
-    window.history.back()
-  } else {
-    navigate(fallback, { replace: true })
-  }
+  if (depth() > 0) window.history.back()
+  else navigate(fallback, { replace: true })
 }
 
 /** matchPath('/recipes/:id/edit', '/recipes/abc/edit') → { id: 'abc' } */

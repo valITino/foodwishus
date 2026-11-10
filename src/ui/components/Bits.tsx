@@ -122,10 +122,10 @@ export function Avatar({ avatar, color = 'rose', size = 44, name, accessory }: A
 }
 
 /** A person and their status line, as a little speech bubble. */
-export function StatusBubble({ name, status, avatar, color }: { name: string; status: string; avatar: string; color?: string }) {
+export function StatusBubble({ name, status, avatar, color, accessory }: { name: string; status: string; avatar: string; color?: string; accessory?: string | null }) {
   return (
     <div className="flex items-end gap-2">
-      <Avatar avatar={avatar} color={color} size={40} name={name} />
+      <Avatar avatar={avatar} color={color} accessory={accessory} size={40} name={name} />
       <div className="min-w-0 rounded-[18px] rounded-bl-[6px] border border-line bg-surface px-3.5 py-2">
         <p className="text-2xs font-extrabold text-ink-soft">{name}</p>
         <p className="break-words text-sm font-bold leading-snug">{status}</p>
