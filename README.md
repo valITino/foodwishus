@@ -17,7 +17,24 @@ The app lives here: **https://valitino.github.io/foodwishus/**
 3. Tap **Install app** (on some phones it says **Add to Home screen**).
 
 From then on FoodwishUs has its own icon and opens like every other app. Do this on both
-phones. A tablet or a computer works the same way, in its browser.
+phones. A tablet or a computer works the same way, in its browser. You find the same offer
+in the app under **Settings, This device**.
+
+**It opens without a connection.** Once the app has been opened one time, it starts in the
+train tunnel too. What you do there is saved on the phone and sent later.
+
+**A new version.** When the app has been improved, a small note says so, with a **Reload**
+button. Nothing reloads by itself while you are in the middle of something.
+
+## Notifications
+
+Each phone decides for itself. Open **Settings, Notifications**, tap **Turn on
+notifications** and then **Allow** when Chrome asks. You then hear about five things: a new
+dish or menu was proposed, a meal was planned, "Served, proof needed!", a verdict was handed
+in, and the cook answered. Every kind has its own switch.
+
+If the page says notifications are not set up for this kitchen yet, the owner of the cloud
+has one more step to do (see "For the owner of the cloud").
 
 ## Open the kitchen and invite your partner
 
@@ -182,6 +199,13 @@ Open the kitchen yourself right after the first deploy: whoever opens it is its 
 **What it costs.** Nothing. GitHub Pages hosts the app and Supabase's free plan holds the
 data: room for about 2,500 meal photos. If that ever gets tight, save a backup with photos
 first.
+
+### Switching notifications on (once)
+
+Notifications need a small helper in the Supabase project. Nobody has to copy any key:
+`supabase/functions/push/README.md` has the steps (one database update, one function, two
+statements). Until that is done, everything else works and the Notifications page says it
+is not set up yet.
 
 ## For developers
 

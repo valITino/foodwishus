@@ -176,6 +176,7 @@ test('the start screens keep the basics, and so do the pages that need a real ki
     ['people', '/settings/people', 'main'],
     ['invite', '/settings/invite', 'main'],
     ['PIN and devices', '/settings/pin', 'main'],
+    ['notifications', '/settings/notifications', 'main'],
     ['sync', '/settings/sync', 'main'],
   ] as const) {
     await page.goto(`/#${path}`)
