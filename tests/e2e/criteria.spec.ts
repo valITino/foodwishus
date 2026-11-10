@@ -10,6 +10,20 @@ const rows = (page: Page) => page.getByTestId('criterion-row')
 const labels = async (page: Page) => (await rows(page).allInnerTexts()).map((text) => text.split('\n')[0])
 const sheet = (page: Page) => page.getByRole('dialog')
 
+/** Note down every order the list shows from now on, however briefly. */
+async function watchOrders(page: Page): Promise<void> {
+  await page.getByTestId('criteria-page').evaluate((list) => {
+    const read = () => [...list.querySelectorAll<HTMLElement>('[data-testid=criterion-row]')].map((row) => row.innerText.split('\n')[0]).join(', ')
+    const seen = [read()]
+    ;(window as unknown as { ordersSeen: string[] }).ordersSeen = seen
+    new MutationObserver(() => {
+      const now = read()
+      if (seen[seen.length - 1] !== now) seen.push(now)
+    }).observe(list, { childList: true, subtree: true, characterData: true })
+  })
+}
+const ordersSeen = (page: Page) => page.evaluate(() => (window as unknown as { ordersSeen: string[] }).ordersSeen)
+
 async function openCriteria(page: Page): Promise<void> {
   await page.goto('/#/settings')
   await page.getByRole('button', { name: /^Review criteria/ }).click()
@@ -66,6 +80,8 @@ test('add, rename, pick an icon, reorder, switch off and on: the review sheet fo
     expect(await k.evaluate(async (app) => ((await app.db.criteria.toArray()) as { label: string; icon: string }[]).find((c) => c.label === 'Bite')?.icon)).toBe('star')
   })
 
+  await watchOrders(page)
+
   await test.step('reorder with the keyboard: space picks up, arrows move, space drops', async () => {
     // Every key is answered aloud. The next key waits for that answer: an arrow pressed
     // before the row has arrived starts from the old place and the step is lost.
@@ -82,10 +98,12 @@ test('add, rename, pick an icon, reorder, switch off and on: the review sheet fo
   })
 
   await test.step('reorder by dragging the grip', async () => {
-    const from = await page.getByRole('button', { name: 'Move Temperature' }).boundingBox()
+    // Put the pointer on the grip the way a hand would: once the row has come to rest.
+    const grip = page.getByRole('button', { name: 'Move Temperature' })
+    await grip.hover()
+    const from = await grip.boundingBox()
     const to = await page.getByRole('button', { name: 'Move Taste' }).boundingBox()
     if (!from || !to) throw new Error('grips not on screen')
-    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
     await page.mouse.down()
     await page.mouse.move(from.x + from.width / 2, from.y - 40, { steps: 6 })
     await expect(page.getByText('Picked up Temperature.').or(page.getByText(/^Temperature is now number/))).toBeAttached()
@@ -104,6 +122,15 @@ test('add, rename, pick an icon, reorder, switch off and on: the review sheet fo
     await expect(ask).not.toBeChecked()
     await expect(rows(page).nth(4)).toContainText('Not asked')
     await expect(rows(page)).toHaveCount(7)
+  })
+
+  await test.step('each move changed the list once: no shuffling while it was being saved', async () => {
+    // Read after a later change to the same list, so a late shuffle would be in here too.
+    expect(await ordersSeen(page)).toEqual([
+      'Taste, Bite, Smell, Looks, Portion, Temperature, Crunch',
+      'Taste, Crunch, Bite, Smell, Looks, Portion, Temperature',
+      'Temperature, Taste, Crunch, Bite, Smell, Looks, Portion',
+    ])
   })
 
   await test.step('the review sheet asks the criteria that are on, in the new order', async () => {
