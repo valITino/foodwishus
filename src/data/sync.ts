@@ -6,7 +6,7 @@
 // It never blocks the app: if the cloud is unreachable the pass ends quietly and the
 // next trigger (reconnect, app focus, a change from the partner, a timer) tries again.
 
-import { isBackendError, photoPath, type Backend } from './backend'
+import { BackendError, isBackendError, photoPath, type Backend } from './backend'
 import { META, type AppDB } from './db'
 import type { Store } from './store'
 import { nowIso, SYNC_TABLES, type ID, type ISO, type Photo } from './types'
@@ -39,6 +39,8 @@ export interface SyncOptions {
 /** Each pull re-reads this much history, so a row committed "late" is never missed. */
 const OVERLAP_MS = 30_000
 const MAX_ATTEMPTS = 3
+/** A photo the cloud refused this often waits until somebody taps "Try again". */
+export const MAX_UPLOAD_ATTEMPTS = 5
 const MISSING_RETRY_MS = 5 * 60_000
 
 export class SyncEngine {
@@ -236,7 +238,7 @@ export class SyncEngine {
     const waiting = await this.db.blobs.where('pending').equals(1).toArray()
     let uploadedAny = false
     for (const entry of waiting) {
-      if (entry.attempts >= 5) continue
+      if (entry.attempts >= MAX_UPLOAD_ATTEMPTS) continue
       try {
         if (entry.full) await this.backend.uploadBlob(photoPath(householdId, entry.id, 'full'), entry.full)
         if (entry.thumb) await this.backend.uploadBlob(photoPath(householdId, entry.id, 'thumb'), entry.thumb)
@@ -327,6 +329,77 @@ export class SyncEngine {
   private isRecent(photo: Photo, now: number): boolean {
     const taken = Date.parse(photo.takenAt ?? photo.createdAt)
     return now - taken < this.opts.fullPhotoDays * 86_400_000
+  }
+
+  // --------------------------------------------------------- refused changes --
+  //
+  // A change the cloud said no to three times is set aside in `deadLetters`, and the
+  // device then falls back in line with the cloud. Nothing is thrown away until a person
+  // says so: these two are the only ways out of that list.
+
+  /**
+   * Send a refused change once more. A refused new row goes out as it is on this device
+   * now, later edits included. A refused edit is applied to the row again and sent.
+   */
+  async retryRefused(seq: number): Promise<void> {
+    const letter = await this.db.deadLetters.get(seq)
+    if (!letter) return
+    const rows = this.db.rows(letter.table)
+    await this.db.transaction('rw', rows, this.db.outbox, this.db.deadLetters, async () => {
+      if (!(await this.db.deadLetters.get(seq))) return
+      const current = await rows.get(letter.rowId)
+      let data = letter.data
+      if (letter.kind === 'put') {
+        data = { ...(current ?? letter.data) }
+        if (!current) await rows.put(data as never)
+      } else if (current) {
+        await rows.put({ ...current, ...letter.data })
+      }
+      await this.db.outbox.add({ table: letter.table, rowId: letter.rowId, kind: letter.kind, data, createdAt: nowIso(), attempts: 0 })
+      await this.db.deadLetters.delete(seq)
+    })
+    await this.refreshCounts()
+    this.kick(0)
+  }
+
+  /**
+   * Give up on a refused change. A refused edit simply goes: the row already shows what
+   * the cloud has. A refused new row never reached the cloud, so it leaves this device as
+   * well; that needs a connection, because only the cloud knows whether the row arrived
+   * some other way after all. Rejects with a network error when the cloud cannot be asked.
+   */
+  async discardRefused(seq: number): Promise<void> {
+    const letter = await this.db.deadLetters.get(seq)
+    if (!letter) return
+    let inCloud = true
+    if (letter.kind === 'put') {
+      const everything = await this.backend.pull(null)
+      if (everything.seat !== 'ok') throw new BackendError('auth', 'not_in_kitchen')
+      inCloud = (everything.tables[letter.table] ?? []).some((row) => row.id === letter.rowId)
+    }
+    const rows = this.db.rows(letter.table)
+    await this.db.transaction('rw', rows, this.db.outbox, this.db.deadLetters, this.db.blobs, async () => {
+      if (!inCloud) {
+        // Later edits to a row the cloud does not have would go nowhere: they leave with it.
+        await this.db.outbox.where('[table+rowId]').equals([letter.table, letter.rowId]).delete()
+        await rows.delete(letter.rowId)
+        if (letter.table === 'photos') await this.db.blobs.delete(letter.rowId)
+      }
+      await this.db.deadLetters.delete(seq)
+    })
+    await this.refreshCounts()
+    this.kick()
+  }
+
+  /** Photos the cloud refused five times stop being sent. This gives each of them a fresh start. */
+  async retryUploads(): Promise<void> {
+    await this.db.blobs
+      .where('pending')
+      .equals(1)
+      .modify((entry) => {
+        entry.attempts = 0
+      })
+    this.kick(0)
   }
 
   // ------------------------------------------------------------------ status --

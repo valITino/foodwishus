@@ -26,6 +26,7 @@ export const en = {
     synced: 'All synced',
     syncing: 'Syncing',
     sending: (n: number) => (n === 1 ? '1 change waiting' : `${n} changes waiting`),
+    refused: (n: number) => (n === 1 ? '1 change refused' : `${n} changes refused`),
     offline: 'Offline. Saved on this phone.',
     error: 'Sync hit a snag',
     lockedOut: 'This device is logged out',

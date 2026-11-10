@@ -48,6 +48,11 @@ config and the screenshot tool read the same variable).
   `0007_push.sql`. Setting it up is described in `supabase/functions/push/README.md`.
 - The database is live with the users' real kitchen. Never run tests or experiments against
   it; schema changes go through a migration the owner approves.
+- **Backup:** the rules (what is in the file, what an import may do) are pure functions in
+  `src/data/backup.ts`; `backupFile.ts` packs and reads the zip (`zip.ts`, no library).
+  An import only adds, writes through the store and never touches people.
+- **Refused changes** (`deadLetters`) leave the list only through `sync.retryRefused` and
+  `sync.discardRefused`; `src/data/refused.ts` puts them into words for the Sync page.
 - The real backend is Supabase (`supabaseBackend.ts`); rules live in `supabase/migrations`.
   The pretend cloud in `src/data/fake` must follow the same rules. Never point tests at
   the real project.
@@ -68,7 +73,10 @@ config and the screenshot tool read the same variable).
   fight `p-4` with another padding class.
 - **Phone first:** design for 360 to 430 px wide. Touch targets at least 44 px. Every
   control has a label (`aria-label` for icon buttons). Text contrast AA in light and
-  candlelight. Respect reduced motion (the global CSS already shortens animations).
+  candlelight: on a cherry ground use `text-on-cherry`, never `text-white`; soft and rose
+  text on `bg-blush` gets its deeper ink by itself. Respect reduced motion (the global CSS
+  already shortens animations). `tests/e2e/a11y.spec.ts` guards names, sideways scroll and
+  the one h1 on every screen: add new screens to its list.
 - **Motion answers actions.** No entrance animations on every card.
 - **Calories:** show them only when `usePref('showCalories')` is true. Neutral wording, no
   targets or warnings.

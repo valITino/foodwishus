@@ -1,7 +1,7 @@
 // The frame around every screen: decides between onboarding and the app, switches
 // tabs, and hosts the things that float above pages (add sheet, toasts).
 
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { boot, isDemo, leaveDemo, useSyncStatus } from '../data/app'
 import { useMe } from '../data/hooks'
 import { CockpitRoutes, CockpitScreen } from '../features/cockpit'
@@ -57,14 +57,14 @@ function AddSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
 function DemoBanner() {
   const t = useT()
   return (
-    <div className="sticky top-0 z-40 bg-sage text-on-rose">
+    <aside aria-label={t.demo.banner} className="sticky top-0 z-40 bg-sage text-on-rose">
       <div className="app-column flex min-h-10 items-center justify-between gap-3 px-4 pt-[env(safe-area-inset-top)] text-xs font-extrabold">
         <span>{t.demo.banner}</span>
         <button type="button" className="min-h-10 underline underline-offset-4" onClick={() => void leaveDemo()}>
           {t.demo.leave}
         </button>
       </div>
-    </div>
+    </aside>
   )
 }
 
@@ -84,8 +84,21 @@ export function Shell() {
     if (isDemo) document.documentElement.style.setProperty('--banner-h', '2.5rem')
   }, [])
 
+  const shown = useRef(path)
   useEffect(() => {
     window.scrollTo(0, 0)
+    if (shown.current === path) return
+    shown.current = path
+    // A new page: whatever was tapped is gone, and focus with it. Hand it to the page's
+    // title, so a screen reader says where we are and the keyboard starts at the top.
+    const frame = requestAnimationFrame(() => {
+      if (document.activeElement && document.activeElement !== document.body) return
+      const title = document.querySelector('h1')
+      if (!title) return
+      title.setAttribute('tabindex', '-1')
+      title.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
   }, [path])
 
   // Pages that work without a kitchen.

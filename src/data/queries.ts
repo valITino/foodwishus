@@ -4,7 +4,9 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from './app'
 import { META } from './db'
-import type { Criterion, Dish, Household, ID, Member, Menu, Review, Serving } from './types'
+import { describeRefused, type RefusedChange } from './refused'
+import { MAX_UPLOAD_ATTEMPTS } from './sync'
+import type { Criterion, Dish, Household, ID, ISO, Member, Menu, Review, Serving } from './types'
 
 const alive = <T extends { deletedAt: string | null }>(rows: T[]): T[] => rows.filter((r) => !r.deletedAt)
 
@@ -80,6 +82,43 @@ export function useReviews(): Review[] | undefined {
   return useLiveQuery(async () => alive(await db.reviews.toArray()), [])
 }
 
+/** The order criteria are asked in. Two phones can hand out the same number; the older criterion then goes first. */
+export function byCriterionOrder(a: Criterion, b: Criterion): number {
+  return a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+}
+
+/** Every criterion that is not deleted, switched off ones too, in their order. */
 export function useCriteria(): Criterion[] | undefined {
-  return useLiveQuery(async () => alive(await db.criteria.toArray()).sort((a, b) => a.sortOrder - b.sortOrder), [])
+  return useLiveQuery(async () => alive(await db.criteria.toArray()).sort(byCriterionOrder), [])
+}
+
+/** How many reviews hold a score for each criterion. A criterion that was never rated is not in the map. */
+export function useCriterionUse(): Map<ID, number> | undefined {
+  return useLiveQuery(async () => {
+    const use = new Map<ID, number>()
+    for (const review of alive(await db.reviews.toArray())) for (const id of Object.keys(review.scores)) use.set(id, (use.get(id) ?? 0) + 1)
+    return use
+  }, [])
+}
+
+/** Changes the cloud refused and that wait for a decision on the Sync page, oldest first. */
+export function useRefusedChanges(): RefusedChange[] | undefined {
+  return useLiveQuery(async () => {
+    const letters = await db.deadLetters.orderBy('seq').toArray()
+    if (letters.length === 0) return []
+    const [dishes, menus, servings, reviews, criteria] = await Promise.all([db.dishes.toArray(), db.menus.toArray(), db.servings.toArray(), db.reviews.toArray(), db.criteria.toArray()])
+    const byId = <T extends { id: ID }>(rows: T[]) => new Map(rows.map((row) => [row.id, row]))
+    const kitchen = { dishes: byId(dishes), menus: byId(menus), servings: byId(servings), reviews: byId(reviews), criteria: byId(criteria) }
+    return letters.map((letter) => describeRefused(letter, kitchen))
+  }, [])
+}
+
+/** Photos the cloud refused so often that they wait for "Try again". */
+export function useStuckUploads(): number | undefined {
+  return useLiveQuery(async () => (await db.blobs.where('pending').equals(1).toArray()).filter((entry) => entry.attempts >= MAX_UPLOAD_ATTEMPTS).length, [])
+}
+
+/** When this device last saved a backup, or null. */
+export function useLastBackupAt(): ISO | null | undefined {
+  return useLiveQuery(async () => (await db.getMeta<ISO>(META.lastBackupAt)) ?? null, [])
 }

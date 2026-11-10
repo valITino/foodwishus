@@ -110,7 +110,6 @@ export function SettingsHome() {
         {member ? (
           <button
             type="button"
-            aria-label={c.profile.edit}
             data-testid="my-profile"
             onClick={() => navigate('/settings/profile')}
             className="flex w-full items-center gap-4 rounded-card border border-line bg-surface p-4 pt-5 text-left active:translate-y-[2px]"
@@ -125,6 +124,8 @@ export function SettingsHome() {
                 {member.status || c.profile.noStatus}
               </span>
             </span>
+            {/* Read aloud after the name and status, so what is seen is also what is said. */}
+            <span className="sr-only">{c.profile.edit}</span>
             <Icon name="next" size={20} className="shrink-0 text-ink-soft" />
           </button>
         ) : (
@@ -177,6 +178,8 @@ export function SettingsHome() {
                 <span className="shrink-0 text-xs font-extrabold text-rose-ink">{c.kitchen.rename}</span>
               </button>
               {!isDemo && <LinkRow title={c.kitchen.people} hint={member?.isAdmin ? c.kitchen.peopleHintAdmin : c.kitchen.peopleHint} onClick={() => navigate('/settings/people')} />}
+              <LinkRow title={c.kitchen.criteria} hint={c.kitchen.criteriaHint} onClick={() => navigate('/settings/criteria')} />
+              <LinkRow title={c.kitchen.backup} hint={c.kitchen.backupHint} onClick={() => navigate('/settings/backup')} />
             </Card>
             {isDemo && partner && <p className="px-1 text-xs text-ink-soft">{c.kitchen.demoNote}</p>}
           </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { syncReport, type SyncReportInput } from '../../src/features/settings/syncReport'
+import { scrub, syncReport, type SyncReportInput } from '../../src/features/settings/syncReport'
 
 const base: SyncReportInput = {
   version: '0.1.0',
@@ -59,5 +59,39 @@ describe('the sync report for support', () => {
   it('says when it comes from the demo kitchen or an unpaired phone', () => {
     expect(syncReport({ ...base, demo: true, backend: 'fake' })).toContain('App: 0.1.0 (fake, demo kitchen)')
     expect(syncReport({ ...base, householdId: undefined, memberId: undefined, members: 0 })).toContain('Kitchen: none, people: 0, me: none')
+  })
+
+  it('adds the last error on record, photos that gave up and row counts when it has them', () => {
+    const text = syncReport({
+      ...base,
+      status: { ...base.status, uploads: 3 },
+      stuckPhotos: 2,
+      lastErrorOnRecord: { message: 'new row for relation "dishes" violates check constraint "dishes_name_check"', at: '2026-11-09T20:00:00.000Z' },
+      rows: { dishes: 31, servings: 140, photos: 72 },
+    })
+    expect(text).toContain('Photos waiting: 3 (2 gave up)')
+    expect(text).toContain('Last error: none')
+    expect(text).toContain('Last error on record: new row for relation "dishes" violates check constraint "dishes_name_check", 2026-11-09T20:00:00.000Z')
+    expect(text).toContain('Rows: dishes 31, servings 140, photos 72')
+    expect(syncReport(base)).not.toContain('Rows:')
+    expect(syncReport(base)).not.toContain('on record')
+  })
+
+  it('carries nothing a person typed, even if an error message quotes it', () => {
+    expect(scrub('duplicate key value violates unique constraint "members_household_name_key"')).toBe('duplicate key value violates unique constraint "members_household_name_key"')
+    expect(scrub('Key (name)=(Mia Rossi) already exists.')).toBe('Key (name)=(…) already exists.')
+    expect(scrub('invalid input value: "Grandma\'s secret Rösti"')).toBe('invalid input value: "…"')
+    expect(scrub("Failed to execute 'fetch' on 'Window': cannot reach 'my secret note'")).toBe("Failed to execute 'fetch' on 'Window': cannot reach '…'")
+    expect(scrub('line one\n   line two')).toBe('line one line two')
+    expect(scrub('x'.repeat(500))).toHaveLength(200)
+
+    const text = syncReport({
+      ...base,
+      status: { ...base.status, state: 'error', lastError: 'value "Leo loves Mia" is too long' },
+      refused: [{ table: 'dishes', kind: 'put', lastError: 'Failing row contains ("Rösti mit Speck")', failedAt: '2026-11-10T07:00:00.000Z' }],
+    })
+    expect(text).not.toContain('Leo loves Mia')
+    expect(text).not.toContain('Speck')
+    expect(text).toContain('Last error: value "…" is too long')
   })
 })

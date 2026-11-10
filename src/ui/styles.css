@@ -28,6 +28,8 @@
   --color-rose-ink: #a8425a;
   --color-on-rose: #3b2a27;
   --color-cherry: #c8414b;
+  /* Text and icons on a cherry ground: white in daylight, cocoa in candlelight. */
+  --color-on-cherry: #ffffff;
   --color-sage: #b5c4a8;
   --color-sage-ink: #5a6e4d;
   --color-butter: #f5e3a3;
@@ -80,6 +82,7 @@
   --color-rose-edge: #c9788a;
   --color-rose-ink: #f4aebb;
   --color-cherry: #f27c86;
+  --color-on-cherry: #3b2a27;
   --color-sage: #8fa382;
   --color-sage-ink: #bdd0ae;
   --color-butter: #e6cf82;
@@ -90,6 +93,13 @@
 
   --shadow-float: 0 0 0 1px #f4aebb1f, 0 16px 36px -12px #000000a6, 0 0 28px -8px #e89cac40;
   --shadow-paper: 0 8px 18px -8px #00000099, 0 1px 2px #00000066;
+}
+
+/* Text on blush (the awning, the tab bar, notes): the soft ink and the rose ink are one
+   step deeper there, so small labels keep AA contrast. Candlelight needs no help. */
+:root:not([data-theme='dark']) .bg-blush {
+  --color-ink-soft: #6f5b55;
+  --color-rose-ink: #9f3d54;
 }
 
 /* -------------------------------------------------------------------- base -- */
@@ -129,6 +139,11 @@
     outline: 3px solid var(--color-rose-ink);
     outline-offset: 3px;
     border-radius: 6px;
+  }
+  /* A page title that receives focus after a page change (so screen readers announce it)
+     is not a control and needs no ring. */
+  h1[tabindex='-1']:focus {
+    outline: none;
   }
   ::selection {
     background: var(--color-blush);

@@ -164,9 +164,49 @@ The workspace used to build this cannot connect to Supabase from its shell or br
 
 ## 9. If Supabase ever goes away
 
-The data is plain Postgres tables plus JPEG files. Export and import (JSON plus a photo zip)
-arrive in M7. The app talks to the cloud through one small interface (`src/data/backend.ts`),
-so another backend means rewriting one file, not the app.
+The data is plain Postgres tables plus JPEG files. Settings has a backup that puts all of
+it into one file and brings it back into any kitchen (see 10). The app talks to the cloud
+through one small interface (`src/data/backend.ts`), so another backend means rewriting one
+file, not the app.
+
+## 10. The backup file
+
+One zip: `backup.json` (a format version, the kitchen's name, the date, every row) and the
+photos next to it as plain JPEGs. It opens with any zip tool, so the pictures are never
+locked inside the app.
+
+- **No zip library.** The file is written without compression (JPEGs do not shrink) and
+  read through its table of contents, in about 200 lines of our own (`src/data/zip.ts`).
+  The bundle gains nothing, photos are never held in memory as one piece, and looking at
+  what a backup holds never reads the pictures.
+- **An import only ever adds.** A row the kitchen does not have is added. A row it has is
+  left alone unless the file's copy is newer. Nothing is deleted. Everything is written
+  through the store, so it syncs like any other change, and running the same import twice
+  finds nothing to do.
+- **Deleted since the backup comes back.** A restore that cannot bring back what was
+  deleted by mistake is not worth much. The preview says how many entries return. Cost:
+  things deleted on purpose return too, and have to be deleted again.
+- **People are never imported.** The file only notes who was who (name and role), so
+  that in another kitchen a review still belongs to the right person: matched by profile,
+  then by name, then by role. A review moved to another profile gets that profile's id for
+  it, so it can still be edited and never exists twice.
+- **Criteria are matched by name.** A kitchen that already asks about "Taste" does not
+  get a second "Taste"; the file's scores are counted under the one that is there. Renamed
+  criteria arrive as extra ones, and the preview says so.
+- **Old photos.** A phone keeps full-size photos for 60 days and thumbnails after that.
+  For a backup the full size is fetched from the cloud. Offline, the thumbnail goes in
+  alone and the app says how many photos that concerns.
+- A file from a newer app, a file that is not a backup and a damaged file are each
+  refused with their own sentence, before anything is written.
+
+## 11. Changes the cloud refuses
+
+A refused change is set aside after three tries (see 1). The Sync page lists each one in
+words ("A change to the dish Rösti") with two ways out. **Try again** sends a new row as
+it is on the device now, or applies an edit again. **Discard** drops an edit; a new row
+that never reached the cloud leaves the device too, after asking the cloud whether it
+really does not have it (so discarding something new needs a connection). Nothing leaves
+that list by itself.
 
 ## Limits to know
 
@@ -192,5 +232,8 @@ Things added beyond the written spec. Keep or veto.
 - **PIN log-in on any device, an admin, restore codes and an owner's master key** (the spec
   asked for a recovery path; this is it, in full).
 - **Lock-out protection:** a logged-out or paused device never throws away unsent work.
+- **Icons for review criteria**, shown on the review sheet next to each row of spoons.
+- **Focus follows you:** a sheet takes the keyboard focus and gives it back, and a new
+  page hands it to its title, so screen readers say where you are.
 - **Quote of the day:** the same quote all day, a new one tomorrow.
 - **`/#/lab`** in development: a workbench to watch sync between two browser windows.
