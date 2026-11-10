@@ -11,6 +11,7 @@ import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { SupabaseBackend } from '../../src/data/supabaseBackend'
+import { pushHandler, SECRET_HEADER } from '../../supabase/functions/push/handler'
 
 // ------------------------------------------------- what the migrations define --
 
@@ -38,6 +39,25 @@ function functionsInMigrations(): Map<string, Signature> {
         params: parts.map((a) => a.split(/\s+/)[0]),
         required: parts.filter((a) => !/\sdefault\s/i.test(a)).map((a) => a.split(/\s+/)[0]),
       })
+    }
+  }
+  return found
+}
+
+/** Every column of every public table after all migrations have run. */
+function columnsInMigrations(): Map<string, Set<string>> {
+  const dir = join(__dirname, '../../supabase/migrations')
+  const found = new Map<string, Set<string>>()
+  const notAColumn = /^(check|primary|unique|foreign|constraint)\b/i
+  for (const file of readdirSync(dir).sort()) {
+    const sql = readFileSync(join(dir, file), 'utf8')
+    for (const [, table, body] of sql.matchAll(/create table public\.(\w+) \(\n([\s\S]*?)\n\);/g)) {
+      const names = body.split('\n').map((line) => line.trim()).filter((line) => line && !line.startsWith('--') && !notAColumn.test(line)).map((line) => line.split(/\s+/)[0])
+      found.set(table, new Set(names))
+    }
+    for (const [, table, changes] of sql.matchAll(/alter table public\.(\w+)\n?([\s\S]*?);/g)) {
+      for (const [, column] of changes.matchAll(/add column (\w+)/g)) found.get(table)?.add(column)
+      for (const [, column] of changes.matchAll(/drop column (\w+)/g)) found.get(table)?.delete(column)
     }
   }
   return found
@@ -147,10 +167,33 @@ describe('the app and the database agree on every function', () => {
     await b.setMemberPaused('m2', true)
     await b.signOutMember('m2')
     await b.pull(null)
+    await b.savePushSubscription({ endpoint: 'https://push.example.test/send/abc', p256dh: 'BPublicKey', auth: 'AuthSecret', mutedTypes: ['served'], userAgent: 'Test browser' })
+    await b.savePushSubscription({ endpoint: 'https://push.example.test/send/abc', p256dh: 'BPublicKey', auth: 'AuthSecret', mutedTypes: [] })
+    await b.setPushMuted('https://push.example.test/send/abc', ['proposed', 'replied'])
+    await b.removePushSubscription('https://push.example.test/send/abc')
+    await b.pushPublicKey()
 
     const used = new Set(calls.map((c) => c.fn))
     expect([...used].sort()).toEqual(
-      ['create_household', 'create_invite', 'join_household', 'kitchen_exists', 'my_membership', 'peek_invite', 'set_member_paused', 'set_pin', 'sign_in_with_pin', 'sign_out_device', 'sign_out_member', 'sign_out_other_devices', 'sync_pull'].sort(),
+      [
+        'create_household',
+        'create_invite',
+        'join_household',
+        'kitchen_exists',
+        'my_membership',
+        'peek_invite',
+        'push_public_key',
+        'remove_push_subscription',
+        'save_push_subscription',
+        'set_member_paused',
+        'set_pin',
+        'set_push_muted',
+        'sign_in_with_pin',
+        'sign_out_device',
+        'sign_out_member',
+        'sign_out_other_devices',
+        'sync_pull',
+      ].sort(),
     )
     for (const { fn, args } of calls) {
       const signature = defined.get(fn)
@@ -161,6 +204,32 @@ describe('the app and the database agree on every function', () => {
     }
     // Nothing the app could call is left over from the recovery-key days.
     expect([...defined.keys()].filter((name) => /recover/.test(name))).toEqual([])
+  })
+
+  it('signs a device up for notifications with the names the database expects', async () => {
+    const b = backend()
+    await b.savePushSubscription({ endpoint: 'https://push.example.test/send/abc', p256dh: 'BPublicKey', auth: 'AuthSecret', mutedTypes: ['served', 'replied'], userAgent: 'Test browser' })
+    await b.setPushMuted('https://push.example.test/send/abc', [])
+    await b.removePushSubscription('https://push.example.test/send/abc')
+    expect(calls).toEqual([
+      { fn: 'save_push_subscription', args: { p_endpoint: 'https://push.example.test/send/abc', p_p256dh: 'BPublicKey', p_auth: 'AuthSecret', p_muted_types: ['served', 'replied'], p_user_agent: 'Test browser' } },
+      { fn: 'set_push_muted', args: { p_endpoint: 'https://push.example.test/send/abc', p_muted_types: [] } },
+      { fn: 'remove_push_subscription', args: { p_endpoint: 'https://push.example.test/send/abc' } },
+    ])
+    // The table itself is closed to the app (0007): nothing may go around the functions.
+    expect(patches).toEqual([])
+  })
+
+  it('asks for the kitchen\'s public key, and reads "none yet" as null', async () => {
+    const b = backend()
+    answers = { push_public_key: { body: 'BA1Hxzyi1RUM1b5wjxsn7nGxAszw2u61m164i3MrAIxHF6YK5h4SDYic-dRuU_RCPCfA5aq9ojSwk5Y2EmClBPs' } }
+    expect(await b.pushPublicKey()).toBe('BA1Hxzyi1RUM1b5wjxsn7nGxAszw2u61m164i3MrAIxHF6YK5h4SDYic-dRuU_RCPCfA5aq9ojSwk5Y2EmClBPs')
+    answers = { push_public_key: { body: null } }
+    expect(await b.pushPublicKey()).toBeNull()
+    expect(calls.map((c) => [c.fn, c.args])).toEqual([
+      ['push_public_key', {}],
+      ['push_public_key', {}],
+    ])
   })
 
   it('sends the profile in the database\'s spelling', async () => {
@@ -202,6 +271,12 @@ describe('the app understands the database\'s answers', () => {
       answers = { set_member_paused: refuse(code) }
       await expect(b.setMemberPaused('m2', true), code).rejects.toMatchObject({ kind: 'rejected', code })
     }
+    for (const code of ['not_in_kitchen', 'push_invalid']) {
+      answers = { save_push_subscription: refuse(code) }
+      await expect(b.savePushSubscription({ endpoint: 'https://push.example.test/x', p256dh: 'k', auth: 'a', mutedTypes: [] }), code).rejects.toMatchObject({ kind: 'rejected', code })
+    }
+    answers = { set_push_muted: refuse('push_missing') }
+    await expect(b.setPushMuted('https://push.example.test/x', ['served'])).rejects.toMatchObject({ kind: 'rejected', code: 'push_missing' })
   })
 
   it('shows who invites before the code is used', async () => {
@@ -232,5 +307,72 @@ describe('the app understands the database\'s answers', () => {
   it('sends profile changes with the database\'s column names and never its clock', async () => {
     await backend().push({ table: 'members', kind: 'patch', id: 'm1', data: { defaultRole: 'chef', prefs: { showCalories: false }, updatedAt: '2026-01-01T00:00:00Z' } })
     expect(patches).toEqual([{ table: 'members', body: { default_role: 'chef', prefs: { showCalories: false } } }])
+  })
+})
+
+// The push function (supabase/functions/push) talks to the database too: two functions
+// that are for the service role alone, and a handful of tables it reads. It has never
+// run against the real project from here, so its spelling is checked the same way.
+describe('the push function and the database agree', () => {
+  const secret = 'a-shared-secret-made-in-the-database-0123456789'
+  const post = (body: unknown) => new Request('https://project.supabase.test/functions/v1/push', { method: 'POST', headers: { [SECRET_HEADER]: secret }, body: JSON.stringify(body) })
+
+  it('calls only database functions that exist, with the parameter names they declare', async () => {
+    const defined = functionsInMigrations()
+    answers = {
+      push_settings: { body: { secret, subject: 'https://kitchen.example.org/', vapid_public: null, vapid_private: null } },
+      push_store_keys: { body: { vapid_public: 'B'.repeat(87), vapid_private: 'd'.repeat(43) } },
+    }
+    const answer = await pushHandler({ supabaseUrl: url, serviceRoleKey: 'service-role-key' })(post({ type: 'init' }))
+    expect(await answer.json()).toEqual({ ok: true, publicKey: 'B'.repeat(87) })
+
+    expect(calls.map((c) => c.fn)).toEqual(['push_settings', 'push_settings', 'push_store_keys'])
+    for (const { fn, args } of calls) {
+      const signature = defined.get(fn)
+      expect(signature, `${fn} is not defined in supabase/migrations`).toBeDefined()
+      const sent = Object.keys(args)
+      expect(sent.filter((name) => !signature!.params.includes(name)), `${fn} was sent parameters it does not have`).toEqual([])
+      expect(signature!.required.filter((name) => !sent.includes(name)), `${fn} is missing required parameters`).toEqual([])
+    }
+    // What it reads back are the names push_settings and push_store_keys write.
+    const sql = readFileSync(join(__dirname, '../../supabase/migrations/0007_push.sql'), 'utf8')
+    for (const name of ['secret', 'subject', 'vapid_public', 'vapid_private']) expect(sql).toContain(`'${name}', ${name}`)
+  })
+
+  it('reads only tables and columns that exist', async () => {
+    const columns = columnsInMigrations()
+    const ids = { h: '11111111-1111-4111-8111-111111111111', mia: '22222222-2222-4222-8222-222222222222', meal: '33333333-3333-4333-8333-333333333333', review: '44444444-4444-4444-8444-444444444444', dish: '55555555-5555-4555-8555-555555555555', menu: '66666666-6666-4666-8666-666666666666' }
+    const asked: { table: string; names: string[] }[] = []
+    let serving: Record<string, unknown> = {}
+    const database = (async (input: string | URL | Request, init: RequestInit = {}) => {
+      const at = new URL(String(input))
+      const table = at.pathname.replace('/rest/v1/', '')
+      const reply = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
+      if (table === 'rpc/push_settings') return reply({ secret, subject: 'https://kitchen.example.org/', vapid_public: 'B'.repeat(87), vapid_private: 'd'.repeat(43) })
+      if (init.method === 'DELETE') return new Response(null, { status: 204 })
+      asked.push({ table, names: [...at.searchParams.keys()].filter((key) => key !== 'select').concat((at.searchParams.get('select') ?? '').split(',')) })
+      if (table === 'members') return reply([{ id: ids.mia, name: 'Mia', prefs: {}, disabled_at: null }])
+      if (table === 'servings') return reply([serving])
+      return reply([])
+    }) as typeof fetch
+    const handle = pushHandler({ supabaseUrl: 'https://project.supabase.test', serviceRoleKey: 'service-role-key' }, { fetch: database, now: () => new Date() })
+
+    const event = { household_id: ids.h, actor_id: ids.mia, serving_id: ids.meal }
+    serving = { status: 'served', deleted_at: null, dish_id: ids.dish, menu_id: null }
+    expect((await handle(post({ ...event, type: 'served', review_id: null }))).status).toBe(200)
+    serving = { status: 'eaten', deleted_at: null, dish_id: null, menu_id: ids.menu }
+    expect((await handle(post({ ...event, type: 'replied', review_id: ids.review }))).status).toBe(200)
+
+    expect([...new Set(asked.map((a) => a.table))].sort()).toEqual(['dishes', 'members', 'menus', 'push_subscriptions', 'reviews', 'servings'])
+    for (const { table, names } of asked) {
+      const known = columns.get(table)
+      expect(known, `the table ${table} is not defined in supabase/migrations`).toBeDefined()
+      expect(names.filter((name) => !known!.has(name)), `the function asks ${table} for columns it does not have`).toEqual([])
+    }
+    // The parser really sees the columns, including ones added and dropped by later migrations.
+    expect(columns.get('members')!.has('prefs')).toBe(true)
+    expect(columns.get('members')!.has('disabled_at')).toBe(true)
+    expect(columns.get('members')!.has('user_id')).toBe(false)
+    expect(columns.get('push_subscriptions')!.has('user_id')).toBe(true)
   })
 })

@@ -83,6 +83,21 @@ export async function savePhoto(store: Store, image: PreparedImage, input: AddPh
   return photo
 }
 
+/**
+ * Put a photo from a backup back: the same row under the same id, its image bytes on this
+ * device, and both queued for the cloud again (a new kitchen has never seen them).
+ */
+export async function restorePhoto(store: Store, photo: Photo, image: { full: Blob | null; thumb: Blob | null }): Promise<void> {
+  // The demo kitchen has no cloud: there the photo is simply here, with nothing left to send.
+  const waiting = !store.localOnly
+  const entry: BlobEntry = { id: photo.id, full: image.full, thumb: image.thumb, pending: waiting ? 1 : 0, attempts: 0 }
+  const { db } = store
+  await db.transaction('rw', db.photos, db.blobs, db.outbox, async () => {
+    await db.blobs.put(entry)
+    await store.put('photos', { ...photo, uploaded: !waiting })
+  })
+}
+
 export async function addPhotoFromFile(store: Store, file: Blob, input: AddPhotoInput): Promise<Photo> {
   return savePhoto(store, await prepareImage(file), input)
 }

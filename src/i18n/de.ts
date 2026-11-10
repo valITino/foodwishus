@@ -26,6 +26,7 @@ export const de: Messages = {
     synced: 'Alles synchron',
     syncing: 'Synchronisiert',
     sending: (n: number) => (n === 1 ? '1 Änderung wartet' : `${n} Änderungen warten`),
+    refused: (n: number) => (n === 1 ? '1 Änderung abgelehnt' : `${n} Änderungen abgelehnt`),
     offline: 'Offline. Auf diesem Handy gespeichert.',
     error: 'Sync hakt gerade',
     lockedOut: 'Dieses Gerät ist abgemeldet',

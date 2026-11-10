@@ -159,7 +159,7 @@ export function SteamLoader({ label }: { label?: string }) {
 }
 
 /** A quiet line telling you whether your changes have reached the cloud. */
-export function SyncPill({ status }: { status: Pick<SyncStatus, 'state' | 'pending' | 'uploads'> }) {
+export function SyncPill({ status }: { status: Pick<SyncStatus, 'state' | 'pending' | 'uploads'> & { stuck?: number } }) {
   const t = useT()
   const waiting = status.pending + status.uploads
   let icon: IconName = 'synced'
@@ -172,14 +172,19 @@ export function SyncPill({ status }: { status: Pick<SyncStatus, 'state' | 'pendi
   } else if (status.state === 'locked-out' || status.state === 'paused') {
     icon = 'offline'
     text = status.state === 'paused' ? t.sync.paused : t.sync.lockedOut
-    dot = 'bg-cherry text-white'
+    dot = 'bg-cherry text-on-cherry'
   } else if (status.state === 'error') {
     icon = 'offline'
     text = t.sync.error
-    dot = 'bg-cherry text-white'
+    dot = 'bg-cherry text-on-cherry'
   } else if (waiting > 0) {
     icon = 'sending'
     text = t.sync.sending(waiting)
+    dot = 'bg-butter text-on-rose'
+  } else if (status.stuck) {
+    // Nothing is waiting, but not everything arrived: the Sync page in Settings has the list.
+    icon = 'offline'
+    text = t.sync.refused(status.stuck)
     dot = 'bg-butter text-on-rose'
   } else if (status.state === 'syncing') {
     icon = 'sending'

@@ -9,6 +9,7 @@ import { usePref } from '../../data/prefs'
 import type { Criterion, Dish, ID, Reaction, Review, Score5 } from '../../data/types'
 import { useCopy, useLang, useT } from '../../i18n'
 import { Button, Chip, Sheet, SpoonMeter, TextArea, toast } from '../../ui/components'
+import { CriterionIcon } from '../../ui/deco/CriterionIcon'
 import { reviewCopy } from './copy'
 import { portionChoice, PORTIONS } from './logic'
 import { BigSpoons, FacePicker } from './parts'
@@ -124,7 +125,7 @@ export function ReviewSheet({ open, onClose, servingId, dishId, dishName, dish, 
             <p className="text-xs font-extrabold">{c.details.criteria}</p>
             <div className="mt-1 divide-y divide-line rounded-card border border-line bg-surface px-4 py-1">
               {active.map((criterion) => (
-                <SpoonMeter key={criterion.id} label={criterion.label} value={draft.scores[criterion.id] ?? null} onChange={(value) => score(criterion.id, value)} />
+                <SpoonMeter key={criterion.id} icon={<CriterionIcon name={criterion.icon} size={20} />} label={criterion.label} value={draft.scores[criterion.id] ?? null} onChange={(value) => score(criterion.id, value)} />
               ))}
             </div>
           </div>
@@ -134,7 +135,7 @@ export function ReviewSheet({ open, onClose, servingId, dishId, dishName, dish, 
           <p className="mb-2 text-xs font-extrabold">{c.details.portions}</p>
           <div role="group" aria-label={c.details.portions} className="flex flex-wrap gap-2">
             {PORTIONS.map((amount) => (
-              <Chip key={amount} selected={portion === amount} className="px-3.5" onClick={() => change({ portionsEaten: amount })}>
+              <Chip key={amount} selected={portion === amount} className="min-w-11 justify-center px-3.5" onClick={() => change({ portionsEaten: amount })}>
                 {c.details.portionLabels[amount]}
               </Chip>
             ))}

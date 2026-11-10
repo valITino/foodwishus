@@ -125,7 +125,7 @@ export function PinField({ label, hint, value, onChange, error, invalid, onCompl
       )}
       {error && (
         <p id={`${fieldId}-error`} role="alert" className="mt-2 flex items-start gap-2 text-xs font-bold leading-snug">
-          <span className="mt-px grid size-4 shrink-0 place-items-center rounded-full bg-cherry text-white" aria-hidden>
+          <span className="mt-px grid size-4 shrink-0 place-items-center rounded-full bg-cherry text-on-cherry" aria-hidden>
             <Icon name="close" size={10} />
           </span>
           {error}

@@ -56,7 +56,7 @@ export function monthGrid(day: Day): Day[] {
 
 const locale = (lang: Lang) => (lang === 'de' ? 'de-CH' : 'en-GB')
 
-type DayStyle = 'weekday' | 'weekday-short' | 'date' | 'date-short' | 'full' | 'month'
+type DayStyle = 'weekday' | 'weekday-short' | 'date' | 'date-short' | 'date-year' | 'full' | 'month'
 
 export function formatDay(day: Day, lang: Lang, style: DayStyle = 'full'): string {
   const options: Record<DayStyle, Intl.DateTimeFormatOptions> = {
@@ -64,6 +64,7 @@ export function formatDay(day: Day, lang: Lang, style: DayStyle = 'full'): strin
     'weekday-short': { weekday: 'short' },
     date: { day: 'numeric', month: 'long' },
     'date-short': { day: 'numeric', month: 'short' },
+    'date-year': { day: 'numeric', month: 'long', year: 'numeric' },
     full: { weekday: 'long', day: 'numeric', month: 'long' },
     month: { month: 'long', year: 'numeric' },
   }

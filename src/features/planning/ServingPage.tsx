@@ -283,7 +283,7 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
   if (!kitchen || leaving) {
     return (
       <Screen>
-        <PageHeader title="" backTo="/wishlist" />
+        <PageHeader title={c.serving.header} backTo="/wishlist" />
       </Screen>
     )
   }
@@ -292,8 +292,10 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
   if (!serving) {
     return (
       <Screen>
-        <PageHeader title="" backTo="/wishlist" />
-        <EmptyState title={c.serving.goneTitle} body={c.serving.goneBody} action={<Button onClick={() => navigate('/wishlist', { replace: true })}>{c.serving.goneAction}</Button>} />
+        <PageHeader title={c.serving.header} backTo="/wishlist" />
+        <main>
+          <EmptyState title={c.serving.goneTitle} body={c.serving.goneBody} action={<Button onClick={() => navigate('/wishlist', { replace: true })}>{c.serving.goneAction}</Button>} />
+        </main>
       </Screen>
     )
   }

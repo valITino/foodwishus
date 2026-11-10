@@ -3,7 +3,8 @@
 // Tests and local development run against it, because they must never touch real data.
 // Keep its rules in step with supabase/migrations.
 
-import { BackendError, type BackendErrorDetails, type Invite, type InvitePeek, type Membership, type PersonCard, type ProfileInput, type PullResult, type PushOp } from '../backend.ts'
+import { langOf, plan, reviewEvent, servingEvent, type AnswerChange, type Delivery, type PushEvent } from '../../../supabase/functions/push/logic.ts'
+import { BackendError, PUSH_TYPES, type BackendErrorDetails, type Invite, type InvitePeek, type Membership, type PersonCard, type ProfileInput, type PullResult, type PushOp, type PushSubscriptionInput, type PushType } from '../backend.ts'
 import { lockMinutes, nameKey, PIN_TRIES, pinProblem } from '../pin.ts'
 import { SYNC_TABLES, WRITABLE_TABLES, type ID, type ISO, type Role, type SyncTable } from '../types.ts'
 
@@ -42,6 +43,35 @@ interface Attempts {
   lastAttempt: number
 }
 
+/** One device that asked for notifications (public.push_subscriptions). */
+interface PushRow {
+  id: ID
+  householdId: ID
+  memberId: ID
+  /** The login (device) that saved it. Logging that device out removes the row. */
+  userId: string
+  endpoint: string
+  p256dh: string
+  auth: string
+  mutedTypes: PushType[]
+  userAgent: string | null
+}
+
+/**
+ * A notification the pretend cloud would have sent. The real cloud hands it to the
+ * browser's push service; here tests read the list instead of a phone's lock screen.
+ */
+export interface SentPush extends Omit<Delivery, 'device'> {
+  endpoint: string
+  memberId: ID
+}
+
+/**
+ * The public key the pretend cloud hands to browsers that want to sign up: the example
+ * key from RFC 8292. Nothing is ever sent with it.
+ */
+export const TEST_PUSH_KEY = 'BA1Hxzyi1RUM1b5wjxsn7nGxAszw2u61m164i3MrAIxHF6YK5h4SDYic-dRuU_RCPCfA5aq9ojSwk5Y2EmClBPs'
+
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const DEFAULT_CRITERIA: [string, string][] = [
   ['Taste', 'tongue'],
@@ -69,6 +99,11 @@ export class FakeCloud {
   /** Wrong PIN tries, counted per typed name, whether or not that name exists. */
   private attempts = new Map<string, Attempts>()
   private blobs = new Map<string, { bytes: Uint8Array; type: string }>()
+  /** Devices that asked for notifications, by the address of their push service. */
+  private pushRows = new Map<string, PushRow>()
+  private sent: SentPush[] = []
+  /** private.push_config.vapid_public: null while notifications are not set up. */
+  private pushKey: string | null = TEST_PUSH_KEY
   private listeners = new Set<(householdId: ID) => void>()
   private clock = 0
 
@@ -84,6 +119,9 @@ export class FakeCloud {
     this.pins.clear()
     this.attempts.clear()
     this.blobs.clear()
+    this.pushRows.clear()
+    this.sent = []
+    this.pushKey = TEST_PUSH_KEY
   }
 
   /** A strictly increasing server clock, like clock_timestamp() in Postgres. */
@@ -323,6 +361,7 @@ export class FakeCloud {
 
   signOutDevice(userId: string): void {
     this.devices.delete(userId)
+    this.dropPushes(userId)
   }
 
   private dropDevices(memberId: ID, except?: string): number {
@@ -330,9 +369,15 @@ export class FakeCloud {
     for (const [login, member] of this.devices) {
       if (member !== memberId || login === except) continue
       this.devices.delete(login)
+      this.dropPushes(login)
       count += 1
     }
     return count
+  }
+
+  /** A device that is logged out, by whomever, gets no more notifications. */
+  private dropPushes(userId: string): void {
+    for (const [endpoint, row] of this.pushRows) if (row.userId === userId) this.pushRows.delete(endpoint)
   }
 
   signOutOtherDevices(userId: string): number {
@@ -367,6 +412,101 @@ export class FakeCloud {
     const code = this.code(10)
     this.invites.set(code, { code, householdId: seat.householdId, kind: 'restore', memberId: seat.id, createdBy: seat.id, expiresAt: Date.now() + 48 * 3_600_000, usedAt: null })
     return code
+  }
+
+  // ----------------------------------------------------------- notifications --
+
+  /** For any device with a login, like public.push_public_key(). */
+  pushPublicKey(_userId: string): string | null {
+    return this.pushKey
+  }
+
+  /**
+   * Test hook: what the owner does from the SQL editor. Null is "not set up yet" (or the
+   * keys were thrown away); another key is what the function made after that.
+   */
+  setPushPublicKey(key: string | null): void {
+    this.pushKey = key
+  }
+
+  savePushSubscription(userId: string, subscription: PushSubscriptionInput): void {
+    const me = this.memberOf(userId) ?? reject('not_in_kitchen')
+    const { endpoint, p256dh, auth } = subscription ?? {}
+    const fine =
+      typeof endpoint === 'string' && /^https:\/\//.test(endpoint) && endpoint.length <= 2000 &&
+      typeof p256dh === 'string' && p256dh !== '' && p256dh.length <= 200 &&
+      typeof auth === 'string' && auth !== '' && auth.length <= 100
+    if (!fine) reject('push_invalid')
+    // One row per device: the browser may have swapped its subscription for a new one.
+    for (const [other, row] of this.pushRows) if (row.userId === userId && other !== endpoint) this.pushRows.delete(other)
+    // One row per browser: whoever is logged in on it now owns it.
+    this.pushRows.set(endpoint, {
+      id: this.pushRows.get(endpoint)?.id ?? this.id(),
+      householdId: me.householdId,
+      memberId: me.id,
+      userId,
+      endpoint,
+      p256dh,
+      auth,
+      mutedTypes: knownTypes(subscription.mutedTypes),
+      userAgent: typeof subscription.userAgent === 'string' ? subscription.userAgent.slice(0, 300) : null,
+    })
+  }
+
+  setPushMuted(userId: string, endpoint: string, mutedTypes: PushType[]): void {
+    const me = this.memberOf(userId) ?? reject('not_in_kitchen')
+    const row = this.pushRows.get(endpoint)
+    if (!row || row.memberId !== me.id) return reject('push_missing')
+    row.mutedTypes = knownTypes(mutedTypes)
+  }
+
+  removePushSubscription(userId: string, endpoint: string): void {
+    const row = this.pushRows.get(endpoint)
+    if (!row) return
+    if (row.userId === userId || row.memberId === this.memberOf(userId)?.id) this.pushRows.delete(endpoint)
+  }
+
+  /** Test hook: every device signed up for notifications right now. */
+  pushSubscriptions(): { endpoint: string; memberId: ID; mutedTypes: PushType[] }[] {
+    return [...this.pushRows.values()].map(({ endpoint, memberId, mutedTypes }) => ({ endpoint, memberId, mutedTypes: [...mutedTypes] }))
+  }
+
+  /** Test hook: every notification "sent" since the last reset, oldest first. */
+  sentPushes(): SentPush[] {
+    return structuredClone(this.sent)
+  }
+
+  /**
+   * What the database trigger and the push function do together in the real cloud
+   * (0007_push.sql, supabase/functions/push): look up who should hear about the event and
+   * "send" each of their devices one notification. Same rules, same words.
+   */
+  private announce(event: PushEvent): void {
+    const serving = this.table('servings').get(event.servingId)
+    const review = event.reviewId ? this.table('reviews').get(event.reviewId) : undefined
+    const named = serving?.dishId ? this.table('dishes').get(serving.dishId as ID) : serving?.menuId ? this.table('menus').get(serving.menuId as ID) : undefined
+    const deliveries = plan(
+      event,
+      {
+        people: this.seats(event.householdId).map((m) => ({ id: m.id, name: m.name, lang: langOf(m.prefs), paused: Boolean(m.disabledAt) })),
+        devices: [...this.pushRows.values()].filter((row) => row.householdId === event.householdId),
+        meal: serving
+          ? {
+              status: String(serving.status),
+              deleted: Boolean(serving.deletedAt),
+              name: named && !named.deletedAt ? String(named.name) : null,
+              cookId: (serving.cookedBy as ID | null) ?? (serving.proposedBy as ID | null) ?? null,
+              plannedDate: (serving.plannedDate as string | null) ?? null,
+              plannedSlot: (serving.plannedSlot as string | null) ?? null,
+              proposedAt: (serving.proposedAt as ISO | null) ?? null,
+              servedAt: (serving.servedAt as ISO | null) ?? null,
+            }
+          : null,
+        answer: review ? { hasReaction: answerOf(review).reaction, hasReply: answerOf(review).reply, deleted: Boolean(review.deletedAt) } : null,
+      },
+      new Date(),
+    )
+    for (const { device, ...rest } of deliveries) this.sent.push({ ...rest, endpoint: device.endpoint, memberId: device.memberId })
   }
 
   // -------------------------------------------------------------------- sync --
@@ -409,6 +549,16 @@ export class FakeCloud {
         if (!existing) return // an update that matches no row is not an error, as in SQL
         const { id: _id, householdId: _h, createdAt: _c, ...changes } = op.data
         table.set(op.id, { ...existing, ...changes, updatedAt: at })
+      }
+      // The triggers of 0007_push.sql: some changes are worth a notification.
+      const row = table.get(op.id) as Row
+      if (op.table === 'servings') {
+        const type = servingEvent(existing ? mealOf(existing) : null, mealOf(row))
+        if (type) this.announce({ type, householdId: me.householdId, actorId: me.id, servingId: op.id, reviewId: null })
+      } else if (op.table === 'reviews' && existing) {
+        const others = [...table.values()].filter((r) => r.servingId === row.servingId && r.id !== row.id).map(answerOf)
+        const type = reviewEvent(answerOf(existing), answerOf(row), others)
+        if (type) this.announce({ type, householdId: me.householdId, actorId: me.id, servingId: row.servingId as ID, reviewId: op.id })
       }
     }
     this.emit(me.householdId)
@@ -454,6 +604,17 @@ export class FakeCloud {
 }
 
 const normalize = (code: string) => code.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+
+/** Only kinds of notification that exist, each once. */
+const knownTypes = (types: unknown): PushType[] => PUSH_TYPES.filter((type) => Array.isArray(types) && types.includes(type))
+
+const mealOf = (row: Row) => ({ status: String(row.status), deleted: Boolean(row.deletedAt) })
+
+const answerOf = (row: Row): AnswerChange => ({
+  reaction: row.chefReaction != null,
+  reply: typeof row.chefReply === 'string' && row.chefReply.trim() !== '',
+  deleted: Boolean(row.deletedAt),
+})
 
 function defined(obj: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined))

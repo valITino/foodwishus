@@ -41,7 +41,7 @@ export function TabBar({ active, onSelect, onAdd, badges = {}, inline = false }:
         <span className="relative">
           <Icon name={icon} size={24} />
           {count > 0 && (
-            <span className="absolute -right-2.5 -top-1.5 grid min-w-4.5 place-items-center rounded-full bg-cherry px-1 text-2xs font-extrabold leading-4.5 text-white">
+            <span className="absolute -right-2.5 -top-1.5 grid min-w-4.5 place-items-center rounded-full bg-cherry px-1 text-2xs font-extrabold leading-4.5 text-on-cherry">
               {count}
             </span>
           )}

@@ -19,6 +19,10 @@ const METHODS = new Set([
   'signOutOtherDevices',
   'setMemberPaused',
   'signOutMember',
+  'pushPublicKey',
+  'savePushSubscription',
+  'setPushMuted',
+  'removePushSubscription',
   'push',
   'pull',
 ])
@@ -54,6 +58,19 @@ export function fakeCloud(): Plugin {
       // here the tests reach it directly.
       if (url.pathname === '/rescue' && req.method === 'POST') {
         return json(res, 200, { result: cloud.rescueCode(url.searchParams.get('name') ?? '') })
+      }
+
+      // What a phone's lock screen would show: the notifications "sent" so far, and who
+      // is signed up for them. The real cloud hands these to the browser's push service.
+      if (url.pathname === '/pushes' && req.method === 'GET') {
+        return json(res, 200, { result: { sent: cloud.sentPushes(), devices: cloud.pushSubscriptions() } })
+      }
+
+      // The owner's side of notifications, run from the SQL editor in the real cloud:
+      // no "value" is "not set up yet", a value is the key browsers sign up with.
+      if (url.pathname === '/push-key' && req.method === 'POST') {
+        cloud.setPushPublicKey(url.searchParams.get('value') || null)
+        return json(res, 200, { result: null })
       }
 
       if (url.pathname === '/events') {

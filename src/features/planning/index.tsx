@@ -47,8 +47,10 @@ export function PlanningRoutes({ route }: { route: Route }) {
 
   return (
     <Screen>
-      <PageHeader title="" backTo="/wishlist" />
-      <EmptyState title={c.serving.goneTitle} body={c.serving.goneBody} action={<Button onClick={() => navigate('/wishlist', { replace: true })}>{c.serving.goneAction}</Button>} />
+      <PageHeader title={c.serving.header} backTo="/wishlist" />
+      <main>
+        <EmptyState title={c.serving.goneTitle} body={c.serving.goneBody} action={<Button onClick={() => navigate('/wishlist', { replace: true })}>{c.serving.goneAction}</Button>} />
+      </main>
     </Screen>
   )
 }

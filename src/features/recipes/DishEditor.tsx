@@ -377,7 +377,7 @@ function IngredientsField({ ingredients, quick, onQuick, onChange }: Ingredients
       {ingredients.length === 0 ? (
         <p className="px-4 pt-4 text-sm text-ink-soft">{e.noIngredients}</p>
       ) : (
-        <SortableList items={ingredients} onMove={(from, to) => onChange(moveItem(ingredients, from, to))} className="py-1" rowClassName="flex items-center border-b border-line pl-1 pr-1 last:border-b-0">
+        <SortableList items={ingredients} name={(ingredient) => ingredient.name} onMove={(from, to) => onChange(moveItem(ingredients, from, to))} className="py-1" rowClassName="flex items-center border-b border-line pl-1 pr-1 last:border-b-0">
           {(ingredient, _index, handle) => {
             const { quantity, unit } = ingredient.quantity === undefined ? { quantity: '', unit: ingredient.unit } : formatAmount(ingredient.quantity, ingredient.unit, lang, false)
             const amount = [quantity, unit].filter(Boolean).join(' ')

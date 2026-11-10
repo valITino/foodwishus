@@ -25,3 +25,5 @@ jobs:
           npm run e2e
       - name: Production build
         run: npm run build
+      - name: Installed-app test (offline start, update note, notifications)
+        run: npm run e2e:pwa

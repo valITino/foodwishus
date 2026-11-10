@@ -13,7 +13,9 @@ npm run dev         # dev server with a pretend cloud (never touches real data)
 npm run typecheck
 npm test            # vitest unit tests
 npm run e2e         # Playwright, Android viewport, against the dev server
-npm run build       # production build (talks to Supabase)
+npm run build       # production build (talks to Supabase), also writes dist/sw.js
+npm run e2e:pwa     # offline, update note, install and push tests against the production build
+npm run build:push  # bundles the push Edge Function into one file for deploying
 node tools/shots.mjs <outDir> [scale]   # screenshots; needs the dev server running
 ```
 
@@ -41,6 +43,16 @@ config and the screenshot tool read the same variable).
   sample content (`src/data/demo`). Handy for screenshots: set
   `localStorage['foodwishus.prefs'] = '{"demoData":true}'` before loading. Add
   `"demoEmpty":true` for the same kitchen without sample content (tests that need a clean table).
+- **Offline and push:** the service worker is `src/sw/sw.ts` (production build only). Push:
+  `src/data/push.ts` on the device, `supabase/functions/push` on the server, triggers in
+  `0007_push.sql`. Setting it up is described in `supabase/functions/push/README.md`.
+- The database is live with the users' real kitchen. Never run tests or experiments against
+  it; schema changes go through a migration the owner approves.
+- **Backup:** the rules (what is in the file, what an import may do) are pure functions in
+  `src/data/backup.ts`; `backupFile.ts` packs and reads the zip (`zip.ts`, no library).
+  An import only adds, writes through the store and never touches people.
+- **Refused changes** (`deadLetters`) leave the list only through `sync.retryRefused` and
+  `sync.discardRefused`; `src/data/refused.ts` puts them into words for the Sync page.
 - The real backend is Supabase (`supabaseBackend.ts`); rules live in `supabase/migrations`.
   The pretend cloud in `src/data/fake` must follow the same rules. Never point tests at
   the real project.
@@ -61,14 +73,19 @@ config and the screenshot tool read the same variable).
   fight `p-4` with another padding class.
 - **Phone first:** design for 360 to 430 px wide. Touch targets at least 44 px. Every
   control has a label (`aria-label` for icon buttons). Text contrast AA in light and
-  candlelight. Respect reduced motion (the global CSS already shortens animations).
+  candlelight: on a cherry ground use `text-on-cherry`, never `text-white`; soft and rose
+  text on `bg-blush` gets its deeper ink by itself. Respect reduced motion (the global CSS
+  already shortens animations). `tests/e2e/a11y.spec.ts` guards names, sideways scroll and
+  the one h1 on every screen: add new screens to its list.
 - **Motion answers actions.** No entrance animations on every card.
 - **Calories:** show them only when `usePref('showCalories')` is true. Neutral wording, no
   targets or warnings.
 - **Dates:** the kitchen lives in Europe/Zurich. Use `src/lib/dates.ts`.
 - **Wishlist order:** `byPriority` (plain string comparison of fractional indexes).
 - **Tests:** unit tests for logic, a Playwright spec for each user flow. Wait for visible
-  results, never for timers.
+  results, never for timers. That includes every single key: when reordering with the
+  keyboard, wait for the spoken answer ("… is now number 2 of 3.") before the next arrow.
+  CI presses faster than this workspace, and a key sent before the screen has caught up is lost.
 - **Verify by looking:** take screenshots in light and candlelight at 412 x 915 and fix
   what looks off before calling a screen done.
 - Commits end with the attribution lines used in `git log`.

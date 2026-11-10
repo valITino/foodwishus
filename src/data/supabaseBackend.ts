@@ -2,7 +2,7 @@
 // (supabase/migrations), all sync logic lives in sync.ts.
 
 import { createClient, isAuthRetryableFetchError, type SupabaseClient } from '@supabase/supabase-js'
-import { BackendError, type Backend, type Invite, type InvitePeek, type Membership, type PersonCard, type ProfileInput, type PullResult, type PushOp, type Session } from './backend'
+import { BackendError, type Backend, type Invite, type InvitePeek, type Membership, type PersonCard, type ProfileInput, type PullResult, type PushOp, type PushSubscriptionInput, type PushType, type Session } from './backend'
 import { camelKeys, reviveRow, snakeKeys } from './case'
 import { SYNC_TABLES, type ID, type ISO, type Role } from './types'
 
@@ -24,6 +24,8 @@ const KNOWN_CODES = [
   'pin_too_simple',
   'admin_only',
   'not_yourself',
+  'push_invalid',
+  'push_missing',
 ]
 
 type RawMembership = { household_id: ID; member_id: ID; paused?: boolean }
@@ -170,6 +172,28 @@ export class SupabaseBackend implements Backend {
 
   async signOutMember(memberId: ID): Promise<number> {
     return Number(await this.rpc<number>('sign_out_member', { p_member_id: memberId }))
+  }
+
+  async pushPublicKey(): Promise<string | null> {
+    return (await this.rpc<string | null>('push_public_key')) || null
+  }
+
+  async savePushSubscription(subscription: PushSubscriptionInput): Promise<void> {
+    await this.rpc<null>('save_push_subscription', {
+      p_endpoint: subscription.endpoint,
+      p_p256dh: subscription.p256dh,
+      p_auth: subscription.auth,
+      p_muted_types: subscription.mutedTypes,
+      p_user_agent: subscription.userAgent ?? null,
+    })
+  }
+
+  async setPushMuted(endpoint: string, mutedTypes: PushType[]): Promise<void> {
+    await this.rpc<null>('set_push_muted', { p_endpoint: endpoint, p_muted_types: mutedTypes })
+  }
+
+  async removePushSubscription(endpoint: string): Promise<void> {
+    await this.rpc<null>('remove_push_subscription', { p_endpoint: endpoint })
   }
 
   async push(op: PushOp): Promise<void> {

@@ -19,7 +19,7 @@ export class Store {
    */
   constructor(
     readonly db: AppDB,
-    private readonly localOnly = false,
+    readonly localOnly = false,
   ) {}
 
   async householdId(): Promise<ID | undefined> {
