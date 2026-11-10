@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
@@ -11,7 +12,8 @@ export default defineConfig(({ command, mode, isPreview }) => ({
   base: command === 'build' || isPreview ? (process.env.FOODWISHUS_BASE ?? '/foodwishus/') : '/',
   plugins: [react(), tailwindcss(), ...(mode === 'production' ? [] : [fakeCloud()])],
   build: { target: 'es2022', sourcemap: true },
-  server: { port, strictPort: true },
+  // node_modules may be a symlink (git worktrees); allow its real location so fonts load.
+  server: { port, strictPort: true, fs: { allow: ['.', realpathSync('node_modules')] } },
   preview: { port: port - 1000, strictPort: true },
   test: {
     environment: 'node',
