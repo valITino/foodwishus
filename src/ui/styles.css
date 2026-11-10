@@ -66,6 +66,8 @@
 
 /* Candlelight: deep plum-cocoa, warm cream ink, rose that glows softly. */
 [data-theme='dark'] {
+  /* Native controls (date fields, scrollbars) follow candlelight too. */
+  color-scheme: dark;
   --color-ground: #2a1f24;
   --color-surface: #35272d;
   --color-blush: #4b333d;

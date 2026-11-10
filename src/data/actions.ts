@@ -171,6 +171,13 @@ export async function markServed(id: ID): Promise<void> {
   await store.patch('servings', id, { status: 'served', servedAt: nowIso(), cookedBy: serving?.cookedBy ?? memberId })
 }
 
+/** A mis-tap: the meal is not on the table yet. Back to planned, as if "Served" never happened. */
+export async function undoServed(id: ID, fallbackDay: Day): Promise<void> {
+  const serving = await db.servings.get(id)
+  if (serving?.status !== 'served') return
+  await store.patch('servings', id, { status: 'planned', servedAt: null, plannedDate: serving.plannedDate ?? fallbackDay, plannedSlot: serving.plannedSlot ?? 'dinner' })
+}
+
 export async function updateServingNote(id: ID, note: string): Promise<void> {
   await store.patch('servings', id, { note: note.trim() || null })
 }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { back, navigate } from '../../app/router'
-import { markServed, planServing, proposeServing, removeServing, reviveServing, setCraving, skipServing, unplanServing, updateServingNote } from '../../data/actions'
+import { markServed, planServing, proposeServing, removeServing, reviveServing, setCraving, skipServing, undoServed, unplanServing, updateServingNote } from '../../data/actions'
 import type { Day, ID, Serving, Slot } from '../../data/types'
 import { useCopy, useLang, useT } from '../../i18n'
 import { formatDay, toDay } from '../../lib/dates'
@@ -208,7 +208,7 @@ function Planner({ serving, kitchen, info, title, preferred, onDone, onCancel }:
       )}
 
       <Field
-        className="mt-4 [[data-theme=dark]_&]:[color-scheme:dark]"
+        className="mt-4"
         type="date"
         label={c.serving.laterDay}
         min={kitchen.today}
@@ -372,7 +372,7 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
                   <p className="text-xs text-ink-soft">{c.today.waitingHint(partnerName)}</p>
                 </div>
               </div>
-              <TextAction disabled={busy} onClick={() => void act(() => planServing(serving.id, serving.plannedDate ?? kitchen.today, serving.plannedSlot ?? 'dinner'), c.serving.undone)}>
+              <TextAction disabled={busy} onClick={() => void act(() => undoServed(serving.id, kitchen.today), c.serving.undone)}>
                 {c.serving.undoServed}
               </TextAction>
             </Card>
