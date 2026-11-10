@@ -8,6 +8,7 @@ import { CockpitScreen } from '../features/cockpit'
 import { Onboarding, PausedScreen, usePaused } from '../features/onboarding'
 import { PlanningRoutes, TodayScreen, WeekScreen, WishlistScreen } from '../features/planning'
 import { RecipeBookScreen, RecipesRoutes } from '../features/recipes'
+import { isReviewPath, ReviewRoutes } from '../features/review'
 import { SettingsRoutes } from '../features/settings'
 import { Styleguide } from '../features/styleguide/Styleguide'
 import { TodayPreview } from '../features/styleguide/TodayPreview'
@@ -135,6 +136,7 @@ export function Shell() {
   else if (tab === 'recipes') page = <RecipeBookScreen />
   else if (path.startsWith('/recipes/') || path.startsWith('/menus/')) page = <RecipesRoutes route={route} />
   else if (path.startsWith('/serving/') || path.startsWith('/propose/')) page = <PlanningRoutes route={route} />
+  else if (isReviewPath(path)) page = <ReviewRoutes route={route} />
   else if (path.startsWith('/settings')) page = <SettingsRoutes route={route} />
   else page = null
 
