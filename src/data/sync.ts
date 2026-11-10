@@ -152,7 +152,8 @@ export class SyncEngine {
   private async pass(): Promise<void> {
     const householdId = await this.db.getMeta<ID>(META.householdId)
     if (!householdId || this.status.state === 'locked-out') return
-    this.setStatus({ state: 'syncing' })
+    // A paused seat stays "paused" while it asks again, so its screen does not flicker.
+    if (this.status.state !== 'paused') this.setStatus({ state: 'syncing' })
     try {
       // Ask the cloud whether this device still has its seat: once after opening the app,
       // and before every pass that has something to send. A device that was logged out or

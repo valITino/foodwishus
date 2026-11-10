@@ -65,6 +65,11 @@ function subscribe(onChange: () => void): () => void {
   return () => listeners.delete(onChange)
 }
 
+/** The address right now, outside of React. */
+export function currentPath(): string {
+  return current().path
+}
+
 export function useRoute(): Route {
   return useSyncExternalStore(subscribe, current)
 }

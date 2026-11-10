@@ -14,7 +14,7 @@ import { TodayPreview } from '../features/styleguide/TodayPreview'
 import { useT } from '../i18n'
 import { Screen, Sheet, SteamLoader, TabBar, Toaster, type TabId } from '../ui/components'
 import { Cloche, Flower } from '../ui/deco/Deco'
-import { navigate, useRoute } from './router'
+import { currentPath, navigate, useRoute } from './router'
 import { startSettingsSync } from './settingsSync'
 
 // The sync lab talks to the pretend cloud, so it only exists in development builds.
@@ -136,7 +136,17 @@ export function Shell() {
   else if (path.startsWith('/recipes/') || path.startsWith('/menus/')) page = <RecipesRoutes route={route} />
   else if (path.startsWith('/serving/') || path.startsWith('/propose/')) page = <PlanningRoutes route={route} />
   else if (path.startsWith('/settings')) page = <SettingsRoutes route={route} />
-  else page = <TodayScreen />
+  else page = null
+
+  // An address that leads nowhere (an old link, a start-screen path after logging in) goes home.
+  if (page === null) {
+    const lost = path
+    // Only if nobody has navigated in the meantime (the start screens do, right after logging in).
+    queueMicrotask(() => {
+      if (currentPath() === lost) navigate('/', { replace: true })
+    })
+    page = <TodayScreen />
+  }
 
   return (
     <>

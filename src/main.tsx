@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
+import { wipeIfAsked } from './data/wipe'
 import { getLang } from './i18n'
 import { initTheme } from './ui/theme'
 import './ui/styles.css'
@@ -16,8 +17,11 @@ if (import.meta.env.DEV) {
 }
 document.documentElement.lang = getLang()
 
-createRoot(document.getElementById('root') as HTMLElement).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+// A device that was logged out drops its old copy of the kitchen before any screen reads from it.
+void wipeIfAsked().then(() => {
+  createRoot(document.getElementById('root') as HTMLElement).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+})

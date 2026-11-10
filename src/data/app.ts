@@ -1,6 +1,5 @@
 // The app's single data stack: local database, cloud connection, store, sync engine.
 
-import Dexie from 'dexie'
 import { useSyncExternalStore } from 'react'
 import type { Backend, Membership, ProfileInput } from './backend'
 import { AppDB, META } from './db'
@@ -10,6 +9,7 @@ import { takeSeat } from './seat'
 import { Store } from './store'
 import { SupabaseBackend } from './supabaseBackend'
 import { SyncEngine, type SyncStatus } from './sync'
+import { wipeOnNextStart } from './wipe'
 
 const DEMO_DB = 'foodwishus-demo'
 
@@ -90,8 +90,8 @@ export async function logOut(): Promise<void> {
 export async function forgetThisDevice(): Promise<void> {
   sync.stop()
   await backend.signOut().catch(() => undefined)
-  db.close()
-  await Dexie.delete(db.name)
+  // The copy is deleted on the way back in, before anything reads from it (wipe.ts).
+  wipeOnNextStart(db.name)
   window.location.hash = '/'
   window.location.reload()
 }
@@ -131,8 +131,7 @@ export function enterDemo(): void {
 /** Leave the demo kitchen and delete it. The page reloads into the real app. */
 export async function leaveDemo(): Promise<void> {
   setPref('demoData', false)
-  db.close()
-  await Dexie.delete(DEMO_DB)
+  wipeOnNextStart(DEMO_DB)
   window.location.hash = '/'
   window.location.reload()
 }

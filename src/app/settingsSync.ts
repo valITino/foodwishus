@@ -31,6 +31,8 @@ export function settingsToApply(saved: MemberPrefs, local: Settings): Partial<Se
   return out
 }
 
+const sameSettings = (a: MemberPrefs, b: MemberPrefs) => a.theme === b.theme && a.lang === b.lang && a.showCalories === b.showCalories
+
 let running: (() => void) | null = null
 
 /** Start keeping this device and the profile in step. Safe to call more than once. */
@@ -38,18 +40,28 @@ export function startSettingsSync(): () => void {
   if (isDemo) return () => {}
   if (running) return running
 
-  /** What the profile said the last time we saw it. Undefined until it has loaded. */
-  let onProfile: MemberPrefs | null | undefined
+  /**
+   * What the profile said the last time we looked, or what we last wrote to it.
+   * Undefined until the profile has loaded, null when it has never saved settings.
+   */
+  let lastSeen: MemberPrefs | null | undefined
+  /** Our own changes still on their way to the profile. */
+  let writing = 0
   let applying = false
 
   const save = () => {
-    if (applying || onProfile === undefined) return
+    if (applying || lastSeen === undefined) return
     const mine = here()
-    if (onProfile && Object.keys(settingsToApply(mine, { theme: 'auto', lang: 'en', showCalories: true, ...onProfile })).length === 0) return
-    onProfile = mine
-    void updateMyProfile({ prefs: mine }).catch(() => {
-      /* not logged in any more: nothing to save to */
-    })
+    if (lastSeen && sameSettings(mine, lastSeen)) return
+    lastSeen = mine
+    writing += 1
+    void updateMyProfile({ prefs: mine })
+      .catch(() => {
+        /* not logged in any more: nothing to save to */
+      })
+      .finally(() => {
+        writing -= 1
+      })
   }
 
   const profile = liveQuery(async () => {
@@ -58,9 +70,17 @@ export function startSettingsSync(): () => void {
   }).subscribe((me) => {
     if (!me) return
     const saved = savedSettings(me.prefs)
-    onProfile = saved
-    // A brand-new profile: remember the choices made on this device.
-    if (!saved) return save()
+    if (!saved) {
+      // A brand-new profile: remember the choices made on this device.
+      if (lastSeen === undefined) lastSeen = null
+      return save()
+    }
+    // A choice made here a moment ago is still being written. What we see now may be
+    // older than that choice; the next look at the profile will include it.
+    if (writing > 0) return
+    // Nothing new on the profile: do not let an old echo undo what was tapped here.
+    if (lastSeen && sameSettings(saved, lastSeen)) return
+    lastSeen = saved
     const changes = settingsToApply(saved, here())
     applying = true
     try {

@@ -59,7 +59,8 @@ export const de: Messages = {
     servings: (n: number) => (n === 1 ? '1 Portion' : `${n} Portionen`),
     somethingWrong: 'Das hat nicht geklappt. Bitte nochmal versuchen.',
   },
-  roles: { chef: 'Köchin', taster: 'Tester' },
+  // Wer kocht, wechselt von Mahlzeit zu Mahlzeit: die Wörter passen deshalb für alle.
+  roles: { chef: 'Am Herd', taster: 'Am Tisch' },
   courses: { starter: 'Vorspeise', main: 'Hauptgang', side: 'Beilage', dessert: 'Dessert', breakfast: 'Frühstück', snack: 'Snack', drink: 'Getränk' },
   slots: { breakfast: 'Frühstück', lunch: 'Mittagessen', dinner: 'Abendessen', dessert: 'Dessert oder Snack' },
   effort: { easy: 'Einfach', medium: 'Mittel', fancy: 'Aufwendig' },
