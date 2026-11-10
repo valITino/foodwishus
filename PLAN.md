@@ -21,7 +21,10 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
       reactions, recipes), dish in numbers, Hall of Fame, fun facts.
 - [ ] **M6 Polish.** Service worker (offline app shell, install prompt), push notifications, remaining animations,
       40+ quotes, empty states, full German copy, accessibility pass.
-- [ ] **M7 Ship.** Export and import, sync diagnostics screen, Lighthouse, full end-to-end suite, final README.
+- [ ] **M7 Ship.** *Done:* backup (export and import), review criteria in Settings, the Sync page
+      with refused changes, an accessibility pass over every screen with a guard test, Lighthouse
+      measured, final README. *Open:* Lighthouse performance is around 80, the goal is 90 (the
+      first load carries everything in one piece of JavaScript).
 
 ## What is verified so far, and how
 
@@ -29,8 +32,10 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
 | --- | --- |
 | Database rules (strangers locked out, two seats, PIN log-in and its lock, admin-only powers, pause, restore, master key, sealed reviews) | `supabase/tests/security_test.sql`, run against the real project on 10 Nov 2026: 55 checks pass |
 | The app calls only database functions that exist, with the right parameter names | `tests/unit/supabaseContract.test.ts` reads the signatures out of `supabase/migrations` |
-| Sync, log-in, admin, proof and review logic, and every Cockpit number | 416 unit tests against a pretend cloud that follows the same rules |
-| Every user flow so far: the start, joining, logging in on a second device, the admin's tools, the Recipe Book, cook mode, the Wishlist, planning, Our Week, proof photo and review, the Chef's answer, the photo wall, the Cockpit with its filters, the back button closing sheets, and two devices syncing while one is offline | 82 tests in real browsers at Android size (`tests/e2e`) |
+| Sync, log-in, admin, proof and review logic, every Cockpit number, the backup file and its merge rules, review criteria, refused changes | 485 unit tests against a pretend cloud that follows the same rules |
+| Every user flow so far: the start, joining, logging in on a second device, the admin's tools, the Recipe Book, cook mode, the Wishlist, planning, Our Week, proof photo and review, the Chef's answer, the photo wall, the Cockpit with its filters, the back button closing sheets, two devices syncing while one is offline, a backup exported and imported into an empty kitchen and into a kitchen with a partner, review criteria, the Sync page with refused changes | 95 tests in real browsers at Android size (`tests/e2e`) |
+| Accessibility basics on every screen: every control has a name, nothing scrolls sideways at 360 px, one h1, focus goes into a sheet and back | `tests/e2e/a11y.spec.ts`, in English and German; plus an audit with axe-core in light and candlelight |
+| Lighthouse (mobile) on the production build, start screen and Today | Accessibility 100, best practices 100, performance around 80 (several runs) |
 | Design in light and candlelight, English and German | Screenshots at 412 and 360 wide, looked at one by one |
 
 ## Not verified yet
