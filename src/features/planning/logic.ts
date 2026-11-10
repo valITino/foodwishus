@@ -2,6 +2,7 @@
 // database so every rule can be unit-tested. Functions that take "servings" expect them
 // in wishlist order, the way useServings() returns them.
 
+import { currentStreak, eatenDay } from '../../lib/stats'
 import type { Course, Day, ID, Member, Serving, Slot } from '../../data/types'
 import { addDays, toDay, weekOf, zurichHour } from '../../lib/dates'
 
@@ -85,12 +86,6 @@ export function upNext(servings: Serving[], todayDay: Day, limit = 3): Serving[]
   return [...planned, ...wishes].slice(0, limit)
 }
 
-/** The Zurich day a meal was eaten on, or null when it has not been eaten. */
-export function eatenDay(serving: Serving): Day | null {
-  if (serving.status !== 'eaten') return null
-  return serving.eatenAt ? toDay(serving.eatenAt) : serving.plannedDate
-}
-
 /** Meals eaten in the week (Monday to Sunday) that contains the given day. */
 export function eatenInWeek(servings: Serving[], day: Day): number {
   const week = new Set(weekOf(day))
@@ -100,24 +95,8 @@ export function eatenInWeek(servings: Serving[], day: Day): number {
   }).length
 }
 
-/**
- * Days in a row with at least one eaten meal, counted back from today. A day that is
- * not over yet does not break the streak: without a meal today, it runs up to yesterday.
- */
-export function currentStreak(servings: Serving[], todayDay: Day): number {
-  const days = new Set<Day>()
-  for (const serving of servings) {
-    const eaten = eatenDay(serving)
-    if (eaten) days.add(eaten)
-  }
-  let day = days.has(todayDay) ? todayDay : addDays(todayDay, -1)
-  let streak = 0
-  while (days.has(day)) {
-    streak += 1
-    day = addDays(day, -1)
-  }
-  return streak
-}
+// Streaks and eaten days are defined once, with the Cockpit's other numbers.
+export { currentStreak, eatenDay }
 
 // ---------------------------------------------------------------- wishlist --
 
