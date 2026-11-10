@@ -84,6 +84,32 @@ export interface InvitePeek {
   profile: PersonCard | null
 }
 
+/**
+ * The five things a notification can be about. Each device can mute any of them.
+ * The cloud's side of the list is in supabase/functions/push/logic.ts; a unit test keeps
+ * the two the same.
+ */
+export const PUSH_TYPES = ['proposed', 'planned', 'served', 'reviewed', 'replied'] as const
+/**
+ * proposed: a dish or menu was put on the wishlist.   planned: a meal got its day.
+ * served: "Served, proof needed!"   reviewed: the verdict was handed in.
+ * replied: the cook answered the verdict.
+ */
+export type PushType = (typeof PUSH_TYPES)[number]
+
+/** Where the browser's push service reaches this device, and what the device does not want to hear. */
+export interface PushSubscriptionInput {
+  /** The address the push service handed out. It is the device's identity here. */
+  endpoint: string
+  /** The device's public key, base64url. Messages are encrypted for it. */
+  p256dh: string
+  /** The device's shared secret, base64url. */
+  auth: string
+  mutedTypes: PushType[]
+  /** Which browser this is, to tell devices apart when something needs looking at. */
+  userAgent?: string
+}
+
 /** One change on its way to the cloud. "put" sends a whole row, "patch" only the changed fields. */
 export interface PushOp {
   table: SyncTable
@@ -145,6 +171,20 @@ export interface Backend {
   pull(since: ISO | null): Promise<PullResult>
   /** Calls onChange whenever something in the kitchen changes. Returns an unsubscribe function. */
   subscribe(householdId: ID, onChange: () => void): () => void
+
+  /**
+   * Sign this device up for notifications, or replace what the cloud knows about it.
+   * One row per device; the row belongs to whoever is logged in on it now.
+   * Rejects with not_in_kitchen or push_invalid.
+   */
+  savePushSubscription(subscription: PushSubscriptionInput): Promise<void>
+  /**
+   * Change which kinds of notification this device mutes. Rejects with push_missing when
+   * the cloud has no row for the device (save the subscription again).
+   */
+  setPushMuted(endpoint: string, mutedTypes: PushType[]): Promise<void>
+  /** No more notifications for this device. Not an error when there was nothing to remove. */
+  removePushSubscription(endpoint: string): Promise<void>
 
   uploadBlob(path: string, blob: Blob): Promise<void>
   /** Resolves null when the file is not in the cloud (yet). */

@@ -1,7 +1,7 @@
 // In-process backend for unit tests: several "phones" share one FakeCloud and each
 // can be switched offline.
 
-import { BackendError, type Backend, type ProfileInput, type PushOp } from '../backend'
+import { BackendError, type Backend, type ProfileInput, type PushOp, type PushSubscriptionInput, type PushType } from '../backend'
 import type { ID, ISO } from '../types'
 import type { FakeCloud } from './cloudCore'
 
@@ -67,6 +67,15 @@ export class MemoryBackend implements Backend {
     return this.cloud.subscribe((changed) => {
       if (changed === householdId && this.online) queueMicrotask(onChange)
     })
+  }
+  async savePushSubscription(subscription: PushSubscriptionInput) {
+    this.cloud.savePushSubscription(this.user(), structuredClone(subscription))
+  }
+  async setPushMuted(endpoint: string, mutedTypes: PushType[]) {
+    this.cloud.setPushMuted(this.user(), endpoint, [...mutedTypes])
+  }
+  async removePushSubscription(endpoint: string) {
+    this.cloud.removePushSubscription(this.user(), endpoint)
   }
   async uploadBlob(path: string, blob: Blob) {
     const user = this.user()

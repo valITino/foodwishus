@@ -17,6 +17,7 @@ import { setTheme, useTheme } from '../../ui/theme'
 import { ErrorNote } from '../onboarding/parts'
 import { ProfileBubble } from '../profile/ProfileBubble'
 import { settingsCopy } from './copy'
+import { DeviceSection } from './DeviceSection'
 import { SyncSection } from './SyncSection'
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
@@ -230,6 +231,8 @@ export function SettingsHome() {
             </Card>
           </Section>
         )}
+
+        <DeviceSection />
 
         <SyncSection />
 

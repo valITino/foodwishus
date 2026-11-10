@@ -19,6 +19,9 @@ const METHODS = new Set([
   'signOutOtherDevices',
   'setMemberPaused',
   'signOutMember',
+  'savePushSubscription',
+  'setPushMuted',
+  'removePushSubscription',
   'push',
   'pull',
 ])
@@ -54,6 +57,12 @@ export function fakeCloud(): Plugin {
       // here the tests reach it directly.
       if (url.pathname === '/rescue' && req.method === 'POST') {
         return json(res, 200, { result: cloud.rescueCode(url.searchParams.get('name') ?? '') })
+      }
+
+      // What a phone's lock screen would show: the notifications "sent" so far, and who
+      // is signed up for them. The real cloud hands these to the browser's push service.
+      if (url.pathname === '/pushes' && req.method === 'GET') {
+        return json(res, 200, { result: { sent: cloud.sentPushes(), devices: cloud.pushSubscriptions() } })
       }
 
       if (url.pathname === '/events') {

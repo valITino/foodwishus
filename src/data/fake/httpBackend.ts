@@ -1,7 +1,7 @@
 // Browser-side client for the pretend cloud that lives inside the dev server
 // (tools/fakeCloudPlugin.ts). Used by `npm run dev` and the end-to-end tests.
 
-import { BackendError, type Backend, type BackendErrorDetails, type BackendErrorKind, type Invite, type InvitePeek, type Membership, type ProfileInput, type PullResult, type PushOp } from '../backend'
+import { BackendError, type Backend, type BackendErrorDetails, type BackendErrorKind, type Invite, type InvitePeek, type Membership, type ProfileInput, type PullResult, type PushOp, type PushSubscriptionInput, type PushType } from '../backend'
 import type { ID, ISO } from '../types'
 
 const BASE = '/__cloud'
@@ -78,6 +78,15 @@ export class HttpFakeBackend implements Backend {
   }
   pull(since: ISO | null) {
     return this.call<PullResult>('pull', since)
+  }
+  async savePushSubscription(subscription: PushSubscriptionInput) {
+    await this.call<null>('savePushSubscription', subscription)
+  }
+  async setPushMuted(endpoint: string, mutedTypes: PushType[]) {
+    await this.call<null>('setPushMuted', endpoint, mutedTypes)
+  }
+  async removePushSubscription(endpoint: string) {
+    await this.call<null>('removePushSubscription', endpoint)
   }
 
   subscribe(householdId: ID, onChange: () => void) {
