@@ -51,4 +51,14 @@ export function useT(): Messages {
   return dictionaries[useLang()]
 }
 
+/**
+ * Copy that belongs to one feature. Keep it next to the feature:
+ *   const copy = { en: { title: 'Wishlist' }, de: { title: 'Wünsche' } }
+ *   const c = useCopy(copy)
+ * Both languages must have the same shape, or it will not compile.
+ */
+export function useCopy<T>(copy: { en: T; de: NoInfer<T> }): T {
+  return copy[useLang()]
+}
+
 export type { Messages }

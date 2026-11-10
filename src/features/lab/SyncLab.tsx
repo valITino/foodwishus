@@ -96,7 +96,7 @@ export function SyncLab() {
           <Field label="Your name" value={name} onChange={(e) => setName(e.target.value)} />
           <Button onClick={guard(async () => void (await startKitchen('Our kitchen', { name, defaultRole: 'chef' })))}>Start our kitchen</Button>
           <Field label="Invite code" value={code} onChange={(e) => setCode(e.target.value)} />
-          <Button variant="secondary" onClick={guard(() => joinKitchen(code, { name, defaultRole: 'taster' }))}>
+          <Button variant="secondary" onClick={guard(async () => void (await joinKitchen(code, { name, defaultRole: 'taster' })))}>
             Join with code
           </Button>
         </Card>

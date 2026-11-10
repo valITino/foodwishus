@@ -47,7 +47,7 @@ export class HttpFakeBackend implements Backend {
     return this.call<Invite>('createInvite', kind, memberId)
   }
   joinHousehold(code: string, me: ProfileInput) {
-    return this.call<Membership>('joinHousehold', code, me)
+    return this.call<Membership & { kind: 'join' | 'restore' }>('joinHousehold', code, me)
   }
   recoveryPeek(key: string) {
     return this.call<RecoveryPeek>('recoveryPeek', key)

@@ -81,7 +81,8 @@ export interface Backend {
 
   createHousehold(name: string, me: ProfileInput): Promise<Membership & { recoveryKey: string }>
   createInvite(kind: 'join' | 'restore', memberId?: ID): Promise<Invite>
-  joinHousehold(code: string, me: ProfileInput): Promise<Membership>
+  /** kind tells whether a new seat was taken ("join") or an existing profile moved to this phone ("restore"). */
+  joinHousehold(code: string, me: ProfileInput): Promise<Membership & { kind: 'join' | 'restore' }>
   recoveryPeek(key: string): Promise<RecoveryPeek>
   recoverMember(key: string, memberId: ID): Promise<Membership>
   rotateRecoveryKey(): Promise<string>

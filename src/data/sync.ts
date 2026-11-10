@@ -40,6 +40,9 @@ const MISSING_RETRY_MS = 5 * 60_000
 export class SyncEngine {
   status: SyncStatus = { state: 'idle', pending: 0, uploads: 0, stuck: 0, lastSyncAt: null, lastError: null }
 
+  /** True in the demo kitchen: nothing is ever sent or fetched. */
+  disabled = false
+
   private listeners = new Set<(s: SyncStatus) => void>()
   private current: Promise<void> | null = null
   private again = false
@@ -74,9 +77,11 @@ export class SyncEngine {
   /** Begin syncing in the background. Call once the phone is paired. */
   async start(): Promise<void> {
     this.stop()
+    if (this.disabled) return
     const householdId = await this.db.getMeta<ID>(META.householdId)
     if (!householdId) return
-    this.status = { ...this.status, lastSyncAt: (await this.db.getMeta<ISO>(META.lastSyncAt)) ?? null }
+    // Starting fresh also clears a lock-out: the phone has just been paired (again).
+    this.status = { ...this.status, state: 'idle', lastError: null, lastSyncAt: (await this.db.getMeta<ISO>(META.lastSyncAt)) ?? null }
     this.unsubscribe = this.backend.subscribe(householdId, () => this.kick(150))
     this.interval = setInterval(() => this.kick(), this.opts.intervalMs)
 
@@ -109,6 +114,7 @@ export class SyncEngine {
 
   /** Ask for a pass soon. Many kicks in a row become one pass. */
   kick(delayMs = 30): void {
+    if (this.disabled) return
     if (this.kickTimer) clearTimeout(this.kickTimer)
     this.kickTimer = setTimeout(() => {
       this.kickTimer = null
@@ -118,6 +124,7 @@ export class SyncEngine {
 
   /** Run a pass now. Resolves once it, and any pass requested meanwhile, has finished. */
   sync(): Promise<void> {
+    if (this.disabled) return Promise.resolve()
     if (this.current) {
       this.again = true
       return this.current

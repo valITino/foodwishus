@@ -188,7 +188,7 @@ export class FakeCloud {
     return { code, kind, expiresAt: new Date(expiresAt).toISOString() }
   }
 
-  joinHousehold(userId: string, code: string, me: ProfileInput): Membership {
+  joinHousehold(userId: string, code: string, me: ProfileInput): Membership & { kind: 'join' | 'restore' } {
     if (this.memberOf(userId)) reject('already_in_kitchen')
     const invite = this.invites.get(normalize(code))
     if (!invite || invite.usedAt || invite.expiresAt < Date.now()) return reject('invite_invalid')
@@ -205,7 +205,7 @@ export class FakeCloud {
     }
     invite.usedAt = Date.now()
     this.emit(invite.householdId)
-    return { householdId: invite.householdId, memberId }
+    return { householdId: invite.householdId, memberId, kind: invite.kind }
   }
 
   private householdForKey(key: string): ID {

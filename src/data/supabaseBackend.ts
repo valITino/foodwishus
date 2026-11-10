@@ -106,12 +106,12 @@ export class SupabaseBackend implements Backend {
     return { code: row.code, kind: row.kind, expiresAt: row.expires_at }
   }
 
-  async joinHousehold(code: string, me: ProfileInput): Promise<Membership> {
-    const row = await this.rpc<{ household_id: ID; member_id: ID }>('join_household', {
+  async joinHousehold(code: string, me: ProfileInput): Promise<Membership & { kind: 'join' | 'restore' }> {
+    const row = await this.rpc<{ household_id: ID; member_id: ID; kind: 'join' | 'restore' }>('join_household', {
       p_code: code,
       p_member: snakeKeys({ ...me }),
     })
-    return { householdId: row.household_id, memberId: row.member_id }
+    return { householdId: row.household_id, memberId: row.member_id, kind: row.kind }
   }
 
   async recoveryPeek(key: string): Promise<RecoveryPeek> {
