@@ -323,13 +323,15 @@ export async function reactToMeal(servingId: ID, reaction: Reaction): Promise<vo
 }
 
 /**
- * Done: the meal counts as eaten. Needs at least one proof photo, and a reaction or a
- * rating for every dish. eatenAt defaults to when the first proof photo was taken.
+ * Done: the meal counts as eaten. Needs at least one proof photo (for a menu: one of the
+ * whole table), and a reaction or a rating for every dish. eatenAt defaults to when the first proof photo was taken.
  */
 export async function finishMeal(servingId: ID, eatenAt?: ISO): Promise<void> {
   const { memberId } = await me()
   const serving = await servingOrThrow(servingId)
-  if (serving.proofPhotos.length === 0) throw new ActionError('proof_missing')
+  // A menu needs one picture of the whole table; pictures of single courses are extras.
+  const proof = serving.menuId ? serving.proofPhotos.filter((p) => !p.courseDishId) : serving.proofPhotos
+  if (proof.length === 0) throw new ActionError('proof_missing')
   for (const dishId of await reviewDishes(serving)) {
     const review = await db.reviews.get(await reviewIdFor(servingId, dishId, memberId))
     if (!review || review.deletedAt || (review.reaction === null && review.overall === null)) throw new ActionError('reaction_missing')

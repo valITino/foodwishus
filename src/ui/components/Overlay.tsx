@@ -1,5 +1,6 @@
 import { AnimatePresence, motion, useDragControls } from 'motion/react'
-import { useEffect, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
+import { pushLayer } from '../../app/router'
 import { createPortal } from 'react-dom'
 import { useT } from '../../i18n'
 import { Icon } from '../deco/Icon'
@@ -14,22 +15,27 @@ interface SheetProps {
   footer?: ReactNode
 }
 
-/** A bottom sheet. Drag the handle down, tap outside or press Escape to close. */
+/** A bottom sheet. Drag the handle down, tap outside, press Escape or go back to close. */
 export function Sheet({ open, onClose, title, children, footer }: SheetProps) {
   const controls = useDragControls()
   const t = useT()
+  const close = useRef(onClose)
+  close.current = onClose
 
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close.current()
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     window.addEventListener('keydown', onKey)
+    // Android's back button (or swipe) closes the sheet instead of leaving the page under it.
+    const release = pushLayer(() => close.current())
     return () => {
       document.body.style.overflow = previous
       window.removeEventListener('keydown', onKey)
+      release()
     }
-  }, [open, onClose])
+  }, [open])
 
   return createPortal(
     <AnimatePresence>

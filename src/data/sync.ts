@@ -332,6 +332,8 @@ export class SyncEngine {
   // ------------------------------------------------------------------ status --
 
   private async refreshCounts(): Promise<void> {
+    // The demo kitchen never syncs, so nothing is ever "waiting".
+    if (this.disabled) return this.setStatus({ pending: 0, uploads: 0, stuck: 0 })
     const [pending, uploads, stuck] = await Promise.all([
       this.db.outbox.count(),
       this.db.blobs.where('pending').equals(1).count(),

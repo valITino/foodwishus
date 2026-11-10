@@ -2,8 +2,7 @@
 // few words. Everything is optional. Closing the sheet keeps what was entered, however
 // it is closed, so nothing typed between two bites gets lost.
 
-import { useEffect, useRef, useState } from 'react'
-import { setBlocker } from '../../app/router'
+import { useState } from 'react'
 import { CHIP_KEYS, chipLabel } from '../../content/chips'
 import { ActionError, saveReview, type ReviewInput } from '../../data/actions'
 import { usePref } from '../../data/prefs'
@@ -94,18 +93,8 @@ export function ReviewSheet({ open, onClose, servingId, dishId, dishName, dish, 
     setSaving(false)
   }
 
-  // The phone's own back button closes the sheet (keeping what was entered) instead of leaving the page.
-  const finishRef = useRef(finish)
-  finishRef.current = finish
-  useEffect(() => {
-    if (!open) return
-    setBlocker(() => {
-      void finishRef.current()
-      return true
-    })
-    return () => setBlocker(null)
-  }, [open])
-
+  // The phone's own back button closes the sheet too (the shared Sheet sees to that), and
+  // closing always keeps what was entered.
   return (
     <Sheet
       open={open}

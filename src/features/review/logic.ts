@@ -1,7 +1,7 @@
 // The thinking behind proof, verdict and the photo wall, kept free of React and of the
 // database so every rule can be unit-tested.
 
-import { zurichIso } from '../../data/demo/clock'
+import { zurichIso } from '../../lib/dates'
 import type { ExtraReaction, ID, ISO, Menu, PhotoSource, ProofPhoto, Reaction, Review, Score5, Serving } from '../../data/types'
 import { toDay, ZONE } from '../../lib/dates'
 import { cookOf } from '../planning/logic'
