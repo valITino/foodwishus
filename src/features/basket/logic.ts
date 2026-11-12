@@ -2,7 +2,7 @@
 // of the database, so each one is unit-tested. Amounts are kept as written ("500 g",
 // "half a pack"): a shopping list is read by people, and the helper reads words too.
 
-import { covers, sameThing, type Line } from '../../data/basket'
+import { covers, nameWords, sameThing, type Line } from '../../data/basket'
 import type { BasketItem, Day, Dish, ID, Ingredient, Menu, PantryItem, Serving } from '../../data/types'
 import { formatAmount, formatIngredient, parseIngredientLine, type Lang } from '../recipes/logic'
 
@@ -63,7 +63,24 @@ export function plannedMeals(servings: readonly Serving[], dishes: readonly Dish
 }
 
 /** What nobody writes on a shopping list: it is simply there. */
-const ALWAYS_THERE = ['salz', 'salt', 'pfeffer', 'pepper', 'wasser', 'water']
+const SEASONING = new Set(['salz', 'salt', 'pfeffer', 'pepper'])
+const WATER = new Set(['wasser', 'water'])
+const LITTLE_WORDS = new Set(['and', 'und', 'or', 'oder', 'of', 'for', 'the', 'fur', 'das', 'die', 'der', 'zum', 'a', 'some', 'etwas', 'plenty', 'viel', 'black', 'schwarzer', 'schwarz', 'freshly', 'frisch', 'ground', 'gemahlener', 'gemahlen', 'sea', 'meer', 'lukewarm', 'lauwarmes', 'warm', 'warmes', 'cold', 'kaltes', 'hot', 'heisses', 'boiling', 'kochendes'])
+
+/**
+ * Salt, pepper and water, however the recipe puts it: "salt and pepper", "plenty of
+ * black pepper", "160 ml lukewarm water", "salt for the pasta water".
+ */
+export function isAlwaysThere(ingredient: Ingredient): boolean {
+  const words = nameWords(ingredient.name)
+  if (words.length === 0) return false
+  if (WATER.has(words[words.length - 1])) return true
+  // "2 peppers" are vegetables: a count without a unit is not a seasoning.
+  if (ingredient.quantity !== undefined && !ingredient.unit) return false
+  if (words.every((word) => SEASONING.has(word) || WATER.has(word) || LITTLE_WORDS.has(word))) return words.some((word) => SEASONING.has(word) || WATER.has(word))
+  // "Salt for the pasta water", "Pfeffer aus der Mühle": seasoning without an amount, whatever comes after.
+  return ingredient.quantity === undefined && SEASONING.has(words[0])
+}
 
 export interface Need extends Line {
   /** The first meal that asks for it. */
@@ -86,7 +103,7 @@ export function needs(meals: readonly PlannedMeal[], pantry: readonly PantryItem
   for (const meal of meals) {
     const asker = `${meal.servingId}/${meal.dishId}`
     for (const ingredient of meal.ingredients) {
-      if (!ingredient.name.trim() || ALWAYS_THERE.some((name) => sameThing(name, ingredient.name))) continue
+      if (!ingredient.name.trim() || isAlwaysThere(ingredient)) continue
       if (atHome.some((row) => covers(row.name, ingredient.name))) continue
       if (listed.some((item) => covers(item.name, ingredient.name))) continue
       const same = found.find((need) => sameThing(need.name, ingredient.name))

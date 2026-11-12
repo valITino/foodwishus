@@ -706,3 +706,16 @@ export async function usedUp(id: ID): Promise<void> {
   await store.remove('pantry', id)
   await putOnBasket([{ name: item.name, amount: null }])
 }
+
+/** Remember, for both phones, which plan Fork has checked against the pantry. */
+export async function noteForkChecked(signature: string): Promise<void> {
+  const household = (await db.households.toArray()).find((h) => !h.deletedAt)
+  if (!household || household.settings.forkChecked === signature) return
+  await store.patch('households', household.id, { settings: { ...household.settings, forkChecked: signature } })
+}
+
+/** A line for this phone's own bell: Fork found something while nobody was looking. */
+export async function tellForkNews(count: number, name: string | null): Promise<void> {
+  if (count <= 0) return
+  await db.news.add({ kind: 'fork', at: nowIso(), actorId: null, facts: { count, ...(name ? { name } : {}) }, seenAt: null })
+}

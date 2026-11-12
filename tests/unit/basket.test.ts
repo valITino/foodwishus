@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BasketItem, Dish, Menu, PantryItem, Serving } from '../../src/data/types'
-import { adding, covers, groupBasket, intoPantry, mealLines, needs, pantryLines, parseLine, parseLines, plannedMeals, sameThing, sortPantry, stocking, sumAmounts } from '../../src/features/basket/logic'
+import { adding, covers, groupBasket, intoPantry, isAlwaysThere, mealLines, needs, pantryLines, parseLine, parseLines, plannedMeals, sameThing, sortPantry, stocking, sumAmounts } from '../../src/features/basket/logic'
 
 const H = 'h1'
 let n = 0
@@ -42,6 +42,24 @@ describe('the same thing under two names', () => {
     expect(sameThing('Crème fraîche', 'creme fraiche')).toBe(true)
     expect(sameThing('Milch', 'Buttermilch')).toBe(false)
     expect(sameThing('', '')).toBe(false)
+  })
+
+  it('folds one plural ending and no more', () => {
+    expect(sameThing('Onions', 'onion')).toBe(true)
+    expect(sameThing('Tomaten', 'Tomate')).toBe(true)
+    expect(sameThing('Bohnen', 'Bohne')).toBe(true)
+    expect(covers('Onions', 'Onion')).toBe(true)
+    expect(covers('Carrot', 'Carrots, peeled')).toBe(true)
+  })
+
+  it('knows salt, pepper and water however the recipe puts them', () => {
+    for (const name of ['Salz', 'Salt and pepper', 'Plenty of black pepper', 'Salz und Pfeffer', 'Pfeffer aus der Mühle', 'Salt for the pasta water']) expect(isAlwaysThere({ name }), name).toBe(true)
+    expect(isAlwaysThere({ name: 'Lukewarm water', quantity: 160 })).toBe(true)
+    expect(isAlwaysThere({ name: 'Wasser', quantity: 2 })).toBe(true)
+    for (const name of ['Salted butter', 'Pfefferminze', 'Watermelon', 'Black beans', 'Salzkartoffeln']) expect(isAlwaysThere({ name }), name).toBe(false)
+    // Two peppers are vegetables; a teaspoon of pepper is not.
+    expect(isAlwaysThere({ name: 'Pepper, red', quantity: 2 })).toBe(false)
+    expect(isAlwaysThere({ name: 'Pepper', quantity: 1, unit: 'tsp' })).toBe(true)
   })
 
   it('at home covers an ingredient with more words around it, never by a part of a word', () => {

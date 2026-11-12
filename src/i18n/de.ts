@@ -76,6 +76,8 @@ export const de: Messages = {
     todayHint: 'Von der Wunschliste oder aus dem Rezeptbuch',
     link: 'Ein Rezept aus einem Link',
     linkHint: 'Pinterest oder irgendeine Rezeptseite',
+    basket: 'Etwas für den Korb',
+    basketHint: 'Eure gemeinsame Einkaufsliste',
   },
   demo: { banner: 'Demo-Küche. Hier ist nichts echt.', leave: 'Demo verlassen', enter: 'In eine Demo-Küche schauen' },
 }

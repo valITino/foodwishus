@@ -10,7 +10,7 @@ import { BackendError, isBackendError, photoPath, type Backend } from './backend
 import { META, type AppDB } from './db'
 import { newsFrom, staleNews, tidyNews } from './news'
 import type { Store } from './store'
-import { nowIso, SYNC_TABLES, type ID, type ISO, type Photo, type SyncTable } from './types'
+import { LATER_TABLES, nowIso, SYNC_TABLES, type ID, type ISO, type Photo, type SyncTable } from './types'
 
 /**
  * locked-out: this device is no longer logged in. paused: the admin has paused the profile;
@@ -281,6 +281,8 @@ export class SyncEngine {
     // An idle device learns here that it was logged out or paused from somewhere else.
     if (result.seat === 'gone') throw new LockedOut()
     if (result.seat === 'paused') throw new Paused()
+    // A table this cloud did not know before and hands out now: its waiting changes can go.
+    for (const table of LATER_TABLES) if (result.tables[table] !== undefined) this.notYet.delete(table)
 
     // The very first pull fills an empty phone: that is the kitchen as it is, not news.
     const tellNews = since !== null

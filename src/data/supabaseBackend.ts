@@ -242,7 +242,10 @@ export class SupabaseBackend implements Backend {
     const raw = await this.rpc<Record<string, unknown>>('sync_pull', { p_since: since })
     const tables: PullResult['tables'] = {}
     for (const table of SYNC_TABLES) {
-      const rows = (raw[table] as Record<string, unknown>[] | undefined) ?? []
+      const rows = raw[table] as Record<string, unknown>[] | undefined
+      // A cloud from before a later table does not mention it. Leaving it out (instead of
+      // "nothing changed") is how the sync engine knows.
+      if (rows === undefined) continue
       tables[table] = rows.map((row) => reviveRow(table, camelKeys(row)))
     }
     const seat = raw.seat === 'paused' || raw.seat === 'gone' ? raw.seat : 'ok'

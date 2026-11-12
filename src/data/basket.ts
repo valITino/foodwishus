@@ -12,21 +12,24 @@ export interface Line {
 
 // ------------------------------------------------------------- same thing? --
 
-/** A word without what plurals add: "Zwiebeln" and "Zwiebel", "eggs" and "egg" meet. */
+/** A word without what a plural adds. One ending only: "onions" loses its s, "onion" keeps its n. */
 const stem = (word: string): string => (word.length > 3 ? word.replace(/(en|es|n|s|e)$/, '') : word)
 
+/** One word in two forms: "Zwiebeln" and "Zwiebel", "eggs" and "egg", "Tomaten" and "Tomate". */
+const sameWord = (a: string, b: string): boolean => a === b || stem(a) === b || a === stem(b) || (a.length > 3 && b.length > 3 && stem(a) === stem(b) && a[a.length - 1] !== b[b.length - 1])
+
 /** The words that name a thing: no amounts, nothing after a comma or in brackets. */
-function words(name: string): string[] {
+export function nameWords(name: string): string[] {
   return normalize(name.split(/[,(]/)[0])
     .split(/[^\p{L}]+/u)
     .filter((word) => word.length > 1)
-    .map(stem)
 }
 
 /** True when two names mean the same thing on a list: "Zwiebeln" and "zwiebel", "Eggs" and "egg". */
 export function sameThing(a: string, b: string): boolean {
-  const one = words(a).join(' ')
-  return one !== '' && one === words(b).join(' ')
+  const one = nameWords(a)
+  const other = nameWords(b)
+  return one.length > 0 && one.length === other.length && one.every((word, at) => sameWord(word, other[at]))
 }
 
 /**
@@ -35,10 +38,10 @@ export function sameThing(a: string, b: string): boolean {
  * not look at amounts: that is for a person, or for Fork.
  */
 export function covers(atHome: string, ingredient: string): boolean {
-  const have = words(atHome)
-  const need = words(ingredient)
+  const have = nameWords(atHome)
+  const need = nameWords(ingredient)
   if (have.length === 0 || need.length === 0) return false
-  const inside = (short: string[], long: string[]) => long.some((_, at) => short.every((word, i) => long[at + i] === word))
+  const inside = (short: string[], long: string[]) => long.some((_, at) => short.every((word, i) => long[at + i] !== undefined && sameWord(long[at + i], word)))
   return inside(have, need) || inside(need, have)
 }
 

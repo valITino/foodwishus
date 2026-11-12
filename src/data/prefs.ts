@@ -16,10 +16,12 @@ export interface Prefs {
   linkMetric: boolean
   /** Reading a recipe from a link: bring the page's picture along. */
   linkPhoto: boolean
+  /** Fork checks the plan against the pantry by himself when the plan changes. */
+  forkAuto: boolean
 }
 
 const KEY = 'foodwishus.prefs'
-const defaults: Prefs = { showCalories: true, demoData: false, demoEmpty: false, linkTranslate: true, linkMetric: true, linkPhoto: true }
+const defaults: Prefs = { showCalories: true, demoData: false, demoEmpty: false, linkTranslate: true, linkMetric: true, linkPhoto: true, forkAuto: true }
 const listeners = new Set<() => void>()
 let cache: Prefs | null = null
 

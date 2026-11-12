@@ -31,6 +31,11 @@ export interface SyncRow {
 export interface HouseholdSettings {
   /** Custom labels for the six emoji reactions, keyed "1".."6". */
   reactionLabels?: Partial<Record<string, string>>
+  /**
+   * The plan (planned meals of the next days) that Fork last checked against the pantry.
+   * Shared, so that two phones do not both ask about the same plan.
+   */
+  forkChecked?: string
 }
 
 export interface Household {
