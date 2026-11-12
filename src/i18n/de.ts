@@ -2,7 +2,7 @@ import type { Messages } from './en'
 
 export const de: Messages = {
   brand: { name: 'FoodwishUs', slogan: 'U cook. I eat.' },
-  tabs: { today: 'Heute', wishlist: 'Wünsche', week: 'Woche', cockpit: 'Cockpit', recipes: 'Rezepte', add: 'Etwas hinzufügen', nav: 'Hauptnavigation' },
+  tabs: { today: 'Heute', wishlist: 'Wünsche', week: 'Woche', cockpit: 'Cockpit', recipes: 'Rezepte', add: 'Etwas hinzufügen', nav: 'Hauptnavigation', withNews: (tab, count) => `${tab}, ${count} neu` },
   actions: { save: 'Speichern', cancel: 'Abbrechen', done: 'Fertig', served: 'Serviert', takeProof: 'Beweisfoto machen', again: 'Nochmal bitte!', plan: 'Einplanen', propose: 'Vorschlagen' },
   craving: {
     title: 'Wie sehr willst du es?',

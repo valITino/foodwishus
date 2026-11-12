@@ -2,6 +2,7 @@
 // Screens read from here, so they open instantly and work offline.
 
 import Dexie, { type Table } from 'dexie'
+import type { NewsItem } from './news'
 import type {
   Criterion,
   Dish,
@@ -60,6 +61,8 @@ export class AppDB extends Dexie {
   outbox!: Table<OutboxOp, number>
   deadLetters!: Table<DeadLetter, number>
   meta!: Table<MetaEntry, string>
+  /** What the other one did, for the bell. Kept on this phone only (see news.ts). */
+  news!: Table<NewsItem, number>
 
   constructor(name = 'foodwishus') {
     super(name)
@@ -77,6 +80,7 @@ export class AppDB extends Dexie {
       deadLetters: '++seq',
       meta: 'key',
     })
+    this.version(2).stores({ news: '++id, at' })
   }
 
   /** The Dexie table for a synced table name. */

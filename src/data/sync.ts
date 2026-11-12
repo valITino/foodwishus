@@ -8,8 +8,9 @@
 
 import { BackendError, isBackendError, photoPath, type Backend } from './backend'
 import { META, type AppDB } from './db'
+import { newsFrom, staleNews, tidyNews } from './news'
 import type { Store } from './store'
-import { nowIso, SYNC_TABLES, type ID, type ISO, type Photo } from './types'
+import { nowIso, SYNC_TABLES, type ID, type ISO, type Photo, type SyncTable } from './types'
 
 /**
  * locked-out: this device is no longer logged in. paused: the admin has paused the profile;
@@ -267,8 +268,12 @@ export class SyncEngine {
     if (result.seat === 'gone') throw new LockedOut()
     if (result.seat === 'paused') throw new Paused()
 
+    // The very first pull fills an empty phone: that is the kitchen as it is, not news.
+    const tellNews = since !== null
+    const changes: { table: SyncTable; before: unknown; after: unknown }[] = []
+
     const tables = SYNC_TABLES.map((t) => this.db.table(t))
-    await this.db.transaction('rw', [...tables, this.db.outbox, this.db.meta], async () => {
+    await this.db.transaction('rw', [...tables, this.db.outbox, this.db.meta, this.db.news], async () => {
       for (const table of SYNC_TABLES) {
         for (const row of result.tables[table] ?? []) {
           const id = row.id as ID
@@ -278,12 +283,33 @@ export class SyncEngine {
           if (unsent.some((op) => op.kind === 'put')) continue
           let merged = row
           for (const op of unsent) merged = { ...merged, ...op.data }
+          const before = tellNews ? await this.db.rows(table).get(id) : undefined
           await this.db.rows(table).put(merged as never)
+          if (tellNews) changes.push({ table, before, after: merged })
         }
       }
       const cursor = new Date(Date.parse(result.serverTime) - OVERLAP_MS).toISOString()
       await this.db.setMeta(META.cursor, cursor)
+      await this.tellNews(changes)
     })
+  }
+
+  /**
+   * What just arrived, as lines for the bell. A change made on this phone comes back
+   * from the cloud looking exactly like the row that is already here, so it tells nothing.
+   */
+  private async tellNews(changes: { table: SyncTable; before: unknown; after: unknown }[]): Promise<void> {
+    if (changes.length === 0) return
+    const members = (await this.db.members.toArray()).filter((member) => !member.deletedAt && !member.disabledAt)
+    const meId = (await this.db.getMeta<ID>(META.memberId)) ?? null
+    const drafts = tidyNews(
+      changes.flatMap(({ table, before, after }) => newsFrom(table, before as never, after as never, members)),
+      meId,
+    )
+    if (drafts.length === 0) return
+    await this.db.news.bulkAdd(drafts.map((draft) => ({ ...draft, seenAt: null })))
+    const stale = staleNews(await this.db.news.toArray())
+    if (stale.length > 0) await this.db.news.bulkDelete(stale)
   }
 
   // ----------------------------------------------------- 4. download photos --

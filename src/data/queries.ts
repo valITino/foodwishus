@@ -4,6 +4,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from './app'
 import { META } from './db'
+import { NEWS_KEEP, type NewsItem } from './news'
 import { describeRefused, type RefusedChange } from './refused'
 import { MAX_UPLOAD_ATTEMPTS } from './sync'
 import type { Criterion, Dish, Household, ID, ISO, Member, Menu, Review, Serving } from './types'
@@ -121,4 +122,16 @@ export function useStuckUploads(): number | undefined {
 /** When this device last saved a backup, or null. */
 export function useLastBackupAt(): ISO | null | undefined {
   return useLiveQuery(async () => (await db.getMeta<ISO>(META.lastBackupAt)) ?? null, [])
+}
+
+// -------------------------------------------------------------------- news --
+
+/** What the other one did, newest first (see news.ts). */
+export function useNews(): NewsItem[] | undefined {
+  return useLiveQuery(async () => (await db.news.toArray()).sort((a, b) => (a.at === b.at ? (b.id ?? 0) - (a.id ?? 0) : a.at < b.at ? 1 : -1)).slice(0, NEWS_KEEP), [])
+}
+
+/** How many lines of news nobody has looked at yet. */
+export function useUnseenNews(): number | undefined {
+  return useLiveQuery(() => db.news.filter((item) => item.seenAt === null).count(), [])
 }
