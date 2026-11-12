@@ -3,8 +3,8 @@
 // here is queued: it answers now or says why not.
 
 import { backend, db, isDemo } from './app'
-import { BackendError, type HelperFailure, type HelperRequest, type NutritionEstimate, type NutritionEstimateResult, type PantryNotesResult, type RecipeFromLinkResult, type ResultOf, type ShoppingCheck, type ShoppingCheckResult } from './backend'
-import type { BasketItem, Dish, Menu, PantryItem, Serving } from './types'
+import { BackendError, type AssistantAsk, type AssistantResult, type RecipeFromTextResult, type HelperFailure, type HelperRequest, type NutritionEstimate, type NutritionEstimateResult, type PantryNotesResult, type RecipeFromLinkResult, type ResultOf, type ShoppingCheck, type ShoppingCheckResult } from './backend'
+import type { BasketItem, Dish, Menu, PantryItem, Review, Serving } from './types'
 
 /** Why a link could not be read. The helper's own words, plus two only the app knows. */
 export type ReadProblem = HelperFailure | 'offline' | 'demo'
@@ -70,6 +70,18 @@ export function estimateNutrition(request: Omit<NutritionEstimate, 'job'>): Prom
   return ask({ job: 'nutrition-estimate', ...request })
 }
 
+/** One question to Fork in a talk. The kitchen goes along with it; nothing is kept in the cloud. Rejects with a ReadError. */
+export function askFork(request: Omit<AssistantAsk, 'job'>): Promise<AssistantResult> {
+  return ask({ job: 'assistant', ...request })
+}
+
+/** Have a recipe that was written out in words turned into a card for the dish form. Rejects with a ReadError. */
+export async function cardFromText(text: string, lang: 'en' | 'de', nutrition: boolean): Promise<RecipeFromTextResult> {
+  if (isDemo) throw new ReadError('demo')
+  const knownTags = mostUsedTags(await db.dishes.toArray())
+  return ask({ job: 'recipe-from-text', lang, text, nutrition, knownTags })
+}
+
 /** Have Fork compare the planned meals with the pantry. Rejects with a ReadError. */
 export function checkShopping(request: Omit<ShoppingCheck, 'job'>): Promise<ShoppingCheckResult> {
   return ask({ job: 'shopping-check', ...request })
@@ -89,6 +101,12 @@ export interface KitchenNow {
   menus: Menu[]
   pantry: PantryItem[]
   basket: BasketItem[]
+}
+
+/** The same, with the verdicts: what Fork is told when somebody asks him something. */
+export async function kitchenForFork(): Promise<KitchenNow & { reviews: Review[] }> {
+  const [now, reviews] = await Promise.all([kitchenNow(), db.reviews.toArray()])
+  return { ...now, reviews: reviews.filter((review) => !review.deletedAt) }
 }
 
 export async function kitchenNow(): Promise<KitchenNow> {

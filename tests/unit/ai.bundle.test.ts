@@ -78,12 +78,12 @@ describe('the one file that gets deployed as the helper', () => {
     expect(bundle).not.toMatch(/^\s*(import|export)\s/m)
     expect(bundle).not.toContain('@__PURE__')
     expect(bundle).not.toMatch(/sk-ant-|pretend/i)
-    // It asks its environment for the two things Supabase gives every function and the two secrets the owner may set.
-    expect([...new Set([...bundle.matchAll(/Deno\.env\.get\("(\w+)"\)/g)].map(([, name]) => name))].sort()).toEqual(['AI_MODEL', 'ANTHROPIC_API_KEY', 'SUPABASE_ANON_KEY', 'SUPABASE_URL'])
+    // It asks its environment for the two things Supabase gives every function and the three secrets the owner may set.
+    expect([...new Set([...bundle.matchAll(/Deno\.env\.get\("(\w+)"\)/g)].map(([, name]) => name))].sort()).toEqual(['AI_MODEL', 'AI_MODEL_CHAT', 'ANTHROPIC_API_KEY', 'SUPABASE_ANON_KEY', 'SUPABASE_URL'])
     // Readable: not minified.
     expect(bundle.split('\n').length).toBeGreaterThan(400)
-    // Four jobs and their instructions. Much more than this would mean something else got bundled in.
-    expect(bundle.length).toBeLessThan(70_000)
+    // Six jobs and their instructions, the guide to the app among them. Much more than this would mean something else got bundled in.
+    expect(bundle.length).toBeLessThan(90_000)
   })
 
   it('is the file whose size and checksum the build prints', () => {

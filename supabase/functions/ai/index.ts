@@ -6,6 +6,7 @@
 //   ANTHROPIC_API_KEY   the Claude API key. Without it, pages that carry their own
 //                       recipe data are still read, word for word.
 //   AI_MODEL            optional, to use another model than the default.
+//   AI_MODEL_CHAT       optional, another model for the assistant's talk only.
 // Supabase gives every function SUPABASE_URL and SUPABASE_ANON_KEY.
 
 import { helperHandler, type Ticket } from './handler.ts'
@@ -35,6 +36,7 @@ Deno.serve(
     askFetch: (url, init) => fetch(url, init),
     apiKey: Deno.env.get('ANTHROPIC_API_KEY') || null,
     model: Deno.env.get('AI_MODEL') || undefined,
+    chatModel: Deno.env.get('AI_MODEL_CHAT') || undefined,
     ticket,
   }),
 )

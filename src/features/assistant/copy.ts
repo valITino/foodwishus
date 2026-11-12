@@ -1,0 +1,160 @@
+// Every word of the talk with Fork. English and German keep the same shape. German is
+// informal ("du") and Swiss (ss, no ß).
+
+import type { AssistantPlace } from '../../data/backend'
+import type { ReadProblem } from '../../data/helper'
+
+const en = {
+  title: 'Ask Fork',
+  entry: 'Ask Fork, the kitchen assistant',
+  hello: 'I am Fork. Ask me about cooking, about your kitchen, or about this app.',
+  about: 'Fork gets help from an AI (Claude). With each question it gets your dishes, plans, wishes, pantry and basket. No names, no notes, no photos. Nothing changes unless you tap a button.',
+  ideasLabel: 'For example',
+  ideas: ['What can I cook with what is at home?', 'How long does an egg take?', 'How do I add a recipe from Pinterest?', 'Give me a recipe for carbonara'],
+  talk: 'The talk',
+  you: 'You',
+  fork: 'Fork',
+  field: 'Your question',
+  placeholder: 'What shall we cook on Sunday?',
+  ask: 'Ask',
+  thinking: 'Fork is thinking',
+  again: 'Ask again',
+  startOver: 'Start over',
+  startOverTitle: 'Start over?',
+  startOverBody: 'The talk is wiped from this phone. Your kitchen stays as it is.',
+  startedOver: 'Started over',
+  left: (n: number) => (n === 1 ? 'Fork can be asked 1 more time today.' : `Fork can be asked ${n} more times today.`),
+  problems: {
+    offline: 'No connection. Fork needs the internet to answer.',
+    demo: 'Fork cannot answer in the demo kitchen. Leave the demo and ask in your own kitchen.',
+    helper_off: 'Fork has no AI to ask yet. Whoever runs the kitchen sets it up once: a key for the helper, in the cloud.',
+    helper_down: 'The AI is not answering right now. Ask again in a moment.',
+    limit: 'Fork has been asked often enough for today. Tomorrow there is room again.',
+    not_signed_in: 'This phone is not logged in to the kitchen any more. Log in again, then ask.',
+    bad_request: 'The app and the helper do not understand each other. Update the app, then ask again.',
+    not_a_recipe: 'Fork could not make a dish of that answer. Ask for the recipe again, with amounts and steps.',
+    other: 'That did not work. Ask again in a moment.',
+  } as Record<'offline' | 'demo' | 'helper_off' | 'helper_down' | 'limit' | 'not_signed_in' | 'bad_request' | 'not_a_recipe' | 'other', string>,
+  offers: {
+    plan: (dish: string, when: string) => `Plan ${dish} for ${when}`,
+    planned: (when: string) => `Planned for ${when}`,
+    wish: (dish: string) => `Propose ${dish}`,
+    wished: 'Proposed',
+    dish: (dish: string) => `Open ${dish}`,
+    basket: (n: number) => (n === 1 ? 'Put 1 thing on the basket' : `Put ${n} things on the basket`),
+    basketDone: (added: number, there: number) => (added === 0 ? 'All of it is on the basket already' : there > 0 ? `${added} on the basket, ${there} were there already` : added === 1 ? '1 thing is on the basket' : `${added} things are on the basket`),
+    pantry: (n: number) => (n === 1 ? 'Note 1 thing in the pantry' : `Note ${n} things in the pantry`),
+    pantryDone: 'Noted in the pantry',
+    recipe: 'Put it in the recipe book',
+    writing: 'Fork is writing the card',
+    gone: 'That dish is no longer in the recipe book.',
+    over: 'That day is over.',
+    go: {
+      recipes: 'Open the recipe book',
+      'new-dish': 'Add a new dish',
+      link: 'Open "A recipe from a link"',
+      wishlist: 'Open the wishlist',
+      week: 'Open the calendar',
+      basket: 'Open the basket',
+      pantry: 'Open the pantry',
+      cockpit: 'Open the Cockpit',
+      photos: 'Open the photo wall',
+      settings: 'Open the settings',
+      calories: 'Open the settings',
+      notifications: 'Open the notifications',
+      backup: 'Open the backup',
+    } as Record<AssistantPlace, string>,
+  },
+  fromFork: 'Fork',
+}
+
+export type AssistantCopy = typeof en
+
+const de: AssistantCopy = {
+  title: 'Fork fragen',
+  entry: 'Fork fragen, den Küchenhelfer',
+  hello: 'Ich bin Fork. Frag mich etwas zum Kochen, zu eurer Küche oder zu dieser App.',
+  about: 'Fork holt sich Hilfe bei einer KI (Claude). Mit jeder Frage bekommt sie eure Gerichte, Pläne, Wünsche, den Vorrat und den Korb. Keine Namen, keine Notizen, keine Fotos. Es ändert sich nichts, solange du nicht auf einen Knopf tippst.',
+  ideasLabel: 'Zum Beispiel',
+  ideas: ['Was kann ich kochen mit dem, was da ist?', 'Wie lange braucht ein Ei?', 'Wie füge ich ein Rezept von Pinterest hinzu?', 'Gib mir ein Rezept für Carbonara'],
+  talk: 'Das Gespräch',
+  you: 'Du',
+  fork: 'Fork',
+  field: 'Deine Frage',
+  placeholder: 'Was kochen wir am Sonntag?',
+  ask: 'Fragen',
+  thinking: 'Fork überlegt',
+  again: 'Nochmal fragen',
+  startOver: 'Neu anfangen',
+  startOverTitle: 'Neu anfangen?',
+  startOverBody: 'Das Gespräch wird von diesem Handy gelöscht. Eure Küche bleibt, wie sie ist.',
+  startedOver: 'Neu angefangen',
+  left: (n) => (n === 1 ? 'Fork kann heute noch 1 Mal gefragt werden.' : `Fork kann heute noch ${n} Mal gefragt werden.`),
+  problems: {
+    offline: 'Keine Verbindung. Zum Antworten braucht Fork Internet.',
+    demo: 'In der Demo-Küche kann Fork nicht antworten. Verlasse die Demo und frag in deiner eigenen Küche.',
+    helper_off: 'Fork hat noch keine KI zum Fragen. Wer die Küche führt, richtet sie einmal ein: ein Schlüssel für den Helfer, in der Cloud.',
+    helper_down: 'Die KI antwortet gerade nicht. Frag gleich nochmal.',
+    limit: 'Fork wurde für heute oft genug gefragt. Morgen ist wieder Platz.',
+    not_signed_in: 'Dieses Handy ist nicht mehr in der Küche angemeldet. Melde dich wieder an und frag dann.',
+    bad_request: 'Die App und der Helfer verstehen sich nicht. Aktualisiere die App und frag dann nochmal.',
+    not_a_recipe: 'Aus dieser Antwort konnte Fork kein Gericht machen. Frag nochmal nach dem Rezept, mit Mengen und Schritten.',
+    other: 'Das hat nicht geklappt. Frag gleich nochmal.',
+  },
+  offers: {
+    plan: (dish, when) => `${dish} einplanen für ${when}`,
+    planned: (when) => `Geplant für ${when}`,
+    wish: (dish) => `${dish} vorschlagen`,
+    wished: 'Vorgeschlagen',
+    dish: (dish) => `${dish} öffnen`,
+    basket: (n) => (n === 1 ? '1 Sache in den Korb legen' : `${n} Sachen in den Korb legen`),
+    basketDone: (added, there) => (added === 0 ? 'Alles liegt schon im Korb' : there > 0 ? `${added} im Korb, ${there} lagen schon drin` : added === 1 ? '1 Sache liegt im Korb' : `${added} Sachen liegen im Korb`),
+    pantry: (n) => (n === 1 ? '1 Sache im Vorrat notieren' : `${n} Sachen im Vorrat notieren`),
+    pantryDone: 'Im Vorrat notiert',
+    recipe: 'Ins Rezeptbuch legen',
+    writing: 'Fork schreibt die Karte',
+    gone: 'Dieses Gericht steht nicht mehr im Rezeptbuch.',
+    over: 'Dieser Tag ist vorbei.',
+    go: {
+      recipes: 'Rezeptbuch öffnen',
+      'new-dish': 'Neues Gericht erfassen',
+      link: '«Ein Rezept aus einem Link» öffnen',
+      wishlist: 'Wunschliste öffnen',
+      week: 'Kalender öffnen',
+      basket: 'Korb öffnen',
+      pantry: 'Vorrat öffnen',
+      cockpit: 'Cockpit öffnen',
+      photos: 'Fotowand öffnen',
+      settings: 'Einstellungen öffnen',
+      calories: 'Einstellungen öffnen',
+      notifications: 'Benachrichtigungen öffnen',
+      backup: 'Sicherung öffnen',
+    },
+  },
+  fromFork: 'Fork',
+}
+
+export const assistantCopy = { en, de }
+
+/** The sentence for whatever went wrong. Problems that only a link can have fall under "other". */
+export function problemWords(c: AssistantCopy, problem: ReadProblem): string {
+  if (problem === 'not_member') return c.problems.not_signed_in
+  return (c.problems as Record<string, string>)[problem] ?? c.problems.other
+}
+
+/** Where a "go" button leads. */
+export const PLACE_ROUTES: Record<AssistantPlace, string> = {
+  recipes: '/recipes',
+  'new-dish': '/recipes/new',
+  link: '/recipes/import',
+  wishlist: '/wishlist',
+  week: '/week',
+  basket: '/basket',
+  pantry: '/basket?view=pantry',
+  cockpit: '/cockpit',
+  photos: '/photos',
+  settings: '/settings',
+  calories: '/settings',
+  notifications: '/settings/notifications',
+  backup: '/settings/backup',
+}

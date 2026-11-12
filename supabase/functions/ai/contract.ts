@@ -59,7 +59,57 @@ export interface NutritionEstimate {
   ingredients: string[]
 }
 
-export type HelperRequest = RecipeFromLink | ShoppingCheck | PantryNotes | NutritionEstimate
+/** One thing said in the talk with the kitchen assistant. */
+export interface AssistantTurn {
+  who: 'me' | 'fork'
+  text: string
+}
+
+/**
+ * The kitchen as the phone knows it, in lines the assistant can read. A dish is named
+ * by a ref ("D12") that only means something inside this one request. No names of
+ * people, no notes, no photos.
+ */
+export interface KitchenBrief {
+  /** The kitchen's day, "2026-11-12", and its weekday in English. */
+  today: string
+  weekday: string
+  /** Whether this person has calories switched on. */
+  calories: boolean
+  /** "D12 | Rüeblisuppe | main, 35 min, 320 kcal, tags: Swiss | eaten 3 times, last 2026-11-02, liked 4.5 of 5" */
+  dishes: string[]
+  /** "2026-11-13 (Friday), dinner: D12 Rüeblisuppe, you cook" */
+  plan: string[]
+  /** "D7 Lasagne, 4 of 5 hearts, good days: 2026-11-15" */
+  wishes: string[]
+  /** "2026-11-10, dinner: D3 Rösti, liked 5 of 5" */
+  eaten: string[]
+  /** "Mehl: 1 kg (noted 3 days ago)" */
+  pantry: string[]
+  basket: string[]
+}
+
+/** A question to Fork, the kitchen assistant, with the talk before it. */
+export interface AssistantAsk {
+  job: 'assistant'
+  lang: 'en' | 'de'
+  /** The talk so far. The last one is the question. */
+  turns: AssistantTurn[]
+  kitchen: KitchenBrief
+  /** Whole recipes, each starting with its ref: the ones named in the question, and the ones the assistant asked to see. */
+  recipes: string[]
+}
+
+/** A recipe written out in words (by the assistant, in a talk) as a card for the dish form. */
+export interface RecipeFromText {
+  job: 'recipe-from-text'
+  lang: 'en' | 'de'
+  text: string
+  nutrition: boolean
+  knownTags: string[]
+}
+
+export type HelperRequest = RecipeFromLink | ShoppingCheck | PantryNotes | NutritionEstimate | AssistantAsk | RecipeFromText
 
 export type HelperFailure =
   | 'bad_request'
@@ -122,19 +172,52 @@ export interface NutritionEstimateResult {
   left: number
 }
 
+/** Places in the app a button of the assistant can open. */
+export type AssistantPlace = 'recipes' | 'new-dish' | 'link' | 'wishlist' | 'week' | 'basket' | 'pantry' | 'cockpit' | 'photos' | 'settings' | 'calories' | 'notifications' | 'backup'
+
+/**
+ * A button under an answer of the assistant. The assistant offers, a person taps, the
+ * app does it. `dish` is a ref from the request's recipe book.
+ */
+export type AssistantOffer =
+  | { kind: 'plan'; dish: string; day: string; slot: 'breakfast' | 'lunch' | 'dinner' | 'dessert' }
+  | { kind: 'wish'; dish: string }
+  | { kind: 'dish'; dish: string }
+  | { kind: 'basket'; lines: { name: string; amount: string | null }[] }
+  | { kind: 'pantry'; lines: { name: string; amount: string | null }[] }
+  /** The recipe written out in this answer, as a new dish to look over. */
+  | { kind: 'recipe' }
+  | { kind: 'go'; place: AssistantPlace }
+
+export interface AssistantResult {
+  ok: true
+  /** Empty when `look` asks for recipes first. */
+  text: string
+  offers: AssistantOffer[]
+  /** Refs of dishes whose whole recipe the assistant wants before it answers: send them and ask again. */
+  look: string[]
+  left: number
+}
+
+export interface RecipeFromTextResult {
+  ok: true
+  card: RecipeCard
+  left: number
+}
+
 export interface HelperRefusal {
   ok: false
   code: HelperFailure
 }
 
-export type HelperResult = RecipeFromLinkResult | ShoppingCheckResult | PantryNotesResult | NutritionEstimateResult
+export type HelperResult = RecipeFromLinkResult | ShoppingCheckResult | PantryNotesResult | NutritionEstimateResult | AssistantResult | RecipeFromTextResult
 export type HelperAnswer = HelperResult | HelperRefusal
 
 /** The answer each job gets. */
-export type ResultOf<R extends HelperRequest> = R extends RecipeFromLink ? RecipeFromLinkResult : R extends ShoppingCheck ? ShoppingCheckResult : R extends PantryNotes ? PantryNotesResult : R extends NutritionEstimate ? NutritionEstimateResult : never
+export type ResultOf<R extends HelperRequest> = R extends RecipeFromLink ? RecipeFromLinkResult : R extends ShoppingCheck ? ShoppingCheckResult : R extends PantryNotes ? PantryNotesResult : R extends NutritionEstimate ? NutritionEstimateResult : R extends AssistantAsk ? AssistantResult : R extends RecipeFromText ? RecipeFromTextResult : never
 
 /** What a kitchen can send per request: enough for a full week and a full pantry, not for a book. */
 export const SHOPPING_LIMITS = { meals: 30, cooked: 20, pantry: 200, basket: 100, line: 600, text: 2000, known: 200, items: 20 }
 
-/** How many times a kitchen can ask the helper per day (a page read, a plan checked, pantry notes sorted). Each costs a fraction of a cent; the limit is against accidents. */
+/** How many times a kitchen can ask the helper per day (a page read, a plan checked, pantry notes sorted, a question to the assistant). Each costs a fraction of a cent; the limit is against accidents. */
 export const DAILY_TICKETS = 40

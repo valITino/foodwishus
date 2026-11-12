@@ -136,6 +136,27 @@ what is off and tap **Save dish**. Nothing is saved before that.
 Fork gets help from an AI (Claude), which can misread things. That is why you always get
 the form to check. Reading needs a connection, and a kitchen can have 40 pages read a day.
 
+### Ask Fork
+
+Fork is also somebody to ask. Tap the small fork on Today (next to the basket and the
+bell), or **+**, then **Ask Fork**, and type a question:
+
+- **About cooking:** "How long does a soft egg take?", "What can I use instead of
+  buttermilk?", "Give me a recipe for carbonara".
+- **About your kitchen:** "What can I cook with what is at home?", "What did we like most
+  last month?", "What is in the Rüeblisuppe?". With each question the phone tells Fork what
+  is in the recipe book, on the plan, on the wishlist, in the pantry and on the basket.
+- **About the app:** "How do I add a recipe from Pinterest?", "Where do I switch on
+  calories?".
+
+Under an answer there can be buttons: **Plan Rösti for Friday, dinner**, **Put 3 things on
+the basket**, **Put it in the recipe book**, **Open the pantry**. Fork never does anything
+by himself. A tap on a button does it, and the button then says what happened.
+
+The talk stays on your phone. **Start over** wipes it. Fork gets help from an AI (Claude),
+which can be wrong: your names, notes and photos are never sent, and a recipe he writes
+goes through the dish form, where you look it over before it is saved.
+
 ### The basket and the pantry
 
 The **basket** is the shopping list the two of you share. It lives behind the basket

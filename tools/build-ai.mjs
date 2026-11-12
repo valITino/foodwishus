@@ -31,7 +31,7 @@ const plain = readFileSync(outfile, 'utf8').replaceAll('/* @__PURE__ */ ', '')
 if (/^\s*(import|export)\s/m.test(plain)) throw new Error('The bundle still imports or exports something. It has to stand alone.')
 // The helper never gets the key in its code: it asks its environment, and only for these.
 const asked = [...plain.matchAll(/Deno\.env\.get\("(\w+)"\)/g)].map(([, name]) => name).sort()
-if (asked.join() !== 'AI_MODEL,ANTHROPIC_API_KEY,SUPABASE_ANON_KEY,SUPABASE_URL') throw new Error(`The bundle asks its environment for something unexpected: ${asked.join(', ')}`)
+if (asked.join() !== 'AI_MODEL,AI_MODEL_CHAT,ANTHROPIC_API_KEY,SUPABASE_ANON_KEY,SUPABASE_URL') throw new Error(`The bundle asks its environment for something unexpected: ${asked.join(', ')}`)
 if (/sk-ant-|pretend/i.test(plain)) throw new Error('The bundle contains a key or a piece of the pretend web. Neither belongs in it.')
 writeFileSync(outfile, plain)
 

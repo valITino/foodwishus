@@ -6,6 +6,8 @@ export interface Ask {
   apiKey: string
   model: string
   system: string
+  /** A talk that went before, for jobs that are one: the person first, the two taking turns. */
+  before?: { role: 'user' | 'assistant'; content: string }[]
   user: string
   /** JSON Schema the answer has to match (structured outputs). */
   schema: unknown
@@ -40,7 +42,7 @@ export async function ask(request: Ask, fetch: AskFetch): Promise<unknown> {
         model: request.model,
         max_tokens: request.maxTokens,
         system: request.system,
-        messages: [{ role: 'user', content: request.user }],
+        messages: [...(request.before ?? []), { role: 'user', content: request.user }],
         output_config: { format: { type: 'json_schema', schema: request.schema } },
       }),
       signal: AbortSignal.timeout(request.timeoutMs ?? 45_000),

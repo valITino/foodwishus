@@ -78,6 +78,8 @@ export const de: Messages = {
     linkHint: 'Pinterest oder irgendeine Rezeptseite',
     basket: 'Etwas für den Korb',
     basketHint: 'Eure gemeinsame Einkaufsliste',
+    fork: 'Fork fragen',
+    forkHint: 'Kochen, eure Küche, diese App',
   },
   demo: { banner: 'Demo-Küche. Hier ist nichts echt.', leave: 'Demo verlassen', enter: 'In eine Demo-Küche schauen' },
 }
