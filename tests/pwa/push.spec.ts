@@ -40,6 +40,23 @@ async function push(page: Page, tools: CDPSession, data: unknown): Promise<void>
   await tools.send('ServiceWorker.disable')
 }
 
+/**
+ * Hand the worker a message and wait for what should come of it. The developer tools are
+ * not the push service: a worker that is just starting can miss what they hand it (seen
+ * once on the build server, on the first message of a fresh browser). So the message is
+ * handed over again until its notification is there. Every message carries a tag, and the
+ * same tag replaces itself: handed over twice, it is still one notification.
+ */
+async function pushed(page: Page, tools: CDPSession, data: unknown, there: () => Promise<void>): Promise<void> {
+  await expect(async () => {
+    await push(page, tools, data)
+    await there()
+  }).toPass({ timeout: 20_000 })
+}
+
+/** How long one handing-over gets before the next one. */
+const SOON = { timeout: 2500 }
+
 const shown = (page: Page): Promise<Shown[]> =>
   page.evaluate(async () => {
     const registration = await navigator.serviceWorker.ready
@@ -60,16 +77,13 @@ test('a push becomes a notification with title, words, icon and one tag per meal
   const tools = await openApp(page)
   const home = new URL('./', page.url()).href
 
-  await push(page, tools, { type: 'planned', title: "It's a date", body: 'Mia planned Älplermagronen for dinner on Friday. Bring your appetite.', tag: `meal-${MEAL}`, url: `/serving/${MEAL}` })
-  await expect.poll(() => shown(page)).toEqual([
+  await pushed(page, tools, { type: 'planned', title: "It's a date", body: 'Mia planned Älplermagronen for dinner on Friday. Bring your appetite.', tag: `meal-${MEAL}`, url: `/serving/${MEAL}` }, () => expect.poll(() => shown(page), SOON).toEqual([
     { title: "It's a date", body: 'Mia planned Älplermagronen for dinner on Friday. Bring your appetite.', tag: `meal-${MEAL}`, icon: `${home}icons/icon-192.png`, data: { route: `/serving/${MEAL}` } },
-  ])
+  ]))
 
   // News about the same meal replaces what is on screen; another meal gets its own.
-  await push(page, tools, { type: 'served', title: 'Served!', body: 'Mia served Älplermagronen. Proof needed!', tag: `meal-${MEAL}`, url: `/review/${MEAL}` })
-  await expect.poll(async () => (await shown(page)).map((n) => n.title)).toEqual(['Served!'])
-  await push(page, tools, { type: 'proposed', title: 'New on the wishlist', body: 'Mia put Rösti on the wishlist. How much do you want it?', tag: 'meal-another', url: '/serving/another' })
-  await expect.poll(async () => (await shown(page)).map((n) => n.title).sort()).toEqual(['New on the wishlist', 'Served!'])
+  await pushed(page, tools, { type: 'served', title: 'Served!', body: 'Mia served Älplermagronen. Proof needed!', tag: `meal-${MEAL}`, url: `/review/${MEAL}` }, () => expect.poll(async () => (await shown(page)).map((n) => n.title), SOON).toEqual(['Served!']))
+  await pushed(page, tools, { type: 'proposed', title: 'New on the wishlist', body: 'Mia put Rösti on the wishlist. How much do you want it?', tag: 'meal-another', url: '/serving/another' }, () => expect.poll(async () => (await shown(page)).map((n) => n.title).sort(), SOON).toEqual(['New on the wishlist', 'Served!']))
 
   // The icons it points to are part of the app.
   for (const icon of ['icons/icon-192.png', 'icons/badge-96.png']) {
@@ -79,10 +93,8 @@ test('a push becomes a notification with title, words, icon and one tag per meal
 
 test('a message it cannot read still shows something, and opens the app at home', async ({ page }) => {
   const tools = await openApp(page)
-  await push(page, tools, 'not json at all')
-  await expect.poll(() => shown(page)).toMatchObject([{ title: 'FoodwishUs', body: 'U cook. I eat.', data: { route: '/' } }])
-  await push(page, tools, { title: 'Hi', body: 'There', tag: 'x', url: 'https://evil.example/' })
-  await expect.poll(async () => (await shown(page)).find((n) => n.title === 'Hi')?.data).toEqual({ route: '/' })
+  await pushed(page, tools, 'not json at all', () => expect.poll(() => shown(page), SOON).toMatchObject([{ title: 'FoodwishUs', body: 'U cook. I eat.', data: { route: '/' } }]))
+  await pushed(page, tools, { title: 'Hi', body: 'There', tag: 'x', url: 'https://evil.example/' }, () => expect.poll(async () => (await shown(page)).find((n) => n.title === 'Hi')?.data, SOON).toEqual({ route: '/' }))
 })
 
 test('tapping the notification takes the open app to the right page and puts the notification away', async ({ page }) => {
@@ -103,8 +115,7 @@ test('tapping the notification takes the open app to the right page and puts the
   })
 
   const route = mealId ? `/serving/${mealId}` : '/week'
-  await push(page, tools, { type: 'planned', title: "It's a date", body: 'Mia planned something.', tag: 'meal-tap', url: route })
-  await expect.poll(async () => (await shown(page)).length).toBe(1)
+  await pushed(page, tools, { type: 'planned', title: "It's a date", body: 'Mia planned something.', tag: 'meal-tap', url: route }, () => expect.poll(async () => (await shown(page)).length, SOON).toBe(1))
 
   await tap(page, 'meal-tap')
   await expect(page).toHaveURL(new RegExp(`#${route}$`))
