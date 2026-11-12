@@ -5,7 +5,7 @@
 import type { DeadLetter } from './db'
 import type { Criterion, Dish, ID, ISO, Menu, Review, Serving, SyncTable } from './types'
 
-export type RefusedThing = 'dish' | 'menu' | 'meal' | 'review' | 'criterion' | 'photo' | 'profile' | 'kitchen'
+export type RefusedThing = 'dish' | 'menu' | 'meal' | 'review' | 'criterion' | 'photo' | 'profile' | 'kitchen' | 'basket' | 'pantry'
 
 export interface RefusedChange {
   /** Its number in the list of refused changes: what "Try again" and "Discard" ask for. */
@@ -36,6 +36,8 @@ const THINGS: Record<SyncTable, RefusedThing> = {
   servings: 'meal',
   reviews: 'review',
   photos: 'photo',
+  basket: 'basket',
+  pantry: 'pantry',
 }
 
 const text = (value: unknown): string | null => (typeof value === 'string' && value.trim() ? value.trim() : null)
@@ -49,6 +51,7 @@ export function describeRefused(letter: DeadLetter, kitchen: RefusedLookup): Ref
   if (table === 'dishes') name = kitchen.dishes.get(rowId)?.name ?? text(data.name)
   else if (table === 'menus') name = kitchen.menus.get(rowId)?.name ?? text(data.name)
   else if (table === 'criteria') name = kitchen.criteria.get(rowId)?.label ?? text(data.label)
+  else if (table === 'basket' || table === 'pantry') name = text(data.name)
   else if (table === 'servings') {
     const serving = kitchen.servings.get(rowId)
     name = mealName(serving?.dishId ?? id(data.dishId), serving?.menuId ?? id(data.menuId))

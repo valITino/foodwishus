@@ -9,6 +9,8 @@ import { usePref } from '../../data/prefs'
 import { useDish, useMenus, useServings } from '../../data/queries'
 import type { Dish, ID } from '../../data/types'
 import { useLang, useT } from '../../i18n'
+import { useBasketCopy } from '../basket/copy'
+import { IngredientsToBasket } from '../basket/parts'
 import { Button, Card, DishThumb, EmptyState, PageHeader, PhotoImg, Screen, Stat, SteamLoader, Stepper, Tag, toast } from '../../ui/components'
 import { Icon } from '../../ui/deco/Icon'
 import { getChosenServings, isCooking, setChosenServings, useCookStore } from './cookSession'
@@ -72,6 +74,8 @@ function Ingredients({ dish }: { dish: Dish }) {
   const servings = getChosenServings(dish.id) ?? base
   const factor = scaleFactor(base, servings)
   const ingredients = dish.recipe.ingredients ?? []
+  const b = useBasketCopy()
+  const [toBasket, setToBasket] = useState(false)
   // Amounts give a little nod when they change, but not when the page first opens.
   const calm = useReducedMotion()
   const settled = useRef(false)
@@ -93,6 +97,12 @@ function Ingredients({ dish }: { dish: Dish }) {
             </Button>
           </div>
         )}
+        <div className="flex justify-end border-t border-line px-1">
+          <Button variant="quiet" className="min-h-11" onClick={() => setToBasket(true)}>
+            {b.fromDish}
+          </Button>
+        </div>
+        <IngredientsToBasket dish={dish} factor={factor} open={toBasket} onClose={() => setToBasket(false)} />
         <ul className="border-t border-line" data-testid="ingredients">
           {ingredients.map((ingredient, i) => {
             const { amount, name } = formatIngredient(ingredient, factor, lang)

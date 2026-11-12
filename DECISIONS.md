@@ -299,6 +299,40 @@ that fetches the page and asks the Claude API for a recipe card.
   recipe to read. In each case the app says so and offers the empty form with the link
   kept as the source.
 
+## 15. The basket and the pantry: two shared lists, and Fork between them
+
+A shopping list for two (the basket), a list of what is at home (the pantry), and a check
+of the planned meals against the pantry that ends in suggestions.
+
+- **Amounts are words.** "500 g", "half a pack", "almost empty". A shopping list is read
+  by people, and nobody keeps a pantry to the gram. The cost: the app itself cannot
+  subtract. It compares names; amounts are for the helper, which reads words.
+- **Two ways to check the plan, like the recipe reader.** With something in the pantry
+  and the helper within reach, the AI compares amounts, knows that Rüebli are carrots,
+  and reckons with what was cooked since a note was written. Otherwise the app lists
+  every ingredient of the planned meals that is neither in the pantry nor on the list,
+  by name, and says that this is all it did.
+- **Fork suggests, people decide.** A check never puts anything on the list. Its results
+  are rows in the state "suggested", synced like everything else, so both see the same
+  suggestions and either can accept or drop them. A new check replaces the old undecided ones.
+- **Fork checks by himself, once per plan.** A change to the planned meals starts a check
+  after half a minute of quiet, on the phone that made the change (the other phone hears
+  of the change a second later and would ask the same question). Which plan was checked
+  is kept in the kitchen's settings, so no plan is asked about twice. What the helper
+  finds rings the bell on both phones. It can be switched off on the basket.
+- **A real notification on the lock screen is not part of this yet.** The bell inside the
+  app says it. A push would need a sixth kind of event in the notifications function.
+- **The same thing is never on the list twice.** Adding what is there already changes its
+  amount; adding what was ticked off puts it back. Names meet across capitals, accents and
+  one plural ending ("Zwiebeln" and "Zwiebel").
+- **Salt, pepper and water are never suggested**, however a recipe puts them.
+- **A cloud that has not been updated yet.** The two tables come with migration 0009. An
+  app that is newer than its cloud keeps their changes on the phone (they wait, they are
+  not refused, and nothing else is held up) and sends them once a pull mentions the new
+  tables. The two tables also listen on a live channel of their own, so that a cloud
+  without them cannot take the first channel down.
+- **Not in the backup.** A shopping list and a pantry are of the moment.
+
 ## Limits to know
 
 | Limit | Value | What happens at the limit |
@@ -307,7 +341,7 @@ that fetches the page and asks the Claude API for a recipe card.
 | Photo storage | 1 GB | About 2,500 photos; old photos would need exporting and pruning |
 | Egress | 5 GB a month | Photos are cached on the phones, so each is downloaded once |
 | Inactivity | about 7 days | Project pauses; keep-alive pings prevent it |
-| Recipes read from links | 40 a day per kitchen | The app says so; tomorrow there is room again. The only part that costs money (see section 14) |
+| Questions to the AI helper (a page read, a plan checked, a sentence sorted) | 40 a day per kitchen | The app says so and Fork compares names instead; tomorrow there is room again. The only part that costs money (see sections 14 and 15) |
 
 Figures as published in November 2026. Check them again before relying on them.
 

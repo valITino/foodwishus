@@ -1,4 +1,17 @@
-# The kitchen's helper: recipes from a link
+# The kitchen's helper
+
+One function, three jobs, each with its own instruction file (see "Skills" below):
+
+| Job | In the app | What it gets | What it answers |
+| --- | --- | --- | --- |
+| `recipe-from-link` | **+**, A recipe from a link | a link and three switches | a recipe card for the dish form |
+| `shopping-check` | Basket, Check the plan (and by itself when the plan changes) | the planned meals with their ingredients, what was cooked lately, the pantry, the basket | what to buy, each with an amount and a reason |
+| `pantry-notes` | Pantry, Tell Fork what is there | one sentence about what is at home | pantry lines to look over |
+
+None of them writes to the kitchen. A card fills a form, suggestions wait on the basket
+for a person to accept, pantry lines are shown before they are saved.
+
+## Recipes from a link
 
 In the app: **+**, then **A recipe from a link**. Paste a link from Pinterest or a recipe
 site (or share it to the app from another app), and the dish form opens filled in: name,
@@ -28,18 +41,24 @@ How it travels:
 
 - **To the recipe site:** one ordinary page request, like a browser's, without cookies
   and without anything about the kitchen.
-- **To the AI:** the text or recipe data of that one page, the language, the two
-  switches, and the tags the kitchen already uses (so "Swiss" is not tagged a second
-  time as "swiss"). No names, no meals, no ratings, no photos.
+- **To the AI, for a recipe:** the text or recipe data of that one page, the language,
+  the two switches, and the tags the kitchen already uses (so "Swiss" is not tagged a
+  second time as "swiss").
+- **To the AI, for a check of the plan:** the names and ingredients of the meals planned
+  for the next 7 days and of those cooked in the last 10, the pantry lines, and what is
+  on the basket.
+- **To the AI, for pantry notes:** the sentence that was typed, and the names the pantry
+  already uses.
+- **Never:** who you are, names of people, ratings, notes to each other, photos.
 - **Stored by the function:** nothing. The database keeps one number per kitchen and
-  day: how many pages were read.
+  day: how many questions were asked.
 
 ## What it costs
 
 GitHub and Supabase stay free. The AI is paid per use, from the Claude API account whose
-key is set in step 3: with the default model (`claude-haiku-5-5`) one recipe is well
-under one cent, and the limit of 40 pages a day keeps even a very bad day at a few
-cents. Prices change: check the pricing page of the Claude Console before relying on this.
+key is set in step 3: with the default model (`claude-haiku-5-5`) one question (a recipe
+read, a plan checked, a sentence sorted) is well under one cent, and the limit of 40
+questions a day keeps even a very bad day at a few cents. Prices change: check the pricing page of the Claude Console before relying on this.
 
 ## Without a key it still does something
 
@@ -103,7 +122,7 @@ Functions, `ai`, Logs) says more:
 | --- | --- | --- |
 | "This page needs the AI helper, and it is not set up for this kitchen yet." | No key is set (step 3), or the function is not deployed (step 2). | Do the missing step. |
 | "The AI helper is not answering right now." | The AI did not answer, or refused the key. The log says `helper did not answer:` with `helper_key` for a refused key (wrong, deleted, or out of credit) and `helper_down` for an outage. | For `helper_key`: check the key and the account in the Claude Console. Otherwise try again later. |
-| "Fork has read 40 pages today, and that is the limit." | The day's tickets are used up. | Wait until tomorrow (Swiss time). To change the limit, change `per_day` in a new migration and `DAILY_TICKETS` in `contract.ts`. |
+| "Fork has read 40 pages today, and that is the limit." (on the basket: "Fork has been asked often enough for today") | The day's tickets are used up. All three jobs share them. | Wait until tomorrow (Swiss time). To change the limit, change `per_day` in a new migration and `DAILY_TICKETS` in `contract.ts`. |
 | "This phone is not logged in to the kitchen any more." | The device's login is gone or its profile is paused. | Log in again on that phone. |
 | "The page did not answer." | The site was slow, down, or refuses visitors that are not browsers. Some sites do. | Try again, or add the dish by hand: the link is kept as its source. |
 | "Fork found no recipe on that page." | No recipe on it, or a pin without a link behind it. | Open the recipe's own page and use that link. |
@@ -150,10 +169,16 @@ the same way and a change is made in one place:
 - `skills/recipe-card.ts`: this job. What it is given, the exact form of the answer
   (a JSON schema), how to write ingredient lines and steps, when to add a note.
 
-A new job (the pantry and the shopping list are next) gets its own file next to it, with
-the same four parts: `system` (house rules plus its own), `user` (the material),
-`schema` (the form of the answer) and `read` (the answer, checked and cut to size). The
-handler only adds: who may ask, what to fetch, and what to fall back on.
+- `skills/shopping-check.ts`: what is missing for the planned meals. How to compare with
+  the pantry (other names for the same thing, words like "almost empty", what was cooked
+  since a note), what never to list, how to word a reason.
+- `skills/pantry-notes.ts`: a sentence about what is at home, as pantry lines, without
+  converting or guessing.
+
+A new job gets its own file next to these, with the same four parts: `system` (house
+rules plus its own), `user` (the material), `schema` (the form of the answer) and `read`
+(the answer, checked and cut to size). The handler only adds: who may ask, what to fetch,
+and what to fall back on.
 
 ## What is in this folder
 

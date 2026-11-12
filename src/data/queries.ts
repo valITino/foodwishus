@@ -7,7 +7,7 @@ import { META } from './db'
 import { NEWS_KEEP, type NewsItem } from './news'
 import { describeRefused, type RefusedChange } from './refused'
 import { MAX_UPLOAD_ATTEMPTS } from './sync'
-import type { Criterion, Dish, Household, ID, ISO, Member, Menu, Review, Serving } from './types'
+import type { BasketItem, Criterion, Dish, Household, ID, ISO, Member, Menu, PantryItem, Review, Serving } from './types'
 
 const alive = <T extends { deletedAt: string | null }>(rows: T[]): T[] => rows.filter((r) => !r.deletedAt)
 
@@ -134,4 +134,20 @@ export function useNews(): NewsItem[] | undefined {
 /** How many lines of news nobody has looked at yet. */
 export function useUnseenNews(): number | undefined {
   return useLiveQuery(() => db.news.filter((item) => item.seenAt === null).count(), [])
+}
+
+// ------------------------------------------------------- basket and pantry --
+
+/** Everything on the basket: to buy, suggested and ticked off. Group it with groupBasket. */
+export function useBasket(): BasketItem[] | undefined {
+  return useLiveQuery(async () => alive(await db.basket.toArray()), [])
+}
+
+/** How many things are waiting to be bought. */
+export function useBasketCount(): number | undefined {
+  return useLiveQuery(async () => (await db.basket.where('state').equals('open').toArray()).filter((item) => !item.deletedAt).length, [])
+}
+
+export function usePantry(): PantryItem[] | undefined {
+  return useLiveQuery(async () => alive(await db.pantry.toArray()), [])
 }

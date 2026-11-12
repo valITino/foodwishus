@@ -4,6 +4,7 @@
 import Dexie, { type Table } from 'dexie'
 import type { NewsItem } from './news'
 import type {
+  BasketItem,
   Criterion,
   Dish,
   Household,
@@ -11,6 +12,7 @@ import type {
   ISO,
   Member,
   Menu,
+  PantryItem,
   Photo,
   Review,
   Serving,
@@ -57,6 +59,8 @@ export class AppDB extends Dexie {
   servings!: Table<Serving, ID>
   reviews!: Table<Review, ID>
   photos!: Table<Photo, ID>
+  basket!: Table<BasketItem, ID>
+  pantry!: Table<PantryItem, ID>
   blobs!: Table<BlobEntry, ID>
   outbox!: Table<OutboxOp, number>
   deadLetters!: Table<DeadLetter, number>
@@ -81,6 +85,7 @@ export class AppDB extends Dexie {
       meta: 'key',
     })
     this.version(2).stores({ news: '++id, at' })
+    this.version(3).stores({ basket: 'id, householdId, state', pantry: 'id, householdId' })
   }
 
   /** The Dexie table for a synced table name. */

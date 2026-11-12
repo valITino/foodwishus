@@ -5,6 +5,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { boot, isDemo, leaveDemo, useSyncStatus } from '../data/app'
 import { useMe } from '../data/hooks'
 import { useUnseenNews } from '../data/queries'
+import { BasketScreen, useForkWatch } from '../features/basket'
 import { NewsScreen } from '../features/news'
 import { Onboarding, PausedScreen, usePaused } from '../features/onboarding'
 import { PlanningRoutes, TodayPicker, TodayScreen, WeekScreen, WishlistScreen } from '../features/planning'
@@ -14,6 +15,7 @@ import { SettingsRoutes } from '../features/settings'
 import { useT } from '../i18n'
 import { Screen, Sheet, SteamLoader, TabBar, Toaster, type TabId } from '../ui/components'
 import { Cherry, Cloche, Flower, Mascot } from '../ui/deco/Deco'
+import { Icon } from '../ui/deco/Icon'
 import { currentPath, navigate, useRoute } from './router'
 import { startSettingsSync } from './settingsSync'
 
@@ -77,6 +79,15 @@ function AddSheet({ open, onClose, onToday }: { open: boolean; onClose: () => vo
             <span className="block text-xs text-ink-soft">{t.addSheet.linkHint}</span>
           </span>
         </button>
+        <button type="button" className={choice} onClick={() => go('/basket?add=1')}>
+          <span className="mx-0.5 grid size-10 shrink-0 place-items-center rounded-full bg-blush">
+            <Icon name="basket" size={24} />
+          </span>
+          <span>
+            <span className="block text-base font-extrabold">{t.addSheet.basket}</span>
+            <span className="block text-xs text-ink-soft">{t.addSheet.basketHint}</span>
+          </span>
+        </button>
         <button type="button" className={choice} onClick={() => go('/menus/new')}>
           <Flower size={44} />
           <span>
@@ -114,6 +125,8 @@ export function Shell() {
   const unseenNews = useUnseenNews() ?? 0
   const [pickingToday, setPickingToday] = useState(false)
   const { path } = route
+  // Fork checks the plan against the pantry by himself, once somebody is logged in.
+  useForkWatch(Boolean(me) && !paused && status.state !== 'locked-out')
 
   useEffect(() => {
     void boot()
@@ -192,6 +205,7 @@ export function Shell() {
   else if (isReviewPath(path)) page = <ReviewRoutes route={route} />
   else if (path.startsWith('/settings')) page = <SettingsRoutes route={route} />
   else if (path === '/news') page = <NewsScreen />
+  else if (path === '/basket') page = <BasketScreen route={route} />
   else page = null
 
   // An address that leads nowhere (an old link, a start-screen path after logging in) goes home.

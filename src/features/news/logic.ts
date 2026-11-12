@@ -72,6 +72,15 @@ export function newsLine(item: NewsItem, ctx: NewsContext, lines: NewsCopy['line
       return who ? lines.menu(who, dish) : lines.menuPlain(dish)
     case 'joined':
       return lines.joined(who || item.facts.name || '')
+    case 'basket': {
+      const count = item.facts.count ?? 1
+      if (count > 1) return who ? lines.basketMany(who, count) : lines.basketManyPlain(count)
+      return who ? lines.basketOne(who, item.facts.name ?? '') : lines.basketOnePlain(item.facts.name ?? '')
+    }
+    case 'fork': {
+      const count = item.facts.count ?? 1
+      return count > 1 ? lines.forkMany(count) : lines.forkOne(item.facts.name ?? '')
+    }
   }
 }
 

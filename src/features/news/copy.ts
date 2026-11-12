@@ -42,6 +42,12 @@ const en = {
     menu: (who: string, menu: string) => `${who} put together a menu: ${menu}.`,
     menuPlain: (menu: string) => `A new menu: ${menu}.`,
     joined: (who: string) => `${who} joined the kitchen.`,
+    basketOne: (who: string, what: string) => `${who} put ${what} on the basket.`,
+    basketOnePlain: (what: string) => `New on the basket: ${what}.`,
+    basketMany: (who: string, count: number) => `${who} put ${count} things on the basket.`,
+    basketManyPlain: (count: number) => `${count} new things on the basket.`,
+    forkOne: (what: string) => `Fork thinks ${what} is running low.`,
+    forkMany: (count: number) => `Fork thinks ${count} things are running low.`,
   },
 }
 
@@ -86,6 +92,12 @@ const de: NewsCopy = {
     menu: (who, menu) => `${who} hat ein Menü zusammengestellt: ${menu}.`,
     menuPlain: (menu) => `Ein neues Menü: ${menu}.`,
     joined: (who) => `${who} ist in der Küche angekommen.`,
+    basketOne: (who, what) => `${who} hat ${what} in den Korb gelegt.`,
+    basketOnePlain: (what) => `Neu im Korb: ${what}.`,
+    basketMany: (who, count) => `${who} hat ${count} Sachen in den Korb gelegt.`,
+    basketManyPlain: (count) => `${count} neue Sachen im Korb.`,
+    forkOne: (what) => `Fork meint, ${what} geht zur Neige.`,
+    forkMany: (count) => `Fork meint, ${count} Sachen gehen zur Neige.`,
   },
 }
 

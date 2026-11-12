@@ -4,10 +4,11 @@
 
 import { generateKeyBetween } from 'fractional-indexing'
 import { backend, db, isDemo, store } from './app'
+import { adding, intoPantry, sameThing, stocking, type Line } from './basket'
 import { exportKitchen, importBackup as importOpened, openBackup as openFile, type ExportOptions, type ExportResult, type ImportResult, type OpenedBackup } from './backupFile'
 import { savePhoto, type PreparedImage } from './photos'
 import { byCriterionOrder, byPriority } from './queries'
-import { newId, nowIso, type Criterion, type Day, type Dish, type ID, type ISO, type Member, type Menu, type MenuCourse, type PhotoSource, type ProofPhoto, type Reaction, type Review, type Score5, type Serving, type Slot } from './types'
+import { newId, nowIso, type BasketItem, type BasketSource, type Criterion, type Day, type Dish, type ID, type ISO, type Member, type Menu, type MenuCourse, type PantryItem, type PhotoSource, type ProofPhoto, type Reaction, type Review, type Score5, type Serving, type Slot } from './types'
 
 async function me(): Promise<{ householdId: ID; memberId: ID }> {
   const [householdId, memberId] = await Promise.all([store.householdId(), store.memberId()])
@@ -545,4 +546,186 @@ export async function openBackup(file: Blob): Promise<OpenedBackup> {
 export async function importBackup(opened: OpenedBackup, onProgress?: (done: number, total: number) => void): Promise<ImportResult> {
   await me()
   return importOpened(store, opened, reviewIdFor, onProgress)
+}
+
+// ------------------------------------------------------- basket and pantry --
+
+export interface BasketInput extends Line {
+  note?: string | null
+  source?: BasketSource
+  reason?: string | null
+  dishId?: ID | null
+}
+
+const basketNow = async (): Promise<BasketItem[]> => (await db.basket.toArray()).filter((item) => !item.deletedAt)
+const pantryNow = async (): Promise<PantryItem[]> => (await db.pantry.toArray()).filter((item) => !item.deletedAt)
+
+/**
+ * A new row for the basket. `place` is where the line stood in what was typed or
+ * suggested in one go: the list shows the newest on top, so the first line is made a
+ * hair newer than the second and the lines keep their order.
+ */
+function basketRow(householdId: ID, memberId: ID, line: BasketInput, state: BasketItem['state'], started: number, place: number): BasketItem {
+  const at = new Date(started - place).toISOString()
+  return {
+    ...fresh(householdId),
+    createdAt: at,
+    updatedAt: at,
+    name: line.name.trim().slice(0, 80),
+    amount: line.amount?.trim().slice(0, 40) || null,
+    note: line.note?.trim().slice(0, 120) || null,
+    state,
+    source: line.source ?? 'hand',
+    reason: line.reason?.trim().slice(0, 240) || null,
+    dishId: line.dishId ?? null,
+    addedBy: memberId,
+    boughtAt: null,
+  }
+}
+
+/**
+ * Put things on the basket. The same thing is never there twice: what is on the list
+ * already only takes a newly typed amount, and what was ticked off or only suggested
+ * goes back on the list. Says how many lines are new and how many were there.
+ */
+export async function putOnBasket(lines: BasketInput[]): Promise<{ added: number; there: number }> {
+  const { householdId, memberId } = await me()
+  let list = await basketNow()
+  let added = 0
+  let there = 0
+  const started = Date.now()
+  for (const [place, line] of lines.entries()) {
+    if (!line.name.trim()) continue
+    const what = adding(list, line)
+    if (what.kind === 'new') {
+      const row = basketRow(householdId, memberId, line, 'open', started, place)
+      await store.put('basket', row)
+      list = [...list, row]
+      added += 1
+      continue
+    }
+    const changes: Partial<BasketItem> = what.kind === 'reopen' ? { state: 'open', boughtAt: null, amount: what.amount, addedBy: memberId } : what.amount !== what.item.amount ? { amount: what.amount } : {}
+    if (Object.keys(changes).length > 0) await store.patch('basket', what.item.id, changes)
+    list = list.map((item) => (item.id === what.item.id ? { ...item, ...changes } : item))
+    if (what.kind === 'reopen') added += 1
+    else there += 1
+  }
+  return { added, there }
+}
+
+/** Tick a thing off, or put it back on the list. Accepting one of Fork's suggestions is the same as putting it back. */
+export async function tickBasket(id: ID, bought: boolean): Promise<void> {
+  await store.patch('basket', id, bought ? { state: 'bought', boughtAt: nowIso() } : { state: 'open', boughtAt: null })
+}
+
+export async function updateBasketItem(id: ID, changes: Partial<Pick<BasketItem, 'name' | 'amount' | 'note'>>): Promise<void> {
+  const clean: Partial<BasketItem> = {}
+  if (changes.name !== undefined && changes.name.trim()) clean.name = changes.name.trim().slice(0, 80)
+  if (changes.amount !== undefined) clean.amount = changes.amount?.trim().slice(0, 40) || null
+  if (changes.note !== undefined) clean.note = changes.note?.trim().slice(0, 120) || null
+  if (Object.keys(clean).length > 0) await store.patch('basket', id, clean)
+}
+
+/** Take things off the basket for good (a line typed by mistake, a suggestion nobody wants). */
+export async function removeFromBasket(ids: ID[]): Promise<void> {
+  if (ids.length === 0) return
+  const at = nowIso()
+  await store.patchAll('basket', ids.map((id) => ({ id, changes: { deletedAt: at } })))
+}
+
+/**
+ * What Fork thinks is missing, as suggestions for the two of you to decide about. A new
+ * round replaces the suggestions nobody decided about, and never suggests what is on
+ * the list already. Returns how many suggestions there are now.
+ */
+export async function suggestForBasket(lines: BasketInput[]): Promise<number> {
+  const { householdId, memberId } = await me()
+  const list = await basketNow()
+  await removeFromBasket(list.filter((item) => item.state === 'suggested').map((item) => item.id))
+  const open = list.filter((item) => item.state === 'open')
+  const taken: Line[] = [...open]
+  let count = 0
+  const started = Date.now()
+  for (const [place, line] of lines.entries()) {
+    if (!line.name.trim() || taken.some((other) => sameThing(other.name, line.name))) continue
+    await store.put('basket', basketRow(householdId, memberId, line, 'suggested', started, place))
+    taken.push(line)
+    count += 1
+  }
+  return count
+}
+
+/** Empty the "bought" part of the list. With `intoPantry`, what was bought is noted as being at home. */
+export async function clearBought(options: { intoPantry: boolean }): Promise<number> {
+  const bought = (await basketNow()).filter((item) => item.state === 'bought')
+  if (bought.length === 0) return 0
+  if (options.intoPantry) await notePantry(bought.map((item) => ({ name: item.name, amount: item.amount })), { keepAmounts: true })
+  await removeFromBasket(bought.map((item) => item.id))
+  return bought.length
+}
+
+/**
+ * Note what is at home. A thing that is in the pantry already gets the new amount; with
+ * `keepAmounts` (things coming from the basket) only when an amount came along.
+ */
+export async function notePantry(lines: Line[], options: { keepAmounts?: boolean } = {}): Promise<{ added: number; updated: number }> {
+  const { householdId } = await me()
+  let pantry = await pantryNow()
+  let added = 0
+  let updated = 0
+  if (options.keepAmounts) {
+    const plan = intoPantry(lines, pantry)
+    if (plan.update.length > 0) await store.patchAll('pantry', plan.update.map(({ id, amount }) => ({ id, changes: { amount } })))
+    for (const line of plan.add) await store.put('pantry', { ...fresh(householdId), name: line.name.trim().slice(0, 80), amount: line.amount?.trim().slice(0, 60) || null })
+    return { added: plan.add.length, updated: plan.update.length }
+  }
+  for (const line of lines) {
+    if (!line.name.trim()) continue
+    const amount = line.amount?.trim().slice(0, 60) || null
+    const what = stocking(pantry, line)
+    if (what.kind === 'there') {
+      // Writing a thing down again says "this is what is there now", also without an amount.
+      await store.patch('pantry', what.item.id, { amount })
+      pantry = pantry.map((item) => (item.id === what.item.id ? { ...item, amount } : item))
+      updated += 1
+    } else {
+      const row: PantryItem = { ...fresh(householdId), name: line.name.trim().slice(0, 80), amount }
+      await store.put('pantry', row)
+      pantry = [...pantry, row]
+      added += 1
+    }
+  }
+  return { added, updated }
+}
+
+export async function updatePantryItem(id: ID, changes: Partial<Pick<PantryItem, 'name' | 'amount'>>): Promise<void> {
+  const clean: Partial<PantryItem> = {}
+  if (changes.name !== undefined && changes.name.trim()) clean.name = changes.name.trim().slice(0, 80)
+  if (changes.amount !== undefined) clean.amount = changes.amount?.trim().slice(0, 60) || null
+  if (Object.keys(clean).length > 0) await store.patch('pantry', id, clean)
+}
+
+export async function removeFromPantry(id: ID): Promise<void> {
+  await store.remove('pantry', id)
+}
+
+/** The last of it is gone: out of the pantry and onto the basket, in one tap. */
+export async function usedUp(id: ID): Promise<void> {
+  const item = await db.pantry.get(id)
+  if (!item || item.deletedAt) return
+  await store.remove('pantry', id)
+  await putOnBasket([{ name: item.name, amount: null }])
+}
+
+/** Remember, for both phones, which plan Fork has checked against the pantry. */
+export async function noteForkChecked(signature: string): Promise<void> {
+  const household = (await db.households.toArray()).find((h) => !h.deletedAt)
+  if (!household || household.settings.forkChecked === signature) return
+  await store.patch('households', household.id, { settings: { ...household.settings, forkChecked: signature } })
+}
+
+/** A line for this phone's own bell: Fork found something while nobody was looking. */
+export async function tellForkNews(count: number, name: string | null): Promise<void> {
+  if (count <= 0) return
+  await db.news.add({ kind: 'fork', at: nowIso(), actorId: null, facts: { count, ...(name ? { name } : {}) }, seenAt: null })
 }

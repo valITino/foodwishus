@@ -94,8 +94,8 @@ own page of numbers and photos.
 **Recipes.** The recipe book with all your dishes and menus. A dish has ingredients, steps,
 times and, if you like, calories. **Cook mode** shows one step at a time in big letters,
 with timers. When the last step is done, **Served** is right there. The round **+**
-button in the middle of the bar adds a new dish, a recipe from a link, a menu, or a meal
-for today.
+button in the middle of the bar adds a new dish, a recipe from a link, something for the
+basket, a menu, or a meal for today.
 
 All proof photos hang together on the **photo wall**, which you reach from Today or from
 any meal that has been eaten.
@@ -123,6 +123,35 @@ what is off and tap **Save dish**. Nothing is saved before that.
 
 Fork gets help from an AI (Claude), which can misread things. That is why you always get
 the form to check. Reading needs a connection, and a kitchen can have 40 pages read a day.
+
+### The basket and the pantry
+
+The **basket** is the shopping list the two of you share. It lives behind the basket
+button on Today (next to the bell), and **+** has "Something for the basket".
+
+- **Write it down:** type a thing and press Enter. "Milk 2 l" works, "2 l milk" too, and
+  several at once with commas. The same thing is never there twice.
+- **In the shop:** tap the circle and the thing is bought. The other phone sees it at once.
+- **From a dish:** on a dish, **Ingredients into the basket** lists the ingredients to
+  tick. What is in the pantry or on the basket already starts unticked.
+- **Back home:** **Clear** empties what was bought, and can note it in the pantry in the
+  same tap.
+
+The **pantry** is what is at home, written the way you see it: "Flour 1 kg", "Milk, almost
+empty", or just "Butter". Tap a line to change how much is left. **Used up** takes it out
+and puts it on the basket. With **Tell Fork what is there** you write or dictate one
+sentence ("we still have 2 onions, half a kilo of flour and the milk is almost gone") and
+Fork sorts it into lines for you to look over.
+
+**Fork checks the plan.** On the basket, **Check the plan** compares the meals planned for
+the next 7 days with the pantry and suggests what to buy, each with a reason ("For the
+Rüeblisuppe on Friday: the pantry says almost empty"). You decide: **+** puts a suggestion
+on the list, **x** drops it. When you change the plan, Fork checks by himself and rings
+the bell on both phones if something is missing; a switch on the basket turns that off.
+
+With an empty pantry, without a connection, or before the AI helper is set up, Fork
+compares names only: every ingredient of the planned meals that is not in the pantry and
+not on the list. He says so when he does.
 
 ### When plans change
 
@@ -253,13 +282,21 @@ Notifications need a small helper in the Supabase project. Nobody has to copy an
 statements). Until that is done, everything else works and the Notifications page says it
 is not set up yet.
 
-### Switching the recipe reader on (once)
+### Switching Fork's helper on (once)
 
-Reading recipes from links needs a second small helper in the Supabase project, and, for
-most pages, a key for the Claude API. The key is the only thing in the whole app that
-costs money: well under a cent per recipe. `supabase/functions/ai/README.md` has the
-steps (one database update, one function, one secret that only you ever see). Until that
-is done, everything else works and the reader says it is not set up yet.
+Reading recipes from links, checking the plan against the pantry and sorting a sentence
+into pantry lines need a second small helper in the Supabase project and a key for the
+Claude API. The key is the only thing in the whole app that costs money: well under a
+cent per question. `supabase/functions/ai/README.md` has the steps (one database update,
+one function, one secret that only you ever see). Until that is done, everything else
+works: the reader says it is not set up yet, and Fork compares names.
+
+### The basket and the pantry need one database update (once)
+
+Apply `supabase/migrations/0009_basket.sql`. It adds two tables with the same rules as
+the rest of the kitchen and changes nothing that exists. Until then the app keeps both
+lists on each phone and shares them as soon as the update is there. Nothing is lost and
+nothing is refused.
 
 ## For developers
 

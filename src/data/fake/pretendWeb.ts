@@ -147,9 +147,73 @@ export function cornbreadAnswer(german: boolean, metric: boolean) {
 
 const NOT_A_RECIPE = { isRecipe: false, name: '', description: '', course: 'main', effort: 'unknown', tags: [], servings: 0, prepMinutes: 0, cookMinutes: 0, ingredientLines: [], steps: [], notes: '', kcalPerServing: 0, checks: [] }
 
+const firstCapital = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1)
+const part = (user: string, title: string): string[] =>
+  (new RegExp(`${title}\\n((?:- .*\\n?)*)`).exec(user)?.[1] ?? '')
+    .split('\n')
+    .map((line) => line.replace(/^- /, '').trim())
+    .filter((line) => line !== '' && !/^(none|nothing|nothing noted)$/.test(line))
+
+const WEEKDAYS = { en: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'], de: ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'] }
+const TOO_LITTLE = /almost empty|a bit|none left|fast leer|ein rest|leer/i
+
+/**
+ * The stand-in's shopping check. It is no kitchen brain: it takes every ingredient of
+ * the planned meals, leaves out what the pantry names (unless the note says it is almost
+ * gone) and what is on the list, and gives each a reason with the weekday. Enough to
+ * build and test everything around the real helper.
+ */
+function pretendCheck(german: boolean, user: string): unknown {
+  const pantry = part(user, 'Pantry:').map((line) => ({ name: line.split(':')[0].trim().toLowerCase(), note: line.slice(line.indexOf(':') + 1).trim() }))
+  const listed = part(user, 'On the shopping list already:').map((line) => line.toLowerCase())
+  const items: { name: string; amount: string; reason: string }[] = []
+  const unchecked: string[] = []
+  for (const meal of part(user, 'Planned meals:')) {
+    const [when, dish, rest = ''] = meal.split(/:\s*/, 3)
+    const weekday = WEEKDAYS[german ? 'de' : 'en'][new Date(`${when.slice(0, 10)}T12:00:00Z`).getUTCDay()]
+    if (rest.startsWith('(no ingredients')) {
+      unchecked.push(dish)
+      continue
+    }
+    for (const line of rest.split(';').map((entry) => entry.trim()).filter(Boolean)) {
+      const taken = /^(\d+(?:[.,]\d+)?(?:\s(?:g|kg|ml|dl|l|EL|TL|tbsp|tsp))?)\s+(.+)$/.exec(line)
+      const name = firstCapital((taken ? taken[2] : line).split(',')[0].trim())
+      const key = name.toLowerCase()
+      if (/^(salz|salt|pfeffer|pepper|wasser|water)$/.test(key) || listed.some((entry) => entry.includes(key)) || items.some((item) => item.name === name)) continue
+      const atHome = pantry.find((row) => row.name === key)
+      if (atHome && !TOO_LITTLE.test(atHome.note)) continue
+      const says = atHome ? atHome.note.replace(/\s*\(noted.*\)$/, '') : null
+      const reason = german
+        ? `Für ${dish} am ${weekday}${says ? `: im Vorrat steht «${says}».` : ': nichts davon im Vorrat.'}`
+        : `For ${dish} on ${weekday}${says ? `: the pantry says "${says}".` : ': none in the pantry.'}`
+      items.push({ name, amount: taken ? taken[1] : '', reason })
+    }
+  }
+  const note = unchecked.length === 0 ? '' : german ? `Für ${unchecked.join(', ')} sind keine Zutaten notiert.` : `No ingredients are written down for ${unchecked.join(', ')}.`
+  return { items, note }
+}
+
+/** The stand-in's pantry notes: one thing per comma, "and" or line; an amount in front, or after "is". */
+function pretendNotes(user: string): unknown {
+  const text = /<material>\n([\s\S]*)\n<\/material>/.exec(user)?.[1] ?? ''
+  const lines: { name: string; amount: string }[] = []
+  for (const piece of text.split(/\n|,|;|\bund\b|\band\b/).map((entry) => entry.replace(/^(wir haben|we have|we still have)?\s*(noch|still)?\s*/i, '').replace(/[.!]$/, '').trim()).filter(Boolean)) {
+    const front = /^(\d+(?:[.,]\d+)?(?:\s(?:g|kg|ml|dl|l|Pack|packs?))?|ein(?:e|en)? halb(?:es|e|en)? \p{L}+|half an? \p{L}+)\s+(?:of\s+)?(.+)$/iu.exec(piece)
+    const behind = /^(.+?)\s+(?:ist|sind|is|are)\s+(.+)$/i.exec(piece)
+    const gone = /^(?:keine?n?|no)\s+(.+?)(?:\s+mehr)?$/i.exec(piece)
+    if (front) lines.push({ name: firstCapital(front[2]), amount: front[1] })
+    else if (behind) lines.push({ name: firstCapital(behind[1].replace(/^(die|der|das|the)\s+/i, '')), amount: behind[2] })
+    else if (gone) lines.push({ name: firstCapital(gone[1]), amount: /keine?n?/i.test(piece) ? 'leer' : 'none left' })
+    else lines.push({ name: firstCapital(piece), amount: '' })
+  }
+  return { lines }
+}
+
 /** What the stand-in answers to one request, judged by the instructions and the material it was given. */
 export function pretendAnswer(system: string, user: string): unknown {
   const german = system.includes('Write in German')
+  if (system.includes('Job: work out what has to be bought')) return pretendCheck(german, user)
+  if (system.includes('Job: turn what the cook wrote or dictated')) return pretendNotes(user)
   const metric = system.includes('Convert cups')
   if (user.includes('cornmeal')) return cornbreadAnswer(german && !system.includes('Keep the language of the material'), metric)
   const material = /<material>\n([\s\S]*)\n<\/material>/.exec(user)?.[1] ?? ''

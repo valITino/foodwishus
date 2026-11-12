@@ -4,7 +4,7 @@
 //
 // This file is the thinking only (no database, no React), so every rule is unit-tested.
 
-import type { Day, Dish, ID, ISO, Member, Menu, Review, Serving, Slot, SyncTable, TableRows } from './types'
+import type { BasketItem, Day, Dish, ID, ISO, Member, Menu, Review, Serving, Slot, SyncTable, TableRows } from './types'
 
 export type NewsKind =
   | 'proposed' // a new wish
@@ -23,6 +23,8 @@ export type NewsKind =
   | 'dishes' // several at once (an import): one line instead of thirty
   | 'menu'
   | 'joined' // the partner took their seat
+  | 'basket' // the other one put something on the shopping list (one line for all of it)
+  | 'fork' // Fork suggested things for the basket (one line for all of them)
 
 export interface NewsFacts {
   /** The name at that moment, for when the dish is renamed or gone later. */
@@ -138,9 +140,17 @@ export function newsFrom<T extends SyncTable>(table: T, before: Row<T> | undefin
       return recipeNews('menu', before as Menu | undefined, after as Menu)
     case 'members':
       return memberNews(before as Member | undefined, after as Member)
+    case 'basket':
+      return basketNews(before as BasketItem | undefined, after as BasketItem)
     default:
       return []
   }
+}
+
+/** Something new for the shopping list, or a new suggestion of Fork's. Ticking off and tidying up are not news. */
+function basketNews(before: BasketItem | undefined, after: BasketItem): NewsDraft[] {
+  if (before || after.deletedAt || after.state === 'bought') return []
+  return [{ kind: after.state === 'suggested' ? 'fork' : 'basket', at: after.createdAt, actorId: after.addedBy, facts: { name: after.name, count: 1 } }]
 }
 
 /** More new dishes than this in one go is an import: one line says how many. */
@@ -176,6 +186,15 @@ export function tidyNews(drafts: readonly NewsDraft[], meId: ID | null): NewsDra
     news = [...news.filter((draft) => draft.kind !== 'dish'), { kind: 'dishes', at: latest.at, actorId: actors.size === 1 ? latest.actorId : null, facts: { count: dishes.length } }]
   }
 
+  // A shopping list is written in one go: one line says how much is new, not ten.
+  for (const kind of ['basket', 'fork'] as const) {
+    const lines = news.filter((draft) => draft.kind === kind)
+    if (lines.length < 2) continue
+    const latest = lines.reduce((a, b) => (a.at >= b.at ? a : b))
+    const actors = new Set(lines.map((draft) => draft.actorId))
+    news = [...news.filter((draft) => draft.kind !== kind), { kind, at: latest.at, actorId: actors.size === 1 ? latest.actorId : null, facts: { count: lines.length } }]
+  }
+
   return [...news].sort((a, b) => (a.at === b.at ? 0 : a.at < b.at ? -1 : 1))
 }
 
@@ -193,6 +212,7 @@ export function staleNews(items: readonly Pick<NewsItem, 'id' | 'at'>[], now: nu
 /** Where a tap on a line leads. A meal that waits for my proof goes straight to the camera. */
 export function newsLink(item: Pick<NewsDraft, 'kind' | 'servingId' | 'dishId' | 'menuId'>, readerEats: boolean): string | null {
   if (item.kind === 'removed') return '/wishlist'
+  if (item.kind === 'basket' || item.kind === 'fork') return '/basket'
   if (item.servingId) return item.kind === 'served' && readerEats ? `/review/${item.servingId}` : `/serving/${item.servingId}`
   if (item.kind === 'dishes') return '/recipes'
   if (item.dishId) return `/recipes/${item.dishId}`

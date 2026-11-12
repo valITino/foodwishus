@@ -65,6 +65,13 @@ config and the screenshot tool read the same variable).
   through `src/data/helper.ts`; the pretend cloud runs the same handler with a pretend web
   (`src/data/fake/pretendWeb.ts`). A card only ever fills the dish form
   (`src/features/recipes/importLogic.ts`): the AI never writes to the kitchen by itself.
+- **Basket and pantry:** two synced tables that came later (`LATER_TABLES` in `types.ts`,
+  migration 0009). A cloud without them makes their changes wait (`SyncStatus.later`), never
+  refuses them. The rules (same thing, adding, clearing into the pantry) are pure functions in
+  `src/data/basket.ts`; what the plan asks for is in `src/features/basket/logic.ts`; Fork's
+  check is `src/features/basket/fork.ts` (the helper when it can, names when it cannot) and
+  runs by itself from `watch.ts`, only on the phone that changed the plan. Fork only ever
+  writes suggestions (`state: 'suggested'`): people put things on the list.
 - **Refused changes** (`deadLetters`) leave the list only through `sync.retryRefused` and
   `sync.discardRefused`; `src/data/refused.ts` puts them into words for the Sync page.
 - The real backend is Supabase (`supabaseBackend.ts`); rules live in `supabase/migrations`.

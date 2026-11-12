@@ -11,6 +11,7 @@ import { zurichHour } from '../../lib/dates'
 import { AwningHeader, Avatar, Button, Card, EmptyState, HeartMeter, Screen, Stat, StatusBubble, SyncPill, Tag, toast } from '../../ui/components'
 import { Mascot } from '../../ui/deco/Deco'
 import { Icon } from '../../ui/deco/Icon'
+import { BasketButton } from '../basket'
 import { Bell } from '../news'
 import { EarlyProof, EatenToday, PhotoWallCard } from '../review'
 import { planningCopy } from './copy'
@@ -189,7 +190,10 @@ export function TodayScreen() {
           {/* The bell sits under the avatar: top right, without squeezing the greeting. */}
           <div className="flex w-full items-center justify-between gap-3">
             <SyncPill status={status} />
-            <Bell />
+            <span className="flex items-center gap-2">
+              <BasketButton />
+              <Bell />
+            </span>
           </div>
           {partner?.status && <StatusBubble name={partner.name} status={partner.status} avatar={partner.avatar} color={partner.color} />}
         </div>

@@ -3,7 +3,8 @@
 // here is queued: it answers now or says why not.
 
 import { backend, db, isDemo } from './app'
-import { BackendError, type HelperFailure, type RecipeFromLinkResult } from './backend'
+import { BackendError, type HelperFailure, type HelperRequest, type PantryNotesResult, type RecipeFromLinkResult, type ResultOf, type ShoppingCheck, type ShoppingCheckResult } from './backend'
+import type { BasketItem, Dish, Menu, PantryItem, Serving } from './types'
 
 /** Why a link could not be read. The helper's own words, plus two only the app knows. */
 export type ReadProblem = HelperFailure | 'offline' | 'demo'
@@ -43,15 +44,48 @@ export function mostUsedTags(dishes: { tags: string[]; deletedAt?: string | null
     .map(([tag]) => tag)
 }
 
-/** Have a recipe page read. Rejects with a ReadError. */
-export async function readRecipe(link: string, options: ReadOptions): Promise<RecipeFromLinkResult> {
+/** One question to the helper. Rejects with a ReadError that says, in one word, why not. */
+async function ask<R extends HelperRequest>(request: R): Promise<ResultOf<R>> {
   // The demo kitchen lives on this phone only: there is no kitchen in the cloud to ask for it.
   if (isDemo) throw new ReadError('demo')
   if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new ReadError('offline')
   try {
-    const knownTags = mostUsedTags(await db.dishes.toArray())
-    return await backend.readRecipe({ link, ...options, knownTags })
+    return await backend.askHelper(request)
   } catch (error) {
     throw new ReadError(readProblem(error))
   }
+}
+
+/** Have a recipe page read. Rejects with a ReadError. */
+export async function readRecipe(link: string, options: ReadOptions): Promise<RecipeFromLinkResult> {
+  if (isDemo) throw new ReadError('demo')
+  const knownTags = mostUsedTags(await db.dishes.toArray())
+  return ask({ job: 'recipe-from-link', link, ...options, knownTags })
+}
+
+/** Have Fork compare the planned meals with the pantry. Rejects with a ReadError. */
+export function checkShopping(request: Omit<ShoppingCheck, 'job'>): Promise<ShoppingCheckResult> {
+  return ask({ job: 'shopping-check', ...request })
+}
+
+/** Have Fork turn a sentence about what is at home into pantry lines. Rejects with a ReadError. */
+export async function sortPantryNotes(text: string, lang: 'en' | 'de'): Promise<PantryNotesResult> {
+  if (isDemo) throw new ReadError('demo')
+  const known = (await db.pantry.toArray()).filter((item) => !item.deletedAt).map((item) => item.name)
+  return ask({ job: 'pantry-notes', lang, text, known })
+}
+
+/** The kitchen as it is on this phone right now, for working out what the plan asks for. */
+export interface KitchenNow {
+  servings: Serving[]
+  dishes: Dish[]
+  menus: Menu[]
+  pantry: PantryItem[]
+  basket: BasketItem[]
+}
+
+export async function kitchenNow(): Promise<KitchenNow> {
+  const [servings, dishes, menus, pantry, basket] = await Promise.all([db.servings.toArray(), db.dishes.toArray(), db.menus.toArray(), db.pantry.toArray(), db.basket.toArray()])
+  const alive = <T extends { deletedAt: string | null }>(rows: T[]): T[] => rows.filter((row) => !row.deletedAt)
+  return { servings: alive(servings), dishes: alive(dishes), menus: alive(menus), pantry: alive(pantry), basket: alive(basket) }
 }
