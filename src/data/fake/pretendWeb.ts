@@ -169,7 +169,7 @@ const part = (user: string, title: string): string[] =>
   (new RegExp(`${title}\\n((?:- .*\\n?)*)`).exec(user)?.[1] ?? '')
     .split('\n')
     .map((line) => line.replace(/^- /, '').trim())
-    .filter((line) => line !== '' && !/^(none|nothing|nothing noted)$/.test(line))
+    .filter((line) => line !== '' && !/^(none|nothing|nothing noted|empty)$/.test(line))
 
 const WEEKDAYS = { en: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'], de: ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'] }
 const TOO_LITTLE = /almost empty|a bit|none left|fast leer|ein rest|leer/i
@@ -226,9 +226,134 @@ function pretendNotes(user: string): unknown {
   return { lines }
 }
 
-/** What the stand-in answers to one request, judged by the instructions and the material it was given. */
-export function pretendAnswer(system: string, user: string): unknown {
+const fold = (text: string): string => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+const SLOT_WORDS: [RegExp, 'breakfast' | 'lunch' | 'dinner' | 'dessert'][] = [[/breakfast|fruhstuck|zmorge/, 'breakfast'], [/lunch|mittag/, 'lunch'], [/dessert|snack/, 'dessert']]
+const SLOT_NAMES = { en: { breakfast: 'breakfast', lunch: 'lunch', dinner: 'dinner', dessert: 'dessert' }, de: { breakfast: 'Frühstück', lunch: 'Mittagessen', dinner: 'Abendessen', dessert: 'Dessert' } }
+const NO_OFFER = { dish: '', day: '', slot: '', place: '', lines: [] }
+
+function dayPlus(day: string, amount: number): string {
+  const date = new Date(`${day}T12:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + amount)
+  return date.toISOString().slice(0, 10)
+}
+
+/** "Rüebli, 2 l milk and bread" as things with their amounts. */
+function thingsIn(text: string): { name: string; amount: string }[] {
+  return text
+    .split(/,|;|\bund\b|\band\b/)
+    .map((piece) => piece.replace(/[.!?]$/, '').trim())
+    .filter(Boolean)
+    .map((piece) => {
+      const front = /^(\d+(?:[.,]\d+)?(?:\s(?:g|kg|ml|dl|l|Pack|packs?))?)\s+(.+)$/i.exec(piece)
+      return front ? { name: firstCapital(front[2]), amount: front[1] } : { name: firstCapital(piece), amount: '' }
+    })
+}
+
+/**
+ * The stand-in for Fork in a talk. It is no cook and no brain: it knows a handful of
+ * questions by their words and answers them from the kitchen lines it was sent, with the
+ * same offers and the same "let me look at the recipe first" the real one is asked for.
+ * Enough to build and test the whole talk around it.
+ */
+function pretendFork(german: boolean, user: string, talk: number): unknown {
+  const lang = german ? 'de' : 'en'
+  const question = /<question>\n([\s\S]*)\n<\/question>/.exec(user)?.[1] ?? ''
+  const asked = fold(question)
+  const today = /Today: (\d{4}-\d{2}-\d{2})/.exec(user)?.[1] ?? '2026-01-01'
+  const book = part(user, 'Recipe book \\(ref \\| name \\| what the phone knows about it\\):').map((line) => ({ ref: line.split(' | ')[0], name: line.split(' | ')[1] ?? '' }))
+  const pantry = part(user, 'Pantry:').map((line) => line.split(':')[0].trim())
+  const planned = part(user, 'Planned:')
+  // "The first dish in the book" names a dish without its name: the real one can follow that, and the app cannot send the recipe ahead.
+  const named = /first dish|erste gericht/.test(asked) ? book[0] : book.filter((dish) => dish.name !== '' && asked.includes(fold(dish.name))).sort((a, b) => b.name.length - a.name.length)[0]
+  const say = (text: string, offers: Record<string, unknown>[] = []) => ({ text, offers: offers.map((offer) => ({ ...NO_OFFER, ...offer })), look: [] })
+
+  // What is in a dish, or its calories: that needs the whole recipe.
+  if (named && /what is in|was ist in|was kommt in|zutaten|ingredients|calories|kalorien|kcal/.test(asked)) {
+    // Only what stands under "Whole recipes" is a recipe: the recipe book has a line for the dish too.
+    const whole = /<recipes>\n([\s\S]*)\n<\/recipes>/.exec(user)?.[1] ?? ''
+    const recipe = new RegExp(`(?:^|\\n)${named.ref} [^\\n]*\\n([\\s\\S]*?)(?:\\n\\n|$)`).exec(whole)
+    if (!recipe) return { text: '', offers: [], look: [named.ref] }
+    const servings = Number(/(\d+) servings/.exec(recipe[0])?.[1] ?? 0)
+    const lines = (/Ingredients:\n((?:- .*\n?)*)/.exec(recipe[0])?.[1] ?? '').split('\n').map((line) => line.replace(/^- /, '').trim()).filter(Boolean)
+    if (/calories|kalorien|kcal/.test(asked)) {
+      const numbers = pretendNutrition(lines, servings)
+      if (!numbers) return say(german ? `Für ${named.name} sind zu wenige Mengen notiert, um das zu schätzen.` : `Too few amounts are written down for ${named.name} to estimate that.`, [{ kind: 'dish', dish: named.ref }])
+      return say(german ? `${named.name} hat etwa ${numbers.kcalPerServing} kcal pro Portion. Das ist eine Schätzung aus den Zutaten.` : `${named.name} has about ${numbers.kcalPerServing} kcal per serving. That is an estimate from the ingredients.`, [{ kind: 'dish', dish: named.ref }])
+    }
+    return say(german ? `In ${named.name} kommt: ${lines.join(', ')}.` : `${named.name} takes: ${lines.join(', ')}.`, [{ kind: 'dish', dish: named.ref }])
+  }
+
+  if (named && /\bplan|einplan|\bplane\b|kochen wir|let us have|lass uns/.test(asked)) {
+    const slot = SLOT_WORDS.find(([words]) => words.test(asked))?.[1] ?? 'dinner'
+    const week = WEEKDAYS[lang].map(fold)
+    const wanted = week.findIndex((name) => asked.includes(name))
+    const from = new Date(`${today}T12:00:00Z`).getUTCDay()
+    const day = /today|heute/.test(asked) ? today : wanted >= 0 ? dayPlus(today, (wanted - from + 7) % 7) : dayPlus(today, 1)
+    const weekday = WEEKDAYS[lang][new Date(`${day}T12:00:00Z`).getUTCDay()]
+    return say(german ? `Ich kann ${named.name} auf ${weekday} setzen, zum ${SLOT_NAMES.de[slot]}.` : `I can put ${named.name} on ${weekday}, for ${SLOT_NAMES.en[slot]}.`, [{ kind: 'plan', dish: named.ref, day, slot }])
+  }
+
+  if (named && /wishlist|wunschliste/.test(asked)) return say(german ? `${named.name} kann auf die Wunschliste.` : `${named.name} can go on the wishlist.`, [{ kind: 'wish', dish: named.ref }])
+
+  const toBasket = /(?:put|add|setz|schreib)\s+(.+?)\s+(?:on|to|auf|in)\s+(?:the|den|die)\s+(?:basket|shopping list|korb|einkaufskorb|einkaufsliste)/i.exec(question)
+  if (toBasket) {
+    const lines = thingsIn(toBasket[1])
+    return say(german ? `Das sind ${lines.length} Dinge für den Korb.` : lines.length === 1 ? 'That is 1 thing for the basket.' : `That is ${lines.length} things for the basket.`, [{ kind: 'basket', lines }])
+  }
+
+  const bought = /(?:i bought|we bought|ich habe gekauft|wir haben gekauft|gekauft habe ich|eingekauft):?\s+(.+)/i.exec(question)
+  if (bought) return say(german ? 'Das kann ich im Vorrat notieren.' : 'I can note that in the pantry.', [{ kind: 'pantry', lines: thingsIn(bought[1]) }])
+
+  const recipeFor = /(?:recipe for|rezept für)\s+(.+?)[.?!]?$/i.exec(question)
+  if (recipeFor) {
+    const name = firstCapital(recipeFor[1].trim())
+    return say(
+      german
+        ? `${name}, für 2 Portionen\n- 200 g Spaghetti\n- 2 Eier\n- 60 g Sbrinz, gerieben\n- 1 TL Pfeffer\nSpaghetti 9 Minuten in Salzwasser kochen.\nEier mit Käse und Pfeffer verrühren.\nSpaghetti abgiessen und sofort mit der Eimasse mischen.`
+        : `${name}, for 2 servings\n- 200 g spaghetti\n- 2 eggs\n- 60 g Sbrinz, grated\n- 1 tsp pepper\nBoil the spaghetti in salted water for 9 minutes.\nWhisk the eggs with the cheese and the pepper.\nDrain the spaghetti and toss with the egg mixture right away.`,
+      [{ kind: 'recipe' }],
+    )
+  }
+
+  if (/pinterest|\blink\b/.test(asked)) return say(german ? 'Tippe auf das Plus, dann auf «Ein Rezept aus einem Link». Link einfügen, «Rezept lesen», und das Gericht ist ausgefüllt.' : 'Tap the plus, then "A recipe from a link". Paste the link, tap "Read recipe", and the dish is filled in.', [{ kind: 'go', place: 'link' }])
+  if (/(show|switch|turn|anzeigen|einschalten|sehen).*(calories|kalorien)|(calories|kalorien).*(show|switch|turn|anzeigen|einschalten|sehen)/.test(asked)) return say(german ? 'Kalorien schaltest du in den Einstellungen ein: «Kalorien anzeigen».' : 'Calories are switched on in Settings: "Show calories".', [{ kind: 'go', place: 'calories' }])
+
+  if (/what can i cook|what could i cook|was kann ich kochen|was koche ich/.test(asked)) {
+    const first = book.slice(0, 2)
+    const home = pantry.length > 0 ? (german ? `Du hast ${pantry.slice(0, 3).join(', ')} zu Hause.` : `You have ${pantry.slice(0, 3).join(', ')} at home.`) : german ? 'Im Vorrat ist nichts notiert.' : 'Nothing is noted in the pantry.'
+    if (first.length === 0) return say(`${home} ${german ? 'Das Rezeptbuch ist noch leer.' : 'The recipe book is still empty.'}`, [{ kind: 'go', place: 'new-dish' }])
+    return say(`${home} ${german ? `Aus dem Rezeptbuch passt ${first.map((dish) => dish.name).join(' oder ')}.` : `From the recipe book, ${first.map((dish) => dish.name).join(' or ')} would fit.`}`, first.map((dish) => ({ kind: 'dish', dish: dish.ref })))
+  }
+
+  if (/how long|wie lange/.test(asked) && /egg|ei\b|eier/.test(asked)) return say(german ? 'Ein Ei aus dem Kühlschrank: 6 Minuten für weich, 8 für wachsweich, 10 für hart, ab kochendem Wasser.' : 'An egg from the fridge: 6 minutes for soft, 8 for jammy, 10 for hard, counted from boiling water.')
+  if (/weather|wetter|football|fussball/.test(asked)) return say(german ? 'Ich bin die Gabel dieser Küche: Ich helfe beim Kochen, bei eurer Küche und bei der App.' : 'I am the fork of this kitchen: I help with cooking, with your kitchen and with the app.')
+
+  const again = talk > 0 ? (german ? ' Wir reden ja schon eine Weile.' : ' We have been talking for a bit.') : ''
+  return say(
+    german
+      ? `Im Rezeptbuch: ${book.length} Gerichte. Geplant: ${planned.length} Mahlzeiten.${again} Frag mich etwas zum Kochen, zu eurer Küche oder zur App.`
+      : `In the recipe book: ${book.length} dishes. Planned: ${planned.length} meals.${again} Ask me about cooking, your kitchen or the app.`,
+  )
+}
+
+/** A recipe the stand-in wrote out in a talk, read back as a card: the first line is the name, "- " lines are ingredients, the rest are steps. */
+function pretendWritten(text: string, estimate: boolean): unknown {
+  const rows = text.split('\n').map((row) => row.trim()).filter(Boolean)
+  const ingredientLines = rows.filter((row) => row.startsWith('- ')).map((row) => row.slice(2))
+  const steps = rows.slice(1).filter((row) => !row.startsWith('- '))
+  if (ingredientLines.length === 0 || steps.length === 0) return NOT_A_RECIPE
+  const servings = Number(/(\d+)\s+(?:servings|Portionen)/.exec(rows[0])?.[1] ?? 0)
+  const guessed = estimate ? pretendNutrition(ingredientLines, servings) : null
+  return { isRecipe: true, name: rows[0].split(',')[0].trim(), description: '', course: 'main', effort: 'easy', tags: [], servings, prepMinutes: 0, cookMinutes: 0, ingredientLines, steps, notes: '', ...(guessed ? { ...guessed, nutritionEstimated: true } : NO_NUTRITION), checks: [] }
+}
+
+/**
+ * What the stand-in answers to one request, judged by the instructions and the material
+ * it was given. `talk` is how many things were said before the question.
+ */
+export function pretendAnswer(system: string, user: string, talk = 0): unknown {
   const german = system.includes('Write in German')
+  if (system.includes('Job: you are Fork, the kitchen assistant')) return pretendFork(german, user, talk)
   if (system.includes('Job: work out what has to be bought')) return pretendCheck(german, user)
   if (system.includes('Job: turn what the cook wrote or dictated')) return pretendNotes(user)
   const metric = system.includes('Convert cups')
@@ -240,6 +365,7 @@ export function pretendAnswer(system: string, user: string): unknown {
   }
   if (user.includes('cornmeal')) return cornbreadAnswer(german && !system.includes('Keep the language of the material'), metric, estimate)
   const material = /<material>\n([\s\S]*)\n<\/material>/.exec(user)?.[1] ?? ''
+  if (user.startsWith('A recipe as it was written out in a talk')) return pretendWritten(material, estimate)
   if (user.includes("The page's own recipe data")) {
     try {
       const found = cardFromData(JSON.parse(material) as Record<string, unknown>)
@@ -264,6 +390,7 @@ export function pretendHelper(options: { down?: boolean; asked?: unknown[] } = {
     const body = JSON.parse(init.body) as { system: string; messages: { content: string }[] }
     options.asked?.push({ ...body, key: init.headers['x-api-key'], version: init.headers['anthropic-version'] })
     if (options.down) return new Response('{"type":"error","error":{"type":"overloaded_error"}}', { status: 529 })
-    return new Response(JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(pretendAnswer(body.system, body.messages[0]?.content ?? '')) }] }))
+    // The question is the last thing said: what went before it is the talk.
+    return new Response(JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(pretendAnswer(body.system, body.messages.at(-1)?.content ?? '', body.messages.length - 1)) }] }))
   }
 }

@@ -361,6 +361,41 @@ of the planned meals against the pantry that ends in suggestions.
   without them cannot take the first channel down.
 - **Not in the backup.** A shopping list and a pantry are of the moment.
 
+## 16. Ask Fork: a kitchen assistant that knows the kitchen and never touches it
+
+A talk with Fork: about cooking, about this kitchen, about the app. One more job of the
+helper function (`assistant`), and a screen (`src/features/assistant`).
+
+- **The phone is the kitchen's memory, so the phone tells.** The app is local-first: what
+  is on the phone is the truth, and it may be ahead of the cloud. So the function does not
+  read the database. With every question the phone sends the kitchen as a few hundred
+  lines of text (`brief.ts`), and the function keeps nothing.
+- **Refs, not ids, and no names.** Dishes are "D1", "D2" for one request. The assistant is
+  told "you cook" and "your partner cooks". Notes, comments and photos never go along.
+- **Whole recipes only where needed.** The recipe book goes along as one line per dish.
+  The recipes of dishes a question names go along at once. For any other one the assistant
+  answers with `look`, and the app sends it and asks again, once: a tool call, done by
+  the phone.
+- **He offers, a person taps.** Under an answer there can be up to four buttons: plan,
+  propose, open a dish, things for the basket or the pantry, a recipe into the dish form, a
+  place in the app. The instructions say to write what a button will do, never that it is
+  done. The function drops every offer the kitchen cannot honour, and the app does the
+  work through the same actions as every other screen.
+- **He knows the app from a guide in the repository** (`APP_GUIDE`), not from guessing.
+  The guide is a list of plain sentences next to the instructions, and changing the app
+  means changing it.
+- **A recipe he writes becomes a dish the usual way.** "Put it in the recipe book" sends
+  his own answer through the recipe card skill (`recipe-from-text`) and opens the dish
+  form filled in, to look over and save.
+- **The talk stays on the phone**, per person, the last 60 things said. Twelve of them go
+  along with a question. "Start over" wipes it.
+- **No streaming.** Answers are short, and one answer in one piece keeps the function, the
+  pretend cloud and the tests the same simple shape as every other job.
+- **Cost:** the tickets (40 a day per kitchen) are shared with Fork's other jobs, and a
+  question that needs a recipe first takes two. If the talk makes that tight, the number
+  is one line in a migration. A stronger model for the talk alone is one secret
+  (`AI_MODEL_CHAT`).
+
 ## Limits to know
 
 | Limit | Value | What happens at the limit |

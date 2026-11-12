@@ -11,6 +11,7 @@ import { zurichHour } from '../../lib/dates'
 import { AwningHeader, Avatar, Button, Card, EmptyState, HeartMeter, Screen, Stat, StatusBubble, SyncPill, Tag, toast } from '../../ui/components'
 import { Mascot } from '../../ui/deco/Deco'
 import { Icon } from '../../ui/deco/Icon'
+import { ForkButton } from '../assistant'
 import { BasketButton } from '../basket'
 import { Bell } from '../news'
 import { EarlyProof, EatenToday, PhotoWallCard } from '../review'
@@ -191,6 +192,7 @@ export function TodayScreen() {
           <div className="flex w-full items-center justify-between gap-3">
             <SyncPill status={status} />
             <span className="flex items-center gap-2">
+              <ForkButton />
               <BasketButton />
               <Bell />
             </span>

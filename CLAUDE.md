@@ -68,6 +68,13 @@ config and the screenshot tool read the same variable).
   Calories a page does not give are estimated from the ingredients and always marked
   (`nutritionEstimated` on the card, "This is an estimate" in the form); the same sum is
   the job `nutrition-estimate` behind "Let Fork estimate" in the dish form.
+- **Ask Fork (the assistant):** `src/features/assistant`. `brief.ts` turns the kitchen into
+  the lines the phone sends with every question (refs like "D12", no names, no notes),
+  `ask.ts` asks (and answers a `look` with whole recipes, once), `talk.ts` keeps the talk in
+  localStorage per person. On the server: `skills/assistant.ts`, with `APP_GUIDE`, the
+  description of the app the assistant answers from. **Change a screen, a button or a rule
+  and you change its line in `APP_GUIDE`.** The assistant only offers (`offers`): the app
+  does the work on a tap, through `actions.ts`.
 - **Basket and pantry:** two synced tables that came later (`LATER_TABLES` in `types.ts`,
   migration 0009). A cloud without them makes their changes wait (`SyncStatus.later`), never
   refuses them. The rules (same thing, adding, clearing into the pantry) are pure functions in

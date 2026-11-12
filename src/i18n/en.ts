@@ -77,6 +77,8 @@ export const en = {
     linkHint: 'Pinterest or any recipe site',
     basket: 'Something for the basket',
     basketHint: 'The shopping list you share',
+    fork: 'Ask Fork',
+    forkHint: 'Cooking, your kitchen, this app',
   },
   demo: { banner: 'Demo kitchen. Nothing here is real.', leave: 'Leave the demo', enter: 'Peek into a demo kitchen' },
 }

@@ -97,6 +97,7 @@ for (const lang of ['en', 'de'] as const) {
       ['kitchen news', '/news'],
       ['basket', '/basket'],
       ['pantry', '/basket?view=pantry'],
+      ['ask Fork', '/fork'],
       ['dish in numbers', `/cockpit/dish/${ids.dish}`],
       ['Settings', '/settings'],
       ['my profile', '/settings/profile'],

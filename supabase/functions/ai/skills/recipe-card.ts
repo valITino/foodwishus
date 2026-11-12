@@ -26,6 +26,8 @@ export interface CardRequest {
   data: string | null
   /** The page's text, used when there is no data. */
   text: string | null
+  /** The text is no page: it is a recipe somebody wrote out in a talk. */
+  written?: boolean
 }
 
 export const CARD_SCHEMA = {
@@ -99,6 +101,7 @@ export const recipeCardSkill = {
   user(request: CardRequest): string {
     const from = request.site ? `Found on: ${request.site}\n\n` : ''
     if (request.data) return `${from}The page's own recipe data (JSON, as published for search engines):\n\n<material>\n${request.data}\n</material>`
+    if (request.written) return `A recipe as it was written out in a talk, possibly with a few words around it:\n\n<material>\n${request.text ?? ''}\n</material>`
     return `${from}The text of the page (menus and footers removed, possibly with leftovers around the recipe):\n\n<material>\n${request.text ?? ''}\n</material>`
   },
 

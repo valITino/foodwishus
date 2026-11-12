@@ -1,6 +1,6 @@
 # The kitchen's helper
 
-One function, four jobs, each with its own instruction file (see "Skills" below):
+One function, six jobs, each with its own instruction file (see "Skills" below):
 
 | Job | In the app | What it gets | What it answers |
 | --- | --- | --- | --- |
@@ -8,10 +8,13 @@ One function, four jobs, each with its own instruction file (see "Skills" below)
 | `shopping-check` | Basket, Check the plan (and by itself when the plan changes) | the planned meals with their ingredients, what was cooked lately, the pantry, the basket | what to buy, each with an amount and a reason |
 | `pantry-notes` | Pantry, Tell Fork what is there | one sentence about what is at home | pantry lines to look over |
 | `nutrition-estimate` | Dish form, Calories, Let Fork estimate | a dish's name, servings and ingredient lines | calories, protein, carbs and fat per serving, as an estimate |
+| `assistant` | Ask Fork (the fork on Today, and in **+**) | a question, the talk before it, and the kitchen in lines | an answer in words, and up to four buttons to tap |
+| `recipe-from-text` | Ask Fork, Put it in the recipe book | a recipe the assistant wrote out in a talk | a recipe card for the dish form |
 
 None of them writes to the kitchen. A card fills a form, suggestions wait on the basket
-for a person to accept, pantry lines are shown before they are saved, and an estimate
-fills the form's four number fields with "This is an estimate" switched on.
+for a person to accept, pantry lines are shown before they are saved, an estimate
+fills the form's four number fields with "This is an estimate" switched on, and the
+assistant only ever offers buttons: a tap on one is what does it, in the app.
 
 ## Recipes from a link
 
@@ -62,6 +65,38 @@ How good is it? It is what a careful cook with a nutrition table would arrive at
 for "roughly 600 a plate", not for anything a diet depends on. That is why it is always
 marked as an estimate.
 
+## Ask Fork: the kitchen assistant
+
+In the app: the small fork next to the basket and the bell on Today, or **+**, **Ask Fork**.
+A talk: a question is typed, Fork answers. He is good at three things:
+
+- **Food and cooking.** That is the AI's own knowledge: times, temperatures, substitutions,
+  what goes with what, storing, nutrition.
+- **This kitchen.** With every question the phone sends the kitchen as lines of text: the
+  recipe book (names, course, minutes, tags, how often eaten and how it was liked), what is
+  planned, the wishlist, what was eaten lately, the pantry, the basket. Whole recipes go
+  along for the dishes a question names. For any other dish the assistant can ask
+  (`look`), and the app sends the recipe and asks again, once.
+- **The app.** `APP_GUIDE` in `skills/assistant.ts` describes every tab and button, so
+  "how do I add a recipe from Pinterest" gets the way there, with a button that opens it.
+  **When a screen or a rule changes, change the line in the guide too.**
+
+What he can offer under an answer (at most four buttons): plan a dish for a day and a
+meal, put a dish on the wishlist, open a dish, put things on the basket, note things in
+the pantry, put a recipe he just wrote out into the dish form, open a place in the app.
+The function checks every offer against the kitchen it was sent (a dish that is not in the
+book, a day that is over, a place that does not exist are dropped), and the app turns the
+dish refs back into dishes the moment the answer arrives.
+
+Nothing is kept by the function. The talk lives on the phone that had it (the last 60
+things said, per person), and "Start over" wipes it.
+
+A stronger model for the talk only: set the secret `AI_MODEL_CHAT` (for example to
+`claude-sonnet-5-5`). Without it the talk uses the same model as everything else. One
+question with a well-filled kitchen is about 6,000 tokens in and a few hundred out: well
+under a cent with the default model, around two cents with the larger one. Prices change:
+the pricing page of the Claude Console has today's.
+
 ## What leaves the kitchen, and what does not
 
 - **To the recipe site:** one ordinary page request, like a browser's, without cookies
@@ -76,7 +111,14 @@ marked as an estimate.
   already uses.
 - **To the AI, for an estimate:** the dish's name, its number of servings and its
   ingredient lines.
-- **Never:** who you are, names of people, ratings, notes to each other, photos.
+- **To the AI, for a question to Fork:** the question, the last things said in that talk,
+  and the kitchen in lines: dish names with their course, minutes, tags, calories (only
+  for somebody who has them switched on), how often eaten and how liked; the plan, the
+  wishlist with its hearts, the meals of the last weeks, the pantry, the basket. Whole
+  recipes only for dishes that are asked about.
+- **Never:** who you are, names of people, notes and comments to each other, photos.
+  (The assistant is told "you cook" or "your partner cooks", never a name. Ratings go
+  along only as "liked 4.5 of 5", and only for a question to Fork.)
 - **Stored by the function:** nothing. The database keeps one number per kitchen and
   day: how many questions were asked.
 
@@ -84,14 +126,15 @@ marked as an estimate.
 
 GitHub and Supabase stay free. The AI is paid per use, from the Claude API account whose
 key is set in step 3: with the default model (`claude-haiku-5-5`) one question (a recipe
-read, a plan checked, a sentence sorted, a dish estimated) is well under one cent, and the limit of 40
+read, a plan checked, a sentence sorted, a dish estimated, a question to Fork) is well under one cent, and the limit of 40
 questions a day keeps even a very bad day at a few cents. Prices change: check the pricing page of the Claude Console before relying on this.
 
 ## Without a key it still does something
 
 A page that carries its own recipe data is read without any AI: word for word, in the
 page's language and units. The dish form says so ("Read from the page as it is"). Pages
-without such data, and translating, converting or estimating calories, need the key. So the function can be
+without such data, translating, converting, estimating calories and every question to
+Fork need the key. So the function can be
 deployed first and the key added later, or never.
 
 ## Steps
@@ -149,7 +192,7 @@ Functions, `ai`, Logs) says more:
 | --- | --- | --- |
 | "This page needs the AI helper, and it is not set up for this kitchen yet." | No key is set (step 3), or the function is not deployed (step 2). | Do the missing step. |
 | "The AI helper is not answering right now." | The AI did not answer, or refused the key. The log says `helper did not answer:` with `helper_key` for a refused key (wrong, deleted, or out of credit) and `helper_down` for an outage. | For `helper_key`: check the key and the account in the Claude Console. Otherwise try again later. |
-| "Fork has read 40 pages today, and that is the limit." (on the basket: "Fork has been asked often enough for today") | The day's tickets are used up. All four jobs share them. | Wait until tomorrow (Swiss time). To change the limit, change `per_day` in a new migration and `DAILY_TICKETS` in `contract.ts`. |
+| "Fork has read 40 pages today, and that is the limit." (on the basket: "Fork has been asked often enough for today") | The day's tickets are used up. All six jobs share them. | Wait until tomorrow (Swiss time). To change the limit, change `per_day` in a new migration and `DAILY_TICKETS` in `contract.ts`. |
 | "This phone is not logged in to the kitchen any more." | The device's login is gone or its profile is paused. | Log in again on that phone. |
 | "The page did not answer." | The site was slow, down, or refuses visitors that are not browsers. Some sites do. | Try again, or add the dish by hand: the link is kept as its source. |
 | "Fork found no recipe on that page." | No recipe on it, or a pin without a link behind it. | Open the recipe's own page and use that link. |
@@ -201,6 +244,9 @@ the same way and a change is made in one place:
   since a note), what never to list, how to word a reason.
 - `skills/pantry-notes.ts`: a sentence about what is at home, as pantry lines, without
   converting or guessing.
+- `skills/assistant.ts`: Fork in a talk. Who he is, how to answer, what he may offer and
+  that he never says something is done, when to ask for a recipe first, and the guide to
+  the app.
 - `skills/nutrition.ts`: calories, protein, carbs and fat per serving from ingredient
   lines. What counts (what is eaten: about half of the frying fat, no cooking water),
   usual sizes for "1 onion", how to round, and when not to estimate at all. Its rules are also part of the recipe

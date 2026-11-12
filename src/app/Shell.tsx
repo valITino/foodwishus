@@ -5,6 +5,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { boot, isDemo, leaveDemo, useSyncStatus } from '../data/app'
 import { useMe } from '../data/hooks'
 import { useUnseenNews } from '../data/queries'
+import { AssistantScreen } from '../features/assistant'
 import { BasketScreen, useForkWatch } from '../features/basket'
 import { NewsScreen } from '../features/news'
 import { Onboarding, PausedScreen, usePaused } from '../features/onboarding'
@@ -93,6 +94,16 @@ function AddSheet({ open, onClose, onToday }: { open: boolean; onClose: () => vo
           <span>
             <span className="block text-base font-extrabold">{t.addSheet.menu}</span>
             <span className="block text-xs text-ink-soft">{t.addSheet.menuHint}</span>
+          </span>
+        </button>
+        {/* Not something to add, but where people look for "what else can I do": a question to Fork. */}
+        <button type="button" className={choice} onClick={() => go('/fork')}>
+          <span className="mx-0.5 grid size-10 shrink-0 place-items-center rounded-full bg-blush">
+            <Icon name="note" size={24} />
+          </span>
+          <span>
+            <span className="block text-base font-extrabold">{t.addSheet.fork}</span>
+            <span className="block text-xs text-ink-soft">{t.addSheet.forkHint}</span>
           </span>
         </button>
       </div>
@@ -206,6 +217,7 @@ export function Shell() {
   else if (path.startsWith('/settings')) page = <SettingsRoutes route={route} />
   else if (path === '/news') page = <NewsScreen />
   else if (path === '/basket') page = <BasketScreen route={route} />
+  else if (path === '/fork') page = <AssistantScreen />
   else page = null
 
   // An address that leads nowhere (an old link, a start-screen path after logging in) goes home.

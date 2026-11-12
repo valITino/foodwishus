@@ -4,9 +4,10 @@
 // the pretend cloud exactly as it runs on Supabase.
 
 import { ask, DEFAULT_MODEL, HelperError, type AskFetch } from './claude.ts'
-import { SHOPPING_LIMITS, type HelperAnswer, type HelperFailure, type HelperRequest, type NutritionEstimate, type PantryNotes, type RecipeFromLink, type ShoppingCheck } from './contract.ts'
+import { SHOPPING_LIMITS, type AssistantAsk, type AssistantTurn, type HelperAnswer, type HelperFailure, type HelperRequest, type NutritionEstimate, type PantryNotes, type RecipeFromLink, type RecipeFromText, type ShoppingCheck } from './contract.ts'
 import { cleanLink, hostFamily, PageError, pageMeta, pageText, pinTarget, readPage, readPicture, recipeData, withoutTracking, type FetchLike } from './page.ts'
 import { cardFromData, type Check, type RecipeCard } from './recipe.ts'
+import { ASSISTANT_LIMITS, assistantSkill } from './skills/assistant.ts'
 import { nutritionSkill } from './skills/nutrition.ts'
 import { pantryNotesSkill } from './skills/pantry-notes.ts'
 import { recipeCardSkill } from './skills/recipe-card.ts'
@@ -22,6 +23,8 @@ export interface HelperDeps {
   /** The Claude API key, or null while none is set. */
   apiKey: string | null
   model?: string
+  /** Another model for the assistant's talk, when the owner wants a stronger one there. */
+  chatModel?: string
   /**
    * Checks that the caller sits in a kitchen and takes one of today's tickets. Gets the
    * request's Authorization header and the project key the app sent along with it.
@@ -62,6 +65,43 @@ function parse(body: unknown): HelperRequest | null {
     if (servings < 1 || servings > 99) return null
     return { job: 'nutrition-estimate', lang, name: typeof raw.name === 'string' ? raw.name.replace(/\s+/g, ' ').trim().slice(0, 80) : '', servings, ingredients: lines(raw.ingredients, 60, 140) }
   }
+  const knownTags = Array.isArray(raw.knownTags) ? raw.knownTags.filter((tag): tag is string => typeof tag === 'string' && tag.length <= 24).slice(0, 40) : []
+  if (raw.job === 'assistant') {
+    const turns: AssistantTurn[] = []
+    for (const entry of Array.isArray(raw.turns) ? raw.turns.slice(-ASSISTANT_LIMITS.turns) : []) {
+      if (entry === null || typeof entry !== 'object') continue
+      const turn = entry as Record<string, unknown>
+      const text = typeof turn.text === 'string' ? turn.text.trim().slice(0, turn.who === 'fork' ? ASSISTANT_LIMITS.answer : ASSISTANT_LIMITS.turn) : ''
+      if (text !== '' && (turn.who === 'me' || turn.who === 'fork')) turns.push({ who: turn.who, text })
+    }
+    // A talk ends with the person's question, or there is nothing to answer.
+    if (turns.at(-1)?.who !== 'me') return null
+    const kitchen = raw.kitchen !== null && typeof raw.kitchen === 'object' ? (raw.kitchen as Record<string, unknown>) : {}
+    if (typeof kitchen.today !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(kitchen.today)) return null
+    const L = ASSISTANT_LIMITS
+    return {
+      job: 'assistant',
+      lang,
+      turns,
+      kitchen: {
+        today: kitchen.today,
+        weekday: typeof kitchen.weekday === 'string' && /^[A-Za-z]{3,12}$/.test(kitchen.weekday) ? kitchen.weekday : '',
+        calories: kitchen.calories === true,
+        dishes: lines(kitchen.dishes, L.dishes, L.line),
+        plan: lines(kitchen.plan, L.plan, L.line),
+        wishes: lines(kitchen.wishes, L.wishes, L.line),
+        eaten: lines(kitchen.eaten, L.eaten, L.line),
+        pantry: lines(kitchen.pantry, L.pantry, 160),
+        basket: lines(kitchen.basket, L.basket, 130),
+      },
+      // Recipes keep their line breaks: they are read as ingredients and steps.
+      recipes: Array.isArray(raw.recipes) ? raw.recipes.filter((recipe): recipe is string => typeof recipe === 'string' && recipe.trim() !== '').map((recipe) => recipe.trim().slice(0, L.recipe)).slice(0, L.recipes) : [],
+    }
+  }
+  if (raw.job === 'recipe-from-text') {
+    if (typeof raw.text !== 'string' || raw.text.trim().length < 20 || raw.text.length > 6000) return null
+    return { job: 'recipe-from-text', lang, text: raw.text.trim(), nutrition: raw.nutrition === true, knownTags }
+  }
   if (raw.job !== 'recipe-from-link' || typeof raw.link !== 'string' || raw.link.length > 2000) return null
   return {
     job: 'recipe-from-link',
@@ -72,7 +112,7 @@ function parse(body: unknown): HelperRequest | null {
     photo: raw.photo !== false,
     // An app from before this switch does not send it: for that app nothing is estimated.
     nutrition: raw.nutrition === true,
-    knownTags: Array.isArray(raw.knownTags) ? raw.knownTags.filter((tag): tag is string => typeof tag === 'string' && tag.length <= 24).slice(0, 40) : [],
+    knownTags,
   }
 }
 
@@ -146,9 +186,10 @@ async function recipeFromLink(request: RecipeFromLink, deps: HelperDeps, left: n
 }
 
 /** One question to the helper for a job that is nothing without it. Null: it did not answer. */
-async function askSkill(deps: HelperDeps, skill: { system: string; user: string; schema: unknown; maxTokens: number }): Promise<unknown | null> {
+async function askSkill(deps: HelperDeps, skill: { system: string; user: string; schema: unknown; maxTokens: number; before?: { role: 'user' | 'assistant'; content: string }[]; model?: string }): Promise<unknown | null> {
   try {
-    return await ask({ apiKey: deps.apiKey as string, model: deps.model ?? DEFAULT_MODEL, ...skill }, deps.askFetch)
+    const { model, ...question } = skill
+    return await ask({ apiKey: deps.apiKey as string, model: model ?? deps.model ?? DEFAULT_MODEL, ...question }, deps.askFetch)
   } catch (error) {
     if (!(error instanceof HelperError)) throw error
     console.warn('helper did not answer:', error.message)
@@ -186,6 +227,28 @@ async function nutritionEstimate(request: NutritionEstimate, deps: HelperDeps, l
   return { ok: true, ...read, left }
 }
 
+/** A question to Fork, the kitchen assistant. The phone brings the kitchen along; nothing is kept here. */
+async function assistant(request: AssistantAsk, deps: HelperDeps, left: number): Promise<HelperAnswer> {
+  if (!deps.apiKey) return { ok: false, code: 'helper_off' }
+  const skill = assistantSkill
+  const answer = await askSkill(deps, { system: skill.system(request), before: skill.history(request.turns), user: skill.user(request), schema: skill.schema, maxTokens: skill.maxTokens, model: deps.chatModel })
+  const read = answer === null ? null : skill.read(answer, request)
+  return read ? { ok: true, ...read, left } : { ok: false, code: 'helper_down' }
+}
+
+/** A recipe the assistant wrote out in words, as a card for the dish form. */
+async function recipeFromText(request: RecipeFromText, deps: HelperDeps, left: number): Promise<HelperAnswer> {
+  if (!deps.apiKey) return { ok: false, code: 'helper_off' }
+  const skill = recipeCardSkill
+  const ask_ = { lang: request.lang, translate: true, metric: true, nutrition: request.nutrition, knownTags: request.knownTags, site: null, data: null, text: request.text, written: true }
+  const answer = await askSkill(deps, { system: skill.system(ask_), user: skill.user(ask_), schema: skill.schema, maxTokens: skill.maxTokens })
+  if (answer === null) return { ok: false, code: 'helper_down' }
+  let card = skill.read(answer)
+  if (!card) return { ok: false, code: 'not_a_recipe' }
+  if (card.nutritionEstimated && !request.nutrition) card = { ...card, kcalPerServing: null, proteinPerServing: null, carbsPerServing: null, fatPerServing: null, nutritionEstimated: false }
+  return { ok: true, card: withServingsCheck(withEstimateCheck(card, request.lang), request.lang), left }
+}
+
 /** The handler. Every expected outcome is an answer with status 200; only a broken request is not. */
 export function helperHandler(deps: HelperDeps): (request: Request) => Promise<Response> {
   return async (request) => {
@@ -210,6 +273,8 @@ export function helperHandler(deps: HelperDeps): (request: Request) => Promise<R
       if (asked.job === 'shopping-check') return json(await shoppingCheck(asked, deps, ticket.left))
       if (asked.job === 'pantry-notes') return json(await pantryNotes(asked, deps, ticket.left))
       if (asked.job === 'nutrition-estimate') return json(await nutritionEstimate(asked, deps, ticket.left))
+      if (asked.job === 'assistant') return json(await assistant(asked, deps, ticket.left))
+      if (asked.job === 'recipe-from-text') return json(await recipeFromText(asked, deps, ticket.left))
       return json(await recipeFromLink(asked, deps, ticket.left))
     } catch (error) {
       if (error instanceof PageError) return refuse(error.code)
