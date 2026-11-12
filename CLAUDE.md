@@ -75,6 +75,12 @@ config and the screenshot tool read the same variable).
   description of the app the assistant answers from. **Change a screen, a button or a rule
   and you change its line in `APP_GUIDE`.** The assistant only offers (`offers`): the app
   does the work on a tap, through `actions.ts`.
+- **Photos for Fork:** picked for one question, shrunk on the phone
+  (`photoForHelper` in `src/data/photos.ts`), sent as base64, kept nowhere. The picking
+  parts are shared (`src/features/assistant/photos.tsx`); the three places are the pantry
+  (`pantry-photo`), the recipe reader (`recipe-from-photo`) and Ask Fork (`photos` on the
+  question). Limits live in `PHOTO_LIMITS` (contract). The stand-in cannot see: it tells
+  one photo from several and a blank one (tiny) from a real one.
 - **Basket and pantry:** two synced tables that came later (`LATER_TABLES` in `types.ts`,
   migration 0009). A cloud without them makes their changes wait (`SyncStatus.later`), never
   refuses them. The rules (same thing, adding, clearing into the pantry) are pure functions in

@@ -43,4 +43,8 @@ describe("the helper's answer, whichever way it arrives", () => {
     expect(await outcome(null, failed(new Response('<html>Teapot</html>', { status: 418 })))).toBe('rejected:helper_down')
     expect(await outcome(null, { name: 'FunctionsFetchError', message: 'Failed to send a request to the Edge Function' })).toBe('network:offline')
   })
+
+  it('knows a request the gateway found too large: photos that are more than it lets through', async () => {
+    expect(await outcome(null, failed(new Response('<html>Request Entity Too Large</html>', { status: 413 })))).toBe('rejected:too_big')
+  })
 })

@@ -9,6 +9,8 @@ export interface Ask {
   /** A talk that went before, for jobs that are one: the person first, the two taking turns. */
   before?: { role: 'user' | 'assistant'; content: string }[]
   user: string
+  /** Pictures for the model to look at. They go in front of the words, which is how it reads them best. */
+  images?: { type: string; base64: string }[]
   /** JSON Schema the answer has to match (structured outputs). */
   schema: unknown
   maxTokens: number
@@ -42,7 +44,7 @@ export async function ask(request: Ask, fetch: AskFetch): Promise<unknown> {
         model: request.model,
         max_tokens: request.maxTokens,
         system: request.system,
-        messages: [...(request.before ?? []), { role: 'user', content: request.user }],
+        messages: [...(request.before ?? []), { role: 'user', content: request.images?.length ? [...request.images.map((image) => ({ type: 'image', source: { type: 'base64', media_type: image.type, data: image.base64 } })), { type: 'text', text: request.user }] : request.user }],
         output_config: { format: { type: 'json_schema', schema: request.schema } },
       }),
       signal: AbortSignal.timeout(request.timeoutMs ?? 45_000),

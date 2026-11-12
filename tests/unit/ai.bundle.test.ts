@@ -82,7 +82,7 @@ describe('the one file that gets deployed as the helper', () => {
     expect([...new Set([...bundle.matchAll(/Deno\.env\.get\("(\w+)"\)/g)].map(([, name]) => name))].sort()).toEqual(['AI_MODEL', 'AI_MODEL_CHAT', 'ANTHROPIC_API_KEY', 'SUPABASE_ANON_KEY', 'SUPABASE_URL'])
     // Readable: not minified.
     expect(bundle.split('\n').length).toBeGreaterThan(400)
-    // Six jobs and their instructions, the guide to the app among them. Much more than this would mean something else got bundled in.
+    // Eight jobs and their instructions, the guide to the app among them. Much more than this would mean something else got bundled in.
     expect(bundle.length).toBeLessThan(90_000)
   })
 

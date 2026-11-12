@@ -59,6 +59,39 @@ export interface NutritionEstimate {
   ingredients: string[]
 }
 
+/**
+ * A photo for the helper to look at: taken or chosen for exactly that, shrunk on the phone,
+ * handed on to the AI and kept nowhere.
+ */
+export interface HelperPhoto {
+  type: 'image/jpeg' | 'image/png' | 'image/webp'
+  /** The picture's bytes in base64, without a "data:" prefix. */
+  base64: string
+}
+
+/** How many photos a request can bring, and how big they can be (as base64: a third more than the bytes). */
+export const PHOTO_LIMITS = { photos: 4, withQuestion: 3, each: 1_400_000, all: 4_200_000 }
+
+/** What is at home, from photos of it: the fridge, a shelf, or single things. */
+export interface PantryPhoto {
+  job: 'pantry-photo'
+  lang: 'en' | 'de'
+  photos: HelperPhoto[]
+  /** The names the pantry already uses. */
+  known: string[]
+}
+
+/** A recipe from photos of it: a page of a cookbook, a handwritten card, a screenshot. Several photos are several pages of one recipe. */
+export interface RecipeFromPhoto {
+  job: 'recipe-from-photo'
+  lang: 'en' | 'de'
+  photos: HelperPhoto[]
+  translate: boolean
+  metric: boolean
+  nutrition: boolean
+  knownTags: string[]
+}
+
 /** One thing said in the talk with the kitchen assistant. */
 export interface AssistantTurn {
   who: 'me' | 'fork'
@@ -98,6 +131,8 @@ export interface AssistantAsk {
   kitchen: KitchenBrief
   /** Whole recipes, each starting with its ref: the ones named in the question, and the ones the assistant asked to see. */
   recipes: string[]
+  /** Photos that come with this question, for the assistant to look at. Photos of earlier questions are not sent again. */
+  photos?: HelperPhoto[]
 }
 
 /** A recipe written out in words (by the assistant, in a talk) as a card for the dish form. */
@@ -109,7 +144,7 @@ export interface RecipeFromText {
   knownTags: string[]
 }
 
-export type HelperRequest = RecipeFromLink | ShoppingCheck | PantryNotes | NutritionEstimate | AssistantAsk | RecipeFromText
+export type HelperRequest = RecipeFromLink | ShoppingCheck | PantryNotes | NutritionEstimate | AssistantAsk | RecipeFromText | PantryPhoto | RecipeFromPhoto
 
 export type HelperFailure =
   | 'bad_request'
@@ -119,7 +154,7 @@ export type HelperFailure =
   | 'bad_link' // nothing in the text looks like a web address
   | 'blocked' // an address that is not a public page
   | 'unreachable' // the page did not answer
-  | 'too_big'
+  | 'too_big' // a page that is too long to read, or photos that are too many or too large
   | 'not_a_page' // a PDF, a picture, a download
   | 'not_a_recipe' // a page, but no recipe on it
   | 'not_enough' // too little to go on (an estimate without amounts, or without ingredients)
@@ -205,16 +240,25 @@ export interface RecipeFromTextResult {
   left: number
 }
 
+export interface PantryPhotoResult {
+  ok: true
+  /** What could be made out, to look over before anything is saved. */
+  lines: { name: string; amount: string | null }[]
+  /** What could not be made out, when that is worth saying. */
+  note: string
+  left: number
+}
+
 export interface HelperRefusal {
   ok: false
   code: HelperFailure
 }
 
-export type HelperResult = RecipeFromLinkResult | ShoppingCheckResult | PantryNotesResult | NutritionEstimateResult | AssistantResult | RecipeFromTextResult
+export type HelperResult = RecipeFromLinkResult | ShoppingCheckResult | PantryNotesResult | NutritionEstimateResult | AssistantResult | RecipeFromTextResult | PantryPhotoResult
 export type HelperAnswer = HelperResult | HelperRefusal
 
 /** The answer each job gets. */
-export type ResultOf<R extends HelperRequest> = R extends RecipeFromLink ? RecipeFromLinkResult : R extends ShoppingCheck ? ShoppingCheckResult : R extends PantryNotes ? PantryNotesResult : R extends NutritionEstimate ? NutritionEstimateResult : R extends AssistantAsk ? AssistantResult : R extends RecipeFromText ? RecipeFromTextResult : never
+export type ResultOf<R extends HelperRequest> = R extends RecipeFromLink ? RecipeFromLinkResult : R extends ShoppingCheck ? ShoppingCheckResult : R extends PantryNotes ? PantryNotesResult : R extends NutritionEstimate ? NutritionEstimateResult : R extends AssistantAsk ? AssistantResult : R extends RecipeFromText ? RecipeFromTextResult : R extends PantryPhoto ? PantryPhotoResult : R extends RecipeFromPhoto ? RecipeFromTextResult : never
 
 /** What a kitchen can send per request: enough for a full week and a full pantry, not for a book. */
 export const SHOPPING_LIMITS = { meals: 30, cooked: 20, pantry: 200, basket: 100, line: 600, text: 2000, known: 200, items: 20 }

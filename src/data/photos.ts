@@ -48,6 +48,31 @@ export async function prepareImage(file: Blob): Promise<PreparedImage> {
   }
 }
 
+const HELPER_EDGE = 1600
+const HELPER_BYTES = 700 * 1024
+
+/**
+ * A photo for Fork to look at (a fridge, a recipe page): shrunk to 1600 px on the long
+ * edge and under about 700 KB, as base64. It is sent with one question and kept nowhere.
+ * Rejects when the file is no picture this browser can read.
+ */
+export async function photoForHelper(file: Blob): Promise<{ type: 'image/jpeg'; base64: string }> {
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  try {
+    let shrunk = await render(bitmap, HELPER_EDGE, 0.82)
+    for (const quality of [0.7, 0.6, 0.5]) {
+      if (shrunk.blob.size <= HELPER_BYTES) break
+      shrunk = await render(bitmap, HELPER_EDGE, quality)
+    }
+    const bytes = new Uint8Array(await shrunk.blob.arrayBuffer())
+    let binary = ''
+    for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000))
+    return { type: 'image/jpeg', base64: btoa(binary) }
+  } finally {
+    bitmap.close()
+  }
+}
+
 export interface AddPhotoInput {
   kind: PhotoKind
   source: PhotoSource

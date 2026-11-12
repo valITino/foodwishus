@@ -8,7 +8,7 @@ const en = {
   title: 'Ask Fork',
   entry: 'Ask Fork, the kitchen assistant',
   hello: 'I am Fork. Ask me about cooking, about your kitchen, or about this app.',
-  about: 'Fork gets help from an AI (Claude). With each question it gets your dishes, plans, wishes, pantry and basket. No names, no notes, no photos. Nothing changes unless you tap a button.',
+  about: 'Fork gets help from an AI (Claude). With each question it gets your dishes, plans, wishes, pantry and basket. No names, no notes, and no photo unless you add one to a question. Nothing changes unless you tap a button.',
   ideasLabel: 'For example',
   ideas: ['What can I cook with what is at home?', 'How long does an egg take?', 'How do I add a recipe from Pinterest?', 'Give me a recipe for carbonara'],
   talk: 'The talk',
@@ -33,8 +33,10 @@ const en = {
     not_signed_in: 'This phone is not logged in to the kitchen any more. Log in again, then ask.',
     bad_request: 'The app and the helper do not understand each other. Update the app, then ask again.',
     not_a_recipe: 'Fork could not make a dish of that answer. Ask for the recipe again, with amounts and steps.',
+    bad_photo: 'One of these is not a picture this phone can read. Take the photo with the camera.',
+    too_big: 'That is too much at once. Send fewer photos.',
     other: 'That did not work. Ask again in a moment.',
-  } as Record<'offline' | 'demo' | 'helper_off' | 'helper_down' | 'limit' | 'not_signed_in' | 'bad_request' | 'not_a_recipe' | 'other', string>,
+  } as Record<'offline' | 'demo' | 'helper_off' | 'helper_down' | 'limit' | 'not_signed_in' | 'bad_request' | 'not_a_recipe' | 'bad_photo' | 'too_big' | 'other', string>,
   offers: {
     plan: (dish: string, when: string) => `Plan ${dish} for ${when}`,
     planned: (when: string) => `Planned for ${when}`,
@@ -66,6 +68,16 @@ const en = {
     } as Record<AssistantPlace, string>,
   },
   fromFork: 'Fork',
+  // Photos to show Fork. The pantry and the recipe reader use the same words.
+  photos: {
+    take: 'Take a photo',
+    choose: 'Choose photos',
+    shown: (n: number, of: number) => `Photo ${n} of ${of}`,
+    remove: (n: number) => `Remove photo ${n}`,
+  },
+  addPhoto: 'Add a photo',
+  photoQuestion: (n: number): string => (n === 1 ? 'What is on this photo?' : 'What is on these photos?'),
+  withPhotos: (n: number) => (n === 1 ? 'With 1 photo' : `With ${n} photos`),
 }
 
 export type AssistantCopy = typeof en
@@ -74,7 +86,7 @@ const de: AssistantCopy = {
   title: 'Fork fragen',
   entry: 'Fork fragen, den Küchenhelfer',
   hello: 'Ich bin Fork. Frag mich etwas zum Kochen, zu eurer Küche oder zu dieser App.',
-  about: 'Fork holt sich Hilfe bei einer KI (Claude). Mit jeder Frage bekommt sie eure Gerichte, Pläne, Wünsche, den Vorrat und den Korb. Keine Namen, keine Notizen, keine Fotos. Es ändert sich nichts, solange du nicht auf einen Knopf tippst.',
+  about: 'Fork holt sich Hilfe bei einer KI (Claude). Mit jeder Frage bekommt sie eure Gerichte, Pläne, Wünsche, den Vorrat und den Korb. Keine Namen, keine Notizen, und ein Foto nur, wenn du es an eine Frage hängst. Es ändert sich nichts, solange du nicht auf einen Knopf tippst.',
   ideasLabel: 'Zum Beispiel',
   ideas: ['Was kann ich kochen mit dem, was da ist?', 'Wie lange braucht ein Ei?', 'Wie füge ich ein Rezept von Pinterest hinzu?', 'Gib mir ein Rezept für Carbonara'],
   talk: 'Das Gespräch',
@@ -99,6 +111,8 @@ const de: AssistantCopy = {
     not_signed_in: 'Dieses Handy ist nicht mehr in der Küche angemeldet. Melde dich wieder an und frag dann.',
     bad_request: 'Die App und der Helfer verstehen sich nicht. Aktualisiere die App und frag dann nochmal.',
     not_a_recipe: 'Aus dieser Antwort konnte Fork kein Gericht machen. Frag nochmal nach dem Rezept, mit Mengen und Schritten.',
+    bad_photo: 'Eines davon ist kein Bild, das dieses Handy lesen kann. Mach das Foto mit der Kamera.',
+    too_big: 'Das ist zu viel auf einmal. Schick weniger Fotos.',
     other: 'Das hat nicht geklappt. Frag gleich nochmal.',
   },
   offers: {
@@ -132,6 +146,15 @@ const de: AssistantCopy = {
     },
   },
   fromFork: 'Fork',
+  photos: {
+    take: 'Foto machen',
+    choose: 'Fotos wählen',
+    shown: (n, of) => `Foto ${n} von ${of}`,
+    remove: (n) => `Foto ${n} entfernen`,
+  },
+  addPhoto: 'Foto dazu',
+  photoQuestion: (n) => (n === 1 ? 'Was ist auf diesem Foto?' : 'Was ist auf diesen Fotos?'),
+  withPhotos: (n) => (n === 1 ? 'Mit 1 Foto' : `Mit ${n} Fotos`),
 }
 
 export const assistantCopy = { en, de }

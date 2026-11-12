@@ -2,14 +2,15 @@
 // tells him with every question) and the app. He never changes anything himself: under an
 // answer there can be buttons, and a tap on one is what does it.
 
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { navigate } from '../../app/router'
 import { isDemo } from '../../data/app'
+import { PHOTO_LIMITS } from '../../data/backend'
 import { notePantry, planServing, proposeServing, putOnBasket } from '../../data/actions'
 import { cardFromText, mostUsedTags, readProblem, type ReadProblem } from '../../data/helper'
 import { usePref } from '../../data/prefs'
 import { useCopy, useLang, useT } from '../../i18n'
-import { Button, Card, Chip, PageHeader, Screen, Sheet, TextArea, toast } from '../../ui/components'
+import { Button, Card, Chip, IconButton, PageHeader, Screen, Sheet, TextArea, toast } from '../../ui/components'
 import { Mascot } from '../../ui/deco/Deco'
 import { Icon } from '../../ui/deco/Icon'
 import { defaultCook } from '../planning/logic'
@@ -17,6 +18,7 @@ import { StickyFooter, useKitchen, useWhen, type Kitchen } from '../planning/sha
 import { draftFromCard, handOver } from '../recipes/importLogic'
 import { askAbout } from './ask'
 import { assistantCopy, PLACE_ROUTES, problemWords, type AssistantCopy } from './copy'
+import { PhotoStrip, usePickedPhotos } from './photos'
 import { loadTalk, saveTalk, turnId, type Offer, type Turn } from './talk'
 
 /** The entry on Today, next to the basket and the bell. */
@@ -96,6 +98,9 @@ export function AssistantScreen() {
   const [text, setText] = useState('')
   /** The question that is on its way. It joins the talk when its answer is there. */
   const [waiting, setWaiting] = useState<string | null>(null)
+  /** Photos to go with the next question: of the fridge, of a recipe, of a dish. */
+  const photos = usePickedPhotos(PHOTO_LIMITS.withQuestion)
+  const photoInput = useRef<HTMLInputElement>(null)
   const [problem, setProblem] = useState<{ why: ReadProblem; question: string } | null>(null)
   const [left, setLeft] = useState<number | null>(null)
   const [working, setWorking] = useState<string | null>(null)
@@ -138,18 +143,22 @@ export function AssistantScreen() {
   }
 
   async function ask(question: string) {
-    const asked = question.trim()
+    const shown = photos.picked
+    // A photo without words is a question too: what is on it?
+    const asked = question.trim() || (shown.length > 0 ? c.photoQuestion(shown.length) : '')
     if (!asked || waiting !== null || !kitchen) return
     setText('')
     setProblem(null)
     setWaiting(asked)
     const before = turns ?? []
     try {
-      const answer = await askAbout(before, asked, { meId: kitchen.meId, lang, calories: showCalories })
+      const answer = await askAbout(before, asked, { meId: kitchen.meId, lang, calories: showCalories }, shown.map((photo) => photo.file))
       if (!here.current) return
-      const said: Turn[] = [{ id: turnId(), who: 'me', text: asked }, { id: turnId(), who: 'fork', text: answer.text, offers: answer.offers }]
+      const said: Turn[] = [{ id: turnId(), who: 'me', text: asked, ...(shown.length > 0 ? { photos: shown.length } : {}) }, { id: turnId(), who: 'fork', text: answer.text, offers: answer.offers }]
       change((talk) => [...talk, ...said])
       setLeft(answer.left)
+      // The photos went with this question. They are let go, and were never kept.
+      photos.clear()
     } catch (error) {
       if (!here.current) return
       // The question is not lost: it waits in the note, one tap from being asked again.
@@ -161,6 +170,12 @@ export function AssistantScreen() {
   function submit(event: FormEvent) {
     event.preventDefault()
     void ask(text)
+  }
+
+  function pickPhotos(event: ChangeEvent<HTMLInputElement>) {
+    const files = [...(event.target.files ?? [])]
+    event.target.value = ''
+    photos.add(files)
   }
 
   /** A button was tapped: now the app does it, and the button turns into what came of it. */
@@ -230,7 +245,7 @@ export function AssistantScreen() {
           ) : undefined
         }
       />
-      <main className="app-column flex flex-col gap-4 px-4 pb-48 pt-4">
+      <main className={`app-column flex flex-col gap-4 px-4 pt-4 ${photos.picked.length > 0 ? 'pb-72' : 'pb-48'}`}>
         <div className="flex items-start gap-3">
           <Mascot size={56} mood="happy" label="" className="shrink-0" />
           <p className="min-w-0 flex-1 pt-1 text-sm font-bold">{c.hello}</p>
@@ -259,6 +274,11 @@ export function AssistantScreen() {
                 <li key={turn.id} className="ml-10 self-end rounded-card bg-blush px-4 py-2.5" data-testid="said-me">
                   <span className="sr-only">{c.you}: </span>
                   <p className="whitespace-pre-line break-words text-sm font-bold">{turn.text}</p>
+                  {turn.photos ? (
+                    <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold">
+                      <Icon name="camera" size={15} /> {c.withPhotos(turn.photos)}
+                    </p>
+                  ) : null}
                 </li>
               ) : (
                 <li key={turn.id} className="mr-6">
@@ -285,6 +305,11 @@ export function AssistantScreen() {
               <li className="ml-10 self-end rounded-card bg-blush px-4 py-2.5 opacity-70" data-testid="said-me">
                 <span className="sr-only">{c.you}: </span>
                 <p className="whitespace-pre-line break-words text-sm font-bold">{waiting}</p>
+                {photos.picked.length > 0 && (
+                  <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold">
+                    <Icon name="camera" size={15} /> {c.withPhotos(photos.picked.length)}
+                  </p>
+                )}
               </li>
             )}
           </ol>
@@ -315,9 +340,16 @@ export function AssistantScreen() {
       </main>
 
       <StickyFooter>
+        {photos.picked.length > 0 && waiting === null && (
+          <div className="mb-3 pt-1">
+            <PhotoStrip picked={photos.picked} words={c.photos} onRemove={photos.remove} size={64} />
+          </div>
+        )}
         <form onSubmit={submit} className="flex items-end gap-2">
+          <input ref={photoInput} type="file" accept="image/*" multiple hidden data-testid="fork-photo" onChange={pickPhotos} />
+          <IconButton icon="camera" tone="paper" label={c.addPhoto} disabled={photos.full || waiting !== null} onClick={() => photoInput.current?.click()} className="mb-1" />
           <TextArea className="min-w-0 flex-1" label={c.field} placeholder={c.placeholder} rows={2} maxLength={2000} value={text} onChange={(event) => setText(event.target.value)} />
-          <Button type="submit" className="min-h-13 shrink-0 px-5" disabled={!text.trim() || waiting !== null}>
+          <Button type="submit" className="min-h-13 shrink-0 px-4" disabled={(!text.trim() && photos.picked.length === 0) || waiting !== null}>
             {c.ask}
           </Button>
         </form>

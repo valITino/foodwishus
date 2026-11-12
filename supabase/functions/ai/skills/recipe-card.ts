@@ -28,6 +28,8 @@ export interface CardRequest {
   text: string | null
   /** The text is no page: it is a recipe somebody wrote out in a talk. */
   written?: boolean
+  /** The recipe is not text at all: it is in this many photos that come with the request. */
+  pictured?: number
 }
 
 export const CARD_SCHEMA = {
@@ -92,6 +94,13 @@ export const recipeCardSkill = {
             ...NUTRITION_RULES.map((rule) => `  ${rule}`),
           ]
         : ['- Nutrition only as the material states it. 0 means "not given". Never estimate, and nutritionEstimated stays false.']),
+      ...(request.pictured
+        ? [
+            '- The material is photos: a page of a cookbook or a magazine, a handwritten card, a screenshot. Read the recipe from them. Several photos are several pages of one recipe: one card.',
+            '- Print can be small and handwriting hard to read. Where a word or an amount is unclear, write your best reading and add a check that names it ("The amount of sugar is hard to read: 150 g or 180 g."). Never fill a gap with what such a recipe usually has.',
+            '- A photo of a finished dish without its recipe, or of anything else, is not a recipe: isRecipe false.',
+          ]
+        : []),
       '- checks: for example a missing number of servings, an amount like "1 can" without a size, a rough conversion, steps that refer to a video, or a recipe that is cut off. Not for things that are fine.',
       '- If the material is not a recipe for one dish (a list of recipes, a shop, a login page, an article): isRecipe false, and every other field empty or 0.',
       `- Limits: name up to ${LIMITS.name} characters, at most ${LIMITS.lines} ingredient lines and ${LIMITS.steps} steps.`,
@@ -101,6 +110,7 @@ export const recipeCardSkill = {
   user(request: CardRequest): string {
     const from = request.site ? `Found on: ${request.site}\n\n` : ''
     if (request.data) return `${from}The page's own recipe data (JSON, as published for search engines):\n\n<material>\n${request.data}\n</material>`
+    if (request.pictured) return request.pictured === 1 ? 'The recipe is in the photo above.' : `The recipe is in the ${request.pictured} photos above, in this order.`
     if (request.written) return `A recipe as it was written out in a talk, possibly with a few words around it:\n\n<material>\n${request.text ?? ''}\n</material>`
     return `${from}The text of the page (menus and footers removed, possibly with leftovers around the recipe):\n\n<material>\n${request.text ?? ''}\n</material>`
   },

@@ -157,6 +157,21 @@ The talk stays on your phone. **Start over** wipes it. Fork gets help from an AI
 which can be wrong: your names, notes and photos are never sent, and a recipe he writes
 goes through the dish form, where you look it over before it is saved.
 
+### Photos instead of typing
+
+Three things Fork can do from a photo. Each time the photo goes to the AI for that one
+look and is kept nowhere, and each time you see the result before anything is saved.
+
+- **What is at home.** In the pantry, tap **Show Fork a photo** and photograph the open
+  fridge or a shelf, or up to four single things. Fork lists what he can see. Take out
+  what is wrong, then **Put it into the pantry**. He only sees the front row, and amounts
+  only where a label or a count shows them.
+- **A recipe on paper.** **+**, **A recipe from a link or a photo**, then **A photo**:
+  a cookbook page, a handwritten card, a screenshot, up to four pages. The dish form opens
+  filled in, with a note where the writing was hard to read.
+- **With a question.** In **Ask Fork**, the camera button adds up to three photos to a
+  question: "What can I cook with this?", "Put this recipe in my book".
+
 ### The basket and the pantry
 
 The **basket** is the shopping list the two of you share. It lives behind the basket

@@ -107,6 +107,20 @@ const en = {
   tellNothing: 'Fork found nothing for the pantry in that. Write what is there, for example "6 eggs, butter".',
   tellSave: 'Put it into the pantry',
   tellAgain: 'Write it again',
+  // The same from photos: of the open fridge, a shelf, or single things.
+  show: 'Show Fork a photo',
+  showHint: 'One photo of the open fridge or a shelf, or up to four photos of single things. Fork lists what he can see, and you look it over before anything is noted.',
+  showPrivacy: 'The photos go to the AI (Claude) for this one look and are kept nowhere.',
+  showLook: 'Let Fork look',
+  showLooking: 'Fork is looking',
+  showResult: 'This is what Fork can see',
+  showNothing: 'Fork could not make out any food. Try another photo, closer and with more light.',
+  showAgain: 'Other photos',
+  showProblem: {
+    bad_photo: 'One of these is not a picture this phone can read. Take the photo with the camera.',
+    too_big: 'That is too much at once. Show Fork fewer photos.',
+    demo: 'In the demo kitchen Fork cannot look at photos. Add one thing at a time.',
+  },
   tellProblem: {
     offline: 'No connection. Fork needs the internet for this. One thing per line works without.',
     demo: 'In the demo kitchen Fork cannot read sentences. Add one thing at a time.',
@@ -223,6 +237,19 @@ const de: typeof en = {
   tellNothing: 'Darin hat Fork nichts für den Vorrat gefunden. Schreib, was da ist, zum Beispiel «6 Eier, Butter».',
   tellSave: 'In den Vorrat legen',
   tellAgain: 'Nochmal schreiben',
+  show: 'Fork ein Foto zeigen',
+  showHint: 'Ein Foto vom offenen Kühlschrank oder einem Regal, oder bis zu vier Fotos von einzelnen Sachen. Fork listet auf, was er sieht, und du schaust es durch, bevor etwas notiert wird.',
+  showPrivacy: 'Die Fotos gehen für diesen einen Blick an die KI (Claude) und werden nirgends gespeichert.',
+  showLook: 'Fork schauen lassen',
+  showLooking: 'Fork schaut',
+  showResult: 'Das sieht Fork',
+  showNothing: 'Fork hat nichts Essbares erkannt. Probier ein anderes Foto, näher und mit mehr Licht.',
+  showAgain: 'Andere Fotos',
+  showProblem: {
+    bad_photo: 'Eines davon ist kein Bild, das dieses Handy lesen kann. Mach das Foto mit der Kamera.',
+    too_big: 'Das ist zu viel auf einmal. Zeig Fork weniger Fotos.',
+    demo: 'In der Demo-Küche kann Fork keine Fotos anschauen. Füge eine Sache nach der anderen hinzu.',
+  },
   tellProblem: {
     offline: 'Keine Verbindung. Dafür braucht Fork Internet. Eine Sache pro Zeile geht auch ohne.',
     demo: 'In der Demo-Küche kann Fork keine Sätze lesen. Füge eine Sache nach der anderen hinzu.',
@@ -256,6 +283,12 @@ export function fallbackLine(c: BasketCopy, why: ReadProblem | 'emptyPantry'): s
 }
 
 /** The sentence for why Fork could not sort a text into pantry lines. */
+/** The sentence for why Fork could not look at photos of what is at home. */
+export function showProblemLine(c: BasketCopy, why: ReadProblem): string {
+  if (why === 'bad_photo' || why === 'too_big' || why === 'demo') return c.showProblem[why]
+  return tellProblemLine(c, why)
+}
+
 export function tellProblemLine(c: BasketCopy, why: ReadProblem): string {
   if (why === 'offline' || why === 'demo' || why === 'limit' || why === 'helper_off') return c.tellProblem[why]
   if (why === 'not_signed_in' || why === 'not_member') return c.tellProblem.not_signed_in

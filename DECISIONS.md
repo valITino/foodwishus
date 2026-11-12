@@ -396,6 +396,32 @@ helper function (`assistant`), and a screen (`src/features/assistant`).
   is one line in a migration. A stronger model for the talk alone is one secret
   (`AI_MODEL_CHAT`).
 
+## 17. Photos for Fork: the pantry, a recipe, a question
+
+Writing the pantry down is the dull part, and many recipes are on paper. So Fork can be
+shown photos: of the open fridge or single things, of a recipe, or with a question.
+
+- **A photo is picked for one question and kept nowhere.** The phone shrinks it, the
+  function hands it to the AI and forgets it, the talk remembers only "with 1 photo".
+  That keeps the promise the app made before ("no photos") true in the way that matters:
+  no photo leaves the phone that was not picked to be looked at, and the proof photos and
+  dish pictures never do.
+- **Seeing is not knowing.** A fridge photo shows the front row, and amounts only where a
+  label or a count shows them. The instruction says: never list what you do not see, and
+  say what you could not make out. The app never saves what was seen by itself: the lines
+  are shown first, each with a way out, like the lines from a sentence.
+- **One reader for recipes.** A photo of a recipe goes through the same skill as a web
+  page and into the same dish form, with a check where the writing was hard to read.
+  Several photos are the pages of one recipe.
+- **Small on purpose.** 1600 px and about 700 KB per photo, four per request: enough to
+  read a cookbook page, small enough for a mobile connection and for the function. The
+  limits are checked before a ticket is taken.
+- **In the talk, a photo is not sent again.** A later question sees what Fork said about
+  it, not the picture. That is cheaper, and it means the talk on the phone never holds a
+  photo.
+- **Cost:** a wrong reading looks as confident as a right one. That is why nothing here
+  writes to the kitchen, and why the pantry sheet and the dish form stand in between.
+
 ## Limits to know
 
 | Limit | Value | What happens at the limit |

@@ -81,7 +81,7 @@ test('ask Fork from Today: an answer in a talk that is kept, and wiped when aske
     await expect(page).toHaveURL(/#\/fork$/)
     await expect(page.getByRole('heading', { level: 1, name: 'Ask Fork' })).toBeVisible()
     await expect(page.getByText('I am Fork. Ask me about cooking, about your kitchen, or about this app.')).toBeVisible()
-    await expect(page.getByText('Fork gets help from an AI (Claude).')).toContainText('No names, no notes, no photos. Nothing changes unless you tap a button.')
+    await expect(page.getByText('Fork gets help from an AI (Claude).')).toContainText('No names, no notes, and no photo unless you add one to a question. Nothing changes unless you tap a button.')
     // Nothing to send yet, nothing to wipe yet.
     await expect(page.getByRole('button', { name: 'Ask', exact: true })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Start over' })).toHaveCount(0)
