@@ -317,9 +317,9 @@ is not set up yet.
 
 ### Switching Fork's helper on (once)
 
-Reading recipes from links, checking the plan against the pantry and sorting a sentence
-into pantry lines need a second small helper in the Supabase project and a key for the
-Claude API. The key is the only thing in the whole app that costs money: well under a
+Reading recipes from links, estimating calories, checking the plan against the pantry,
+sorting a sentence into pantry lines and asking Fork need a second small helper in the
+Supabase project and a key for the Claude API. The key is the only thing in the whole app that costs money: well under a
 cent per question. `supabase/functions/ai/README.md` has the steps (one database update,
 one function, one secret that only you ever see). Until that is done, everything else
 works: the reader says it is not set up yet, and Fork compares names.

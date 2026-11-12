@@ -283,20 +283,36 @@ first meeting is the first link pasted in the real app.
 
 ## What is deployed right now
 
-Switched on for the live project on 12 Nov 2026, after the owner's go-ahead:
+Switched on for the live project on 12 Nov 2026, each step after the owner's go-ahead:
 
 - Migration `helper` (`0008_helper.sql`) is applied: the ticket counter and
   `public.ai_ticket()`. Checked in the catalogue: the counter is private, tickets are for
   logged-in devices only.
-- The function `ai` is deployed (version 1, JWT verification on) as the one-line loader,
-  at commit `03a28bbbd546d068e0248616cbb7b89338d6b4cf`. The ten files GitHub serves at
-  that commit are byte for byte the tested ones.
-- The secret `ANTHROPIC_API_KEY` is the owner's step. Until it is set, pages that carry
-  their own recipe data are read as they are, and Fork compares names.
+- The function `ai` is deployed (version 3, JWT verification on) as the one-line loader,
+  at commit `907f442b1b62a416df00dfc8c411d620762eb459`: all six jobs. The twelve files
+  GitHub serves at that commit are byte for byte the tested ones. (The first deploy, the
+  same day, was at `03a28bb` and knew the first three jobs.)
+- The secret `ANTHROPIC_API_KEY` is the owner's step, in the dashboard. Nobody else sees
+  it, so this note cannot say that it is there, only what the log shows.
 
-Not seen yet: a first call from the app. The workspace this was deployed from cannot
-reach Supabase's function address, so whether the function starts and answers shows with
-the first link pasted in the app. If it does not, Edge Functions, `ai`, Logs says why.
+Seen in the function's log:
+
+- Between the app's update and the second deploy, two calls were answered with 400: the
+  new app asked for a job the old function did not know. That is what an app that is
+  newer than its helper looks like, and why the function is deployed right after a merge.
+- The first four calls to the new version were each answered with 200, after 4 to 15
+  seconds, and without a "helper did not answer" line. A question to Fork without a key is
+  answered in well under a second, so these fit answers from the Claude API. What was
+  asked and answered is not in the log.
+
+The workspace this was deployed from cannot reach Supabase's function address, so the
+function is never called from there: what it does shows in Edge Functions, `ai`, Logs.
+
+A key for this function has to belong to **one workspace** of the Claude Console (chosen
+when the key is created). The function does not send a workspace id, and a key that is
+not tied to a workspace is refused without one. In the app that reads "The AI is not
+answering right now", and the log has a "helper did not answer: helper_down: status 400"
+line.
 
 To ship a change to the function: merge it, then deploy the loader again with the new
 commit in the address.
