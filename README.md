@@ -293,10 +293,10 @@ works: the reader says it is not set up yet, and Fork compares names.
 
 ### The basket and the pantry need one database update (once)
 
-Apply `supabase/migrations/0009_basket.sql`. It adds two tables with the same rules as
-the rest of the kitchen and changes nothing that exists. Until then the app keeps both
-lists on each phone and shares them as soon as the update is there. Nothing is lost and
-nothing is refused.
+`supabase/migrations/0009_basket.sql` adds two tables with the same rules as the rest of
+the kitchen and changes nothing that exists. It is applied to the live project (12 Nov
+2026). A kitchen set up from scratch needs it too: until it is there, the app keeps both
+lists on each phone and shares them as soon as it is. Nothing is lost and nothing is refused.
 
 ## For developers
 
