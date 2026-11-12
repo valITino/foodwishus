@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cleanLink, decodeEntities, hostFamily, isPrivateAddress, PageError, pageMeta, pageText, pinTarget, readPage, readPicture, recipeData, type FetchLike } from '../../supabase/functions/ai/page'
-import { BLOG, PIN, PIN_WITHOUT_LINK, SHOP, SLOPPY_DATA, SWISS_SITE } from './ai.fixtures'
+import { BLOG, PIN, PIN_WITHOUT_LINK, SHOP, SLOPPY_DATA, SWISS_SITE } from '../../src/data/fake/pretendWeb'
 
 /** A web made of a few pages. Anything else does not answer. */
 function web(pages: Record<string, Response | (() => Response)>): FetchLike & { asked: string[] } {

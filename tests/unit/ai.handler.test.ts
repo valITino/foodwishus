@@ -3,7 +3,7 @@ import { ask, DEFAULT_MODEL, type AskFetch } from '../../supabase/functions/ai/c
 import type { HelperAnswer } from '../../supabase/functions/ai/contract'
 import { helperHandler, type HelperDeps, type Ticket } from '../../supabase/functions/ai/handler'
 import type { FetchLike } from '../../supabase/functions/ai/page'
-import { BLOG, PIN, PIN_WITHOUT_LINK, SHOP, SWISS_SITE } from './ai.fixtures'
+import { BLOG, PIN, PIN_WITHOUT_LINK, SHOP, SWISS_SITE } from '../../src/data/fake/pretendWeb'
 
 // The helper from the outside: a request goes in, an answer comes out. The web and the
 // Claude API are stand-ins, so every way through the handler can be walked.

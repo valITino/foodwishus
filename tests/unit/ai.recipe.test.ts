@@ -3,7 +3,7 @@ import { recipeData } from '../../supabase/functions/ai/page'
 import { cardFromData, courseFrom, isoMinutes, LIMITS, servingsFrom, stepTexts, tidyCard } from '../../supabase/functions/ai/recipe'
 import { houseRules } from '../../supabase/functions/ai/skills/house-rules'
 import { CARD_SCHEMA, recipeCardSkill, type CardRequest } from '../../supabase/functions/ai/skills/recipe-card'
-import { SLOPPY_DATA, SWISS_SITE } from './ai.fixtures'
+import { SLOPPY_DATA, SWISS_SITE } from '../../src/data/fake/pretendWeb'
 
 describe("a page's own recipe data", () => {
   it('reads times, servings and steps in the shapes sites publish them', () => {

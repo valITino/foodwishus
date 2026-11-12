@@ -73,6 +73,20 @@ export function fakeCloud(): Plugin {
         return json(res, 200, { result: null })
       }
 
+      // The Edge Function "ai": the same handler, with a pretend web behind it.
+      if (url.pathname === '/helper' && req.method === 'POST') {
+        const { status, answer } = await cloud.helper(user || null, JSON.parse((await readBody(req)).toString('utf8') || 'null'))
+        return json(res, status, answer)
+      }
+
+      // The owner's side of the helper: the key in the function's secrets (empty value: none),
+      // an outage of the AI, and how many of today's readings are used up.
+      if (url.pathname === '/helper-setup' && req.method === 'POST') {
+        const q = url.searchParams
+        cloud.setHelper({ ...(q.has('key') ? { key: q.get('key') || null } : {}), ...(q.has('down') ? { down: q.get('down') === 'true' } : {}), ...(q.has('used') ? { used: Number(q.get('used')) } : {}) })
+        return json(res, 200, { result: null })
+      }
+
       if (url.pathname === '/events') {
         const household = url.searchParams.get('household')
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' })
