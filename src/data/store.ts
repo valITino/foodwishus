@@ -13,6 +13,21 @@ export class Store {
   onWrite: () => void = () => {}
   /** seq of the outbox entry being sent right now. It must not be merged into. */
   inFlightSeq: number | null = null
+  private readonly localListeners = new Set<(table: SyncTable) => void>()
+
+  /**
+   * Hear about every change made on this phone (never about what a sync brings in),
+   * with the table it was made to. Returns a function that stops listening.
+   */
+  onLocal(listener: (table: SyncTable) => void): () => void {
+    this.localListeners.add(listener)
+    return () => this.localListeners.delete(listener)
+  }
+
+  private wrote(table: SyncTable): void {
+    this.onWrite()
+    for (const listener of this.localListeners) listener(table)
+  }
 
   /**
    * @param localOnly The demo kitchen: changes stay on this phone and are never queued for the cloud.
@@ -37,7 +52,7 @@ export class Store {
       await this.db.rows(table).put(row as never)
       await this.enqueue({ table, rowId: row.id, kind: 'put', data: { ...row } })
     })
-    this.onWrite()
+    this.wrote(table)
   }
 
   /** Change some fields of an existing row. Only the changed fields travel to the cloud. */
@@ -75,7 +90,7 @@ export class Store {
         await this.enqueue({ table, rowId: id, kind: 'patch', data: clean })
       }
     })
-    this.onWrite()
+    this.wrote(table)
   }
 
   /** Soft delete: the row stays in the database so the removal can sync. */

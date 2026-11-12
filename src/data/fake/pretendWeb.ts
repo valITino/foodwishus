@@ -169,8 +169,8 @@ function pretendCheck(german: boolean, user: string): unknown {
   const items: { name: string; amount: string; reason: string }[] = []
   const unchecked: string[] = []
   for (const meal of part(user, 'Planned meals:')) {
-    const [day, dish, rest = ''] = meal.split(/:\s*/, 3)
-    const weekday = WEEKDAYS[german ? 'de' : 'en'][new Date(`${day}T12:00:00Z`).getUTCDay()]
+    const [when, dish, rest = ''] = meal.split(/:\s*/, 3)
+    const weekday = WEEKDAYS[german ? 'de' : 'en'][new Date(`${when.slice(0, 10)}T12:00:00Z`).getUTCDay()]
     if (rest.startsWith('(no ingredients')) {
       unchecked.push(dish)
       continue

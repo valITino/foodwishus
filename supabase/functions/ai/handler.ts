@@ -50,7 +50,7 @@ function parse(body: unknown): HelperRequest | null {
   const lang = raw.lang === 'de' ? 'de' : 'en'
   if (raw.job === 'shopping-check') {
     if (typeof raw.today !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw.today)) return null
-    return { job: 'shopping-check', lang, today: raw.today, meals: lines(raw.meals, SHOPPING_LIMITS.meals), cooked: lines(raw.cooked, SHOPPING_LIMITS.cooked), pantry: lines(raw.pantry, SHOPPING_LIMITS.pantry, 160), basket: lines(raw.basket, SHOPPING_LIMITS.basket, 130) }
+    return { job: 'shopping-check', lang, today: raw.today, weekday: typeof raw.weekday === 'string' && /^[A-Za-z]{3,12}$/.test(raw.weekday) ? raw.weekday : '', meals: lines(raw.meals, SHOPPING_LIMITS.meals), cooked: lines(raw.cooked, SHOPPING_LIMITS.cooked), pantry: lines(raw.pantry, SHOPPING_LIMITS.pantry, 160), basket: lines(raw.basket, SHOPPING_LIMITS.basket, 130) }
   }
   if (raw.job === 'pantry-notes') {
     if (typeof raw.text !== 'string' || raw.text.trim() === '' || raw.text.length > SHOPPING_LIMITS.text) return null

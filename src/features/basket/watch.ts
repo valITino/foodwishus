@@ -1,11 +1,14 @@
-// Fork keeps an eye on the plan: when the planned meals of the next days change and
-// something is noted in the pantry, he checks by himself, once per plan and per kitchen,
-// and rings the bell when something is missing. Switched off on the basket page.
+// Fork keeps an eye on the plan: when somebody changes the planned meals of the next days
+// and something is noted in the pantry, he checks by himself and rings the bell when
+// something is missing. He does it on the phone the plan was changed on (the other phone
+// hears of the change a second later and would ask the very same question), and once per
+// plan: which plan was checked is remembered for the whole kitchen. Switched off on the
+// basket page.
 
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { tellForkNews } from '../../data/actions'
-import { isDemo } from '../../data/app'
+import { isDemo, store } from '../../data/app'
 import { kitchenNow } from '../../data/helper'
 import { usePref } from '../../data/prefs'
 import { useHousehold } from '../../data/queries'
@@ -36,10 +39,24 @@ export function useForkWatch(on: boolean): void {
   const somethingNoted = (kitchen?.pantry.length ?? 0) > 0
   const checked = household?.settings.forkChecked ?? null
 
+  // Did this phone touch the meals since Fork last looked? Changes that a sync brings in do not count.
+  const mine = useRef(false)
+  const [touched, setTouched] = useState(0)
+  useEffect(
+    () =>
+      store.onLocal((table) => {
+        if (table !== 'servings') return
+        mine.current = true
+        setTouched((n) => n + 1)
+      }),
+    [],
+  )
+
   useEffect(() => {
-    // Nothing planned, nothing noted, already checked (by either phone), or switched off: nothing to do.
-    if (!on || !auto || !household || signature === '' || !somethingNoted || checked === signature) return
+    // Not changed here, nothing planned, nothing noted, already checked, or switched off: nothing to do.
+    if (!on || !auto || !household || !mine.current || signature === '' || !somethingNoted || checked === signature) return
     const timer = setTimeout(() => {
+      mine.current = false
       if (typeof navigator !== 'undefined' && navigator.onLine === false) return
       void checkPlan(lang, { reason: reasonWords(c, lang) }).then((outcome) => {
         // Only what the helper found rings the bell: a list of names nobody asked for would be noise.
@@ -49,5 +66,5 @@ export function useForkWatch(on: boolean): void {
     return () => clearTimeout(timer)
     // The words and the language do not start a check.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [on, auto, signature, somethingNoted, checked, household?.id])
+  }, [on, auto, signature, somethingNoted, checked, household?.id, touched])
 }

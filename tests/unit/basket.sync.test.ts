@@ -183,3 +183,25 @@ describe('what Fork looks at', () => {
     expect(cooked[0].ingredients).toHaveLength(1)
   })
 })
+
+describe('changes made on this phone', () => {
+  it('are heard of with their table; what a sync brings in is not', async () => {
+    const { her, him } = await makeCouple(cloud)
+    await settle(her, him)
+    const heard: string[] = []
+    const stop = him.store.onLocal((table) => heard.push(table))
+
+    await onBasket(her, 'Milk')
+    await settle(her, him)
+    expect(heard).toEqual([])
+
+    const butter = await onBasket(him, 'Butter')
+    await him.store.patch('basket', butter.id, { amount: '250 g' })
+    await inPantry(him, 'Flour')
+    expect(heard).toEqual(['basket', 'basket', 'pantry'])
+
+    stop()
+    await inPantry(him, 'Sugar')
+    expect(heard).toHaveLength(3)
+  })
+})

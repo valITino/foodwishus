@@ -46,7 +46,7 @@ export function IngredientsToBasket({ dish, factor, open, onClose }: { dish: Dis
   const basket = useBasket()
   const lines = useMemo(() => (dish.recipe.ingredients ?? []).filter((ingredient) => ingredient.name.trim()).map((ingredient) => formatIngredient(ingredient, factor, lang)), [dish, factor, lang])
   const where = (name: string): 'pantry' | 'basket' | null =>
-    (pantry ?? []).some((row) => covers(row.name, name)) ? 'pantry' : (basket ?? []).some((item) => item.state !== 'bought' && covers(item.name, name)) ? 'basket' : null
+    (pantry ?? []).some((row) => covers(row.name, name)) ? 'pantry' : (basket ?? []).some((item) => item.state === 'open' && covers(item.name, name)) ? 'basket' : null
   const [picked, setPicked] = useState<boolean[]>([])
   // Tick what is needed each time the sheet opens, with the pantry as it is then.
   useEffect(() => {

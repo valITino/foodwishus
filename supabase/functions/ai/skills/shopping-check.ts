@@ -54,7 +54,7 @@ export const shoppingCheckSkill = {
       '- A pantry note is only as good as it is fresh. What was cooked since the note was written has used things up: take that off before you compare, and say so in the reason when it decides the matter.',
       '- Salt, pepper, water and a little oil or butter for frying are at home unless the pantry says otherwise. Do not list them.',
       '- Never list what is on the shopping list already, and never a thing no planned meal asks for.',
-      '- reason: one short sentence that names the meal and its day as a weekday, and what the pantry says. For example: "For the Rüeblisuppe on Thursday: it needs 500 g, the pantry has 200 g."',
+      '- reason: one short sentence that names the meal and its day as a weekday (the weekday stands next to each date; write it in the language named above), and what the pantry says. For example: "For the Rüeblisuppe on Thursday: it needs 500 g, the pantry has 200 g."',
       `- At most ${SHOPPING_LIMITS.items} items, the one needed soonest first. When in doubt whether there is enough, list it and say why: a person decides.`,
       '- note: empty, unless a planned meal has no ingredients written down (then say for which meal nothing could be checked).',
     ].join('\n')
@@ -62,7 +62,7 @@ export const shoppingCheckSkill = {
 
   user(request: ShoppingCheck): string {
     return [
-      `Today is ${request.today}.`,
+      `Today is ${request.today}${request.weekday ? ` (${request.weekday})` : ''}.`,
       '',
       '<material>',
       list('Planned meals:', request.meals, 'none'),

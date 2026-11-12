@@ -33,7 +33,9 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
 - [ ] **Fork reads recipes.** Recipe from a link (pasted or shared to the app), with an AI
       helper behind an Edge Function. *Built and tested against a pretend web; the function,
       its migration and the key wait for the owner (`supabase/functions/ai/README.md`).*
-- [ ] **Pantry and shopping list**, with the same helper.
+- [ ] **The basket and the pantry.** A shared shopping list, a pantry, and Fork checking
+      the planned meals against it (by himself when the plan changes), with the same helper.
+      *Built and tested against the pretend cloud; migration 0009 waits for the owner.*
 
 ## What is verified so far, and how
 

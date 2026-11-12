@@ -98,7 +98,8 @@ export interface Need extends Line {
  */
 export function needs(meals: readonly PlannedMeal[], pantry: readonly PantryItem[], basket: readonly BasketItem[], lang: Lang): Need[] {
   const atHome = pantry.filter((row) => !row.deletedAt)
-  const listed = basket.filter((item) => !item.deletedAt && item.state !== 'bought')
+  // On the list means on the list: what is ticked off is gone again, and a suggestion is not there yet.
+  const listed = basket.filter((item) => !item.deletedAt && item.state === 'open')
   const found: (Need & { parts: Ingredient[]; askedBy: Set<string> })[] = []
   for (const meal of meals) {
     const asker = `${meal.servingId}/${meal.dishId}`
@@ -138,14 +139,22 @@ export function sumAmounts(parts: readonly Ingredient[], lang: Lang): string | n
 
 // ------------------------------------------------------- words for the helper --
 
-/** The planned meals as lines the helper reads: "Thu 2026-11-12: Rüeblisuppe: 500 g Rüebli; 1 Zwiebel". */
+/** The weekday of a day, in English: the helper reads it and writes it in the kitchen's language. */
+export function weekday(day: Day): string {
+  return new Intl.DateTimeFormat('en-GB', { weekday: 'long', timeZone: 'UTC' }).format(new Date(`${day}T12:00:00Z`))
+}
+
+/**
+ * Meals as lines the helper reads: "2026-11-13 (Friday): Rüeblisuppe: 500 g Rüebli; 1 Zwiebel".
+ * The weekday is spelled out, so that nobody has to work it out from the date.
+ */
 export function mealLines(meals: readonly PlannedMeal[], lang: Lang): string[] {
   return meals.map((meal) => {
     const lines = meal.ingredients.map((ingredient) => {
       const { amount, name } = formatIngredient(ingredient, 1, lang)
       return amount ? `${amount} ${name}` : name
     })
-    return `${meal.day}: ${meal.dishName}: ${lines.length > 0 ? lines.join('; ') : '(no ingredients written down)'}`
+    return `${meal.day} (${weekday(meal.day)}): ${meal.dishName}: ${lines.length > 0 ? lines.join('; ') : '(no ingredients written down)'}`
   })
 }
 

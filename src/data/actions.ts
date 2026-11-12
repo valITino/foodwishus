@@ -560,9 +560,17 @@ export interface BasketInput extends Line {
 const basketNow = async (): Promise<BasketItem[]> => (await db.basket.toArray()).filter((item) => !item.deletedAt)
 const pantryNow = async (): Promise<PantryItem[]> => (await db.pantry.toArray()).filter((item) => !item.deletedAt)
 
-function basketRow(householdId: ID, memberId: ID, line: BasketInput, state: BasketItem['state']): BasketItem {
+/**
+ * A new row for the basket. `place` is where the line stood in what was typed or
+ * suggested in one go: the list shows the newest on top, so the first line is made a
+ * hair newer than the second and the lines keep their order.
+ */
+function basketRow(householdId: ID, memberId: ID, line: BasketInput, state: BasketItem['state'], started: number, place: number): BasketItem {
+  const at = new Date(started - place).toISOString()
   return {
     ...fresh(householdId),
+    createdAt: at,
+    updatedAt: at,
     name: line.name.trim().slice(0, 80),
     amount: line.amount?.trim().slice(0, 40) || null,
     note: line.note?.trim().slice(0, 120) || null,
@@ -585,11 +593,12 @@ export async function putOnBasket(lines: BasketInput[]): Promise<{ added: number
   let list = await basketNow()
   let added = 0
   let there = 0
-  for (const line of lines) {
+  const started = Date.now()
+  for (const [place, line] of lines.entries()) {
     if (!line.name.trim()) continue
     const what = adding(list, line)
     if (what.kind === 'new') {
-      const row = basketRow(householdId, memberId, line, 'open')
+      const row = basketRow(householdId, memberId, line, 'open', started, place)
       await store.put('basket', row)
       list = [...list, row]
       added += 1
@@ -636,9 +645,10 @@ export async function suggestForBasket(lines: BasketInput[]): Promise<number> {
   const open = list.filter((item) => item.state === 'open')
   const taken: Line[] = [...open]
   let count = 0
-  for (const line of lines) {
+  const started = Date.now()
+  for (const [place, line] of lines.entries()) {
     if (!line.name.trim() || taken.some((other) => sameThing(other.name, line.name))) continue
-    await store.put('basket', basketRow(householdId, memberId, line, 'suggested'))
+    await store.put('basket', basketRow(householdId, memberId, line, 'suggested', started, place))
     taken.push(line)
     count += 1
   }

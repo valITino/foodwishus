@@ -128,8 +128,8 @@ describe('what the plan asks for', () => {
     expect(onions).toMatchObject({ dishName: 'Rüeblisuppe', meals: 3 })
   })
 
-  it('does not count what is ticked off as on the basket, nor what was removed from the pantry as there', () => {
-    const found = needs(meals, [stock('Rahm', null, { deletedAt: '2026-11-12T00:00:00Z' })], [item('Rüebli', { state: 'bought' })], 'de')
+  it('does not count what is ticked off or only suggested as on the basket, nor what was removed from the pantry as there', () => {
+    const found = needs(meals, [stock('Rahm', null, { deletedAt: '2026-11-12T00:00:00Z' })], [item('Rüebli', { state: 'bought' }), item('Zwiebel', { state: 'suggested', source: 'fork' })], 'de')
     expect(found.map((need) => need.name)).toEqual(['Rüebli', 'Zwiebel', 'Rahm', 'Kartoffeln', 'Butter'])
   })
 
@@ -140,8 +140,8 @@ describe('what the plan asks for', () => {
   })
 
   it('reads as lines for the helper', () => {
-    expect(mealLines(meals.slice(0, 1), 'de')).toEqual(['2026-11-13: Rüeblisuppe: 500 g Rüebli; 1 Zwiebel; 1 dl Rahm; Salz'])
-    expect(mealLines([{ ...meals[0], ingredients: [] }], 'de')).toEqual(['2026-11-13: Rüeblisuppe: (no ingredients written down)'])
+    expect(mealLines(meals.slice(0, 1), 'de')).toEqual(['2026-11-13 (Friday): Rüeblisuppe: 500 g Rüebli; 1 Zwiebel; 1 dl Rahm; Salz'])
+    expect(mealLines([{ ...meals[0], ingredients: [] }], 'de')).toEqual(['2026-11-13 (Friday): Rüeblisuppe: (no ingredients written down)'])
   })
 })
 

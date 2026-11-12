@@ -9,7 +9,7 @@ import { checkShopping, kitchenNow, ReadError, type KitchenNow, type ReadProblem
 import type { Day } from '../../data/types'
 import { addDays, toDay, today } from '../../lib/dates'
 import type { Lang } from '../recipes/logic'
-import { mealLines, needs, pantryLines, plannedMeals, type Need, type PlannedMeal } from './logic'
+import { mealLines, needs, pantryLines, plannedMeals, weekday, type Need, type PlannedMeal } from './logic'
 
 /** How far ahead Fork looks, today included. */
 export const CHECK_DAYS = 7
@@ -70,10 +70,12 @@ export async function checkPlan(lang: Lang, words: CheckWords, kitchen?: Kitchen
     const answer = await checkShopping({
       lang,
       today: from,
+      weekday: weekday(from),
       meals: mealLines(meals, lang),
       cooked: mealLines(cookedMeals(now, addDays(from, -COOKED_DAYS)), lang),
       pantry: pantryLines(now.pantry),
-      basket: now.basket.filter((item) => item.state !== 'bought').map((item) => (item.amount ? `${item.name} (${item.amount})` : item.name)),
+      // Only what is really on the list. Earlier suggestions are replaced by this check, so they must not hide what is missing.
+      basket: now.basket.filter((item) => item.state === 'open').map((item) => (item.amount ? `${item.name} (${item.amount})` : item.name)),
     })
     const count = await suggestForBasket(answer.items.map((item) => ({ name: item.name, amount: item.amount, reason: item.reason, source: 'fork' })))
     return { kind: 'checked', count, by: 'fork', why: null, note: answer.note || null }

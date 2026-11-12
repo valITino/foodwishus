@@ -25,9 +25,10 @@ export interface RecipeFromLink {
 export interface ShoppingCheck {
   job: 'shopping-check'
   lang: 'en' | 'de'
-  /** The kitchen's day, "2026-11-12". */
+  /** The kitchen's day, "2026-11-12", and its weekday in English. */
   today: string
-  /** The planned meals of the next days, one per line: "2026-11-13: Rüeblisuppe: 500 g Rüebli; 1 Zwiebel". */
+  weekday: string
+  /** The planned meals of the next days, one per line: "2026-11-13 (Friday): Rüeblisuppe: 500 g Rüebli; 1 Zwiebel". */
   meals: string[]
   /** What was cooked lately, in the same form: it tells what has probably been used up since a pantry note. */
   cooked: string[]
