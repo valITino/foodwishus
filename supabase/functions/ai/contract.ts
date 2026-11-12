@@ -21,7 +21,32 @@ export interface RecipeFromLink {
   knownTags: string[]
 }
 
-export type HelperRequest = RecipeFromLink
+/** What is missing for the planned meals, given what the pantry says. */
+export interface ShoppingCheck {
+  job: 'shopping-check'
+  lang: 'en' | 'de'
+  /** The kitchen's day, "2026-11-12". */
+  today: string
+  /** The planned meals of the next days, one per line: "2026-11-13: Rüeblisuppe: 500 g Rüebli; 1 Zwiebel". */
+  meals: string[]
+  /** What was cooked lately, in the same form: it tells what has probably been used up since a pantry note. */
+  cooked: string[]
+  /** The pantry, one thing per line: "Mehl: 1 kg (noted 3 days ago)". */
+  pantry: string[]
+  /** What is on the shopping list already. */
+  basket: string[]
+}
+
+/** Turn what somebody wrote or dictated about what is at home into pantry lines. */
+export interface PantryNotes {
+  job: 'pantry-notes'
+  lang: 'en' | 'de'
+  text: string
+  /** The names the pantry already uses. */
+  known: string[]
+}
+
+export type HelperRequest = RecipeFromLink | ShoppingCheck | PantryNotes
 
 export type HelperFailure =
   | 'bad_request'
@@ -49,12 +74,41 @@ export interface RecipeFromLinkResult {
   left: number
 }
 
+export interface ShoppingSuggestion {
+  name: string
+  /** How much to buy, as a person would write it. Null when it cannot be said. */
+  amount: string | null
+  /** One sentence: which meal asks for it and what the pantry says. */
+  reason: string
+}
+
+export interface ShoppingCheckResult {
+  ok: true
+  items: ShoppingSuggestion[]
+  /** Something the cook should know about the check itself, or empty. */
+  note: string
+  left: number
+}
+
+export interface PantryNotesResult {
+  ok: true
+  lines: { name: string; amount: string | null }[]
+  left: number
+}
+
 export interface HelperRefusal {
   ok: false
   code: HelperFailure
 }
 
-export type HelperAnswer = RecipeFromLinkResult | HelperRefusal
+export type HelperResult = RecipeFromLinkResult | ShoppingCheckResult | PantryNotesResult
+export type HelperAnswer = HelperResult | HelperRefusal
 
-/** How many pages a kitchen can have read per day. Each costs a fraction of a cent; the limit is against accidents. */
+/** The answer each job gets. */
+export type ResultOf<R extends HelperRequest> = R extends RecipeFromLink ? RecipeFromLinkResult : R extends ShoppingCheck ? ShoppingCheckResult : R extends PantryNotes ? PantryNotesResult : never
+
+/** What a kitchen can send per request: enough for a full week and a full pantry, not for a book. */
+export const SHOPPING_LIMITS = { meals: 30, cooked: 20, pantry: 200, basket: 100, line: 600, text: 2000, known: 200, items: 20 }
+
+/** How many times a kitchen can ask the helper per day (a page read, a plan checked, pantry notes sorted). Each costs a fraction of a cent; the limit is against accidents. */
 export const DAILY_TICKETS = 40

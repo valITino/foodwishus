@@ -3,7 +3,7 @@
 // pretend cloud in tests and local development.
 
 import type { ID, ISO, Role, SyncTable } from './types.ts'
-import type { RecipeFromLink, RecipeFromLinkResult } from '../../supabase/functions/ai/contract.ts'
+import type { HelperRequest, ResultOf } from '../../supabase/functions/ai/contract.ts'
 
 export type BackendErrorKind =
   /** No connection, timeout, 5xx. Try again later; nothing is wrong with the data. */
@@ -193,11 +193,12 @@ export interface Backend {
   removePushSubscription(endpoint: string): Promise<void>
 
   /**
-   * Ask the kitchen's helper to read a recipe from a pasted link and write a recipe card.
-   * Needs a connection. Rejects with one of the helper's own words (HelperFailure), for
-   * example bad_link, unreachable, not_a_recipe, limit or helper_off.
+   * Ask the kitchen's helper (the Edge Function "ai") to do one of its jobs: read a recipe
+   * from a link, check the plan against the pantry, sort pantry notes. Needs a connection.
+   * Rejects with one of the helper's own words (HelperFailure), for example bad_link,
+   * unreachable, not_a_recipe, limit or helper_off.
    */
-  readRecipe(request: Omit<RecipeFromLink, 'job'>): Promise<RecipeFromLinkResult>
+  askHelper<R extends HelperRequest>(request: R): Promise<ResultOf<R>>
 
   uploadBlob(path: string, blob: Blob): Promise<void>
   /** Resolves null when the file is not in the cloud (yet). */
@@ -210,5 +211,5 @@ export interface Backend {
 export const photoPath = (householdId: ID, photoId: ID, variant: 'full' | 'thumb') =>
   `${householdId}/${photoId}${variant === 'thumb' ? '_t' : ''}.jpg`
 
-export type { Check, CheckTopic, HelperFailure, RecipeCard, RecipeFromLink, RecipeFromLinkResult } from '../../supabase/functions/ai/contract.ts'
+export type { Check, CheckTopic, HelperFailure, HelperRequest, HelperResult, PantryNotes, PantryNotesResult, RecipeCard, RecipeFromLink, RecipeFromLinkResult, ResultOf, ShoppingCheck, ShoppingCheckResult, ShoppingSuggestion } from '../../supabase/functions/ai/contract.ts'
 export { DAILY_TICKETS } from '../../supabase/functions/ai/contract.ts'

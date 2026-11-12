@@ -6,7 +6,7 @@
 import { langOf, plan, reviewEvent, servingEvent, type AnswerChange, type Delivery, type PushEvent } from '../../../supabase/functions/push/logic.ts'
 import { BackendError, PUSH_TYPES, type BackendErrorDetails, type Invite, type InvitePeek, type Membership, type PersonCard, type ProfileInput, type PullResult, type PushOp, type PushSubscriptionInput, type PushType } from '../backend.ts'
 import { lockMinutes, nameKey, PIN_TRIES, pinProblem } from '../pin.ts'
-import { SYNC_TABLES, WRITABLE_TABLES, type ID, type ISO, type Role, type SyncTable } from '../types.ts'
+import { LATER_TABLES, SYNC_TABLES, WRITABLE_TABLES, type ID, type ISO, type Role, type SyncTable } from '../types.ts'
 import { DAILY_TICKETS, type HelperAnswer } from '../../../supabase/functions/ai/contract.ts'
 import { helperHandler } from '../../../supabase/functions/ai/handler.ts'
 import { pretendFetch, pretendHelper } from './pretendWeb.ts'
@@ -111,6 +111,8 @@ export class FakeCloud {
   private helperTickets = new Map<string, number>()
   /** Test hook: where every kitchen's count for today starts. */
   private helperUsed = 0
+  /** False: a cloud from before migration 0009, which does not know the basket and the pantry. */
+  private hasLaterTables = true
   /** The function's secret ANTHROPIC_API_KEY: null while the owner has not set one. */
   private helperKey: string | null = 'pretend-key'
   /** True while the pretend Claude API is having an outage. */
@@ -135,6 +137,7 @@ export class FakeCloud {
     this.pushKey = TEST_PUSH_KEY
     this.helperTickets.clear()
     this.helperUsed = 0
+    this.hasLaterTables = true
     this.helperKey = 'pretend-key'
     this.helperDown = false
   }
@@ -571,8 +574,15 @@ export class FakeCloud {
 
   // -------------------------------------------------------------------- sync --
 
+  /** Test hook: the owner has (or has not yet) applied the migration that adds the basket and the pantry. */
+  setLaterTables(there: boolean): void {
+    this.hasLaterTables = there
+  }
+
   push(userId: string, op: PushOp): void {
     const me = this.memberOf(userId) ?? reject('forbidden')
+    // What PostgREST answers for a table it has never heard of.
+    if (!this.hasLaterTables && LATER_TABLES.includes(op.table)) throw new BackendError('setup', 'table_missing')
     const table = this.table(op.table)
     const existing = table.get(op.id)
     const at = this.now()
@@ -628,6 +638,8 @@ export class FakeCloud {
     const me = this.memberOf(userId)
     const tables: PullResult['tables'] = {}
     for (const name of SYNC_TABLES) {
+      // The old sync_pull does not mention the tables that came later.
+      if (!this.hasLaterTables && LATER_TABLES.includes(name)) continue
       const rows: Row[] = []
       if (me) {
         for (const row of this.table(name).values()) {

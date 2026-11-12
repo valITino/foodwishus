@@ -4,10 +4,12 @@
 // the pretend cloud exactly as it runs on Supabase.
 
 import { ask, DEFAULT_MODEL, HelperError, type AskFetch } from './claude.ts'
-import type { HelperAnswer, HelperFailure, HelperRequest, RecipeFromLink } from './contract.ts'
+import { SHOPPING_LIMITS, type HelperAnswer, type HelperFailure, type HelperRequest, type PantryNotes, type RecipeFromLink, type ShoppingCheck } from './contract.ts'
 import { cleanLink, hostFamily, PageError, pageMeta, pageText, pinTarget, readPage, readPicture, recipeData, withoutTracking, type FetchLike } from './page.ts'
 import { cardFromData, type Check, type RecipeCard } from './recipe.ts'
+import { pantryNotesSkill } from './skills/pantry-notes.ts'
 import { recipeCardSkill } from './skills/recipe-card.ts'
+import { shoppingCheckSkill } from './skills/shopping-check.ts'
 
 export type Ticket = { ok: true; left: number } | { ok: false; code: 'not_signed_in' | 'not_member' | 'limit' }
 
@@ -39,9 +41,21 @@ const WORDS = {
   de: { servings: 'Die Seite sagt nicht, für wie viele Personen das Rezept ist.', asIs: 'So von der Seite übernommen: nichts übersetzt, keine Einheiten umgerechnet.' },
 }
 
+const lines = (value: unknown, max: number, each: number = SHOPPING_LIMITS.line): string[] =>
+  Array.isArray(value) ? value.filter((line): line is string => typeof line === 'string' && line.trim() !== '').map((line) => line.replace(/\s+/g, ' ').trim().slice(0, each)).slice(0, max) : []
+
 function parse(body: unknown): HelperRequest | null {
   if (body === null || typeof body !== 'object') return null
   const raw = body as Record<string, unknown>
+  const lang = raw.lang === 'de' ? 'de' : 'en'
+  if (raw.job === 'shopping-check') {
+    if (typeof raw.today !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw.today)) return null
+    return { job: 'shopping-check', lang, today: raw.today, meals: lines(raw.meals, SHOPPING_LIMITS.meals), cooked: lines(raw.cooked, SHOPPING_LIMITS.cooked), pantry: lines(raw.pantry, SHOPPING_LIMITS.pantry, 160), basket: lines(raw.basket, SHOPPING_LIMITS.basket, 130) }
+  }
+  if (raw.job === 'pantry-notes') {
+    if (typeof raw.text !== 'string' || raw.text.trim() === '' || raw.text.length > SHOPPING_LIMITS.text) return null
+    return { job: 'pantry-notes', lang, text: raw.text.trim(), known: lines(raw.known, SHOPPING_LIMITS.known, 80) }
+  }
   if (raw.job !== 'recipe-from-link' || typeof raw.link !== 'string' || raw.link.length > 2000) return null
   return {
     job: 'recipe-from-link',
@@ -114,6 +128,35 @@ async function recipeFromLink(request: RecipeFromLink, deps: HelperDeps, left: n
   return { ok: true, card: withServingsCheck(card, request.lang), source, photo: picture ? { type: picture.type, base64: base64(picture.bytes) } : null, by, left }
 }
 
+/** One question to the helper for a job that is nothing without it. Null: it did not answer. */
+async function askSkill(deps: HelperDeps, skill: { system: string; user: string; schema: unknown; maxTokens: number }): Promise<unknown | null> {
+  try {
+    return await ask({ apiKey: deps.apiKey as string, model: deps.model ?? DEFAULT_MODEL, ...skill }, deps.askFetch)
+  } catch (error) {
+    if (!(error instanceof HelperError)) throw error
+    console.warn('helper did not answer:', error.message)
+    return null
+  }
+}
+
+async function shoppingCheck(request: ShoppingCheck, deps: HelperDeps, left: number): Promise<HelperAnswer> {
+  // Nothing planned: nothing to buy for, and nothing to ask.
+  if (request.meals.length === 0) return { ok: true, items: [], note: '', left }
+  if (!deps.apiKey) return { ok: false, code: 'helper_off' }
+  const skill = shoppingCheckSkill
+  const answer = await askSkill(deps, { system: skill.system(request), user: skill.user(request), schema: skill.schema, maxTokens: skill.maxTokens })
+  const read = answer === null ? null : skill.read(answer)
+  return read ? { ok: true, ...read, left } : { ok: false, code: 'helper_down' }
+}
+
+async function pantryNotes(request: PantryNotes, deps: HelperDeps, left: number): Promise<HelperAnswer> {
+  if (!deps.apiKey) return { ok: false, code: 'helper_off' }
+  const skill = pantryNotesSkill
+  const answer = await askSkill(deps, { system: skill.system(request), user: skill.user(request), schema: skill.schema, maxTokens: skill.maxTokens })
+  const read = answer === null ? null : skill.read(answer)
+  return read ? { ok: true, lines: read, left } : { ok: false, code: 'helper_down' }
+}
+
 /** The handler. Every expected outcome is an answer with status 200; only a broken request is not. */
 export function helperHandler(deps: HelperDeps): (request: Request) => Promise<Response> {
   return async (request) => {
@@ -135,6 +178,8 @@ export function helperHandler(deps: HelperDeps): (request: Request) => Promise<R
     if (!ticket.ok) return refuse(ticket.code, ticket.code === 'limit' ? 200 : 403)
 
     try {
+      if (asked.job === 'shopping-check') return json(await shoppingCheck(asked, deps, ticket.left))
+      if (asked.job === 'pantry-notes') return json(await pantryNotes(asked, deps, ticket.left))
       return json(await recipeFromLink(asked, deps, ticket.left))
     } catch (error) {
       if (error instanceof PageError) return refuse(error.code)

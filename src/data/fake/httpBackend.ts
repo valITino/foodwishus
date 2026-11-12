@@ -1,7 +1,7 @@
 // Browser-side client for the pretend cloud that lives inside the dev server
 // (tools/fakeCloudPlugin.ts). Used by `npm run dev` and the end-to-end tests.
 
-import { BackendError, type Backend, type BackendErrorDetails, type BackendErrorKind, type Invite, type InvitePeek, type Membership, type ProfileInput, type PullResult, type PushOp, type PushSubscriptionInput, type PushType, type RecipeFromLink, type RecipeFromLinkResult } from '../backend'
+import { BackendError, type Backend, type BackendErrorDetails, type BackendErrorKind, type Invite, type InvitePeek, type Membership, type ProfileInput, type PullResult, type PushOp, type PushSubscriptionInput, type PushType, type HelperRequest, type ResultOf } from '../backend'
 import type { ID, ISO } from '../types'
 
 const BASE = '/__cloud'
@@ -115,16 +115,16 @@ export class HttpFakeBackend implements Backend {
     if (!res.ok) throw new BackendError('rejected', 'forbidden')
   }
 
-  async readRecipe(request: Omit<RecipeFromLink, 'job'>) {
+  async askHelper<R extends HelperRequest>(request: R): Promise<ResultOf<R>> {
     const { userId } = await this.ensureSession()
     let res: Response
     try {
-      res = await fetch(`${BASE}/helper`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-user': userId }, body: JSON.stringify({ job: 'recipe-from-link', ...request }) })
+      res = await fetch(`${BASE}/helper`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-user': userId }, body: JSON.stringify(request) })
     } catch {
       throw new BackendError('network', 'offline')
     }
     if (res.status >= 500) throw new BackendError('network', `server_${res.status}`)
-    const answer = (await res.json()) as RecipeFromLinkResult | { ok: false; code: string }
+    const answer = (await res.json()) as ResultOf<R> | { ok: false; code: string }
     if (!answer.ok) throw new BackendError('rejected', answer.code)
     return answer
   }

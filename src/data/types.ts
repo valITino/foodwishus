@@ -195,6 +195,34 @@ export interface Photo extends SyncRow {
   uploaded: boolean
 }
 
+export type BasketState = 'suggested' | 'open' | 'bought'
+export type BasketSource = 'hand' | 'dish' | 'fork'
+
+/** One line of the basket: the shopping list the two of you share. */
+export interface BasketItem extends SyncRow {
+  name: string
+  /** As written: "500 g", "2", "1 pack". */
+  amount: string | null
+  /** A few words: "for the soup", "the blue one". */
+  note: string | null
+  /** suggested: Fork thinks it is needed, nobody has decided yet. open: on the list. bought: ticked off. */
+  state: BasketState
+  /** Typed by hand, taken from a dish's ingredients, or suggested by Fork. */
+  source: BasketSource
+  /** Fork's reason for a suggestion. */
+  reason: string | null
+  dishId: ID | null
+  addedBy: ID | null
+  boughtAt: ISO | null
+}
+
+/** One thing in the pantry and how much of it is left, as somebody wrote it. */
+export interface PantryItem extends SyncRow {
+  name: string
+  /** As written: "1 kg", "half a pack", "almost empty". */
+  amount: string | null
+}
+
 export interface TableRows {
   households: Household
   members: Member
@@ -204,6 +232,8 @@ export interface TableRows {
   servings: Serving
   reviews: Review
   photos: Photo
+  basket: BasketItem
+  pantry: PantryItem
 }
 
 export type SyncTable = keyof TableRows
@@ -218,10 +248,19 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   'servings',
   'reviews',
   'photos',
+  'basket',
+  'pantry',
 ]
 
 /** Tables the app may create rows in. Kitchens and members are made by pairing only. */
-export const WRITABLE_TABLES: readonly SyncTable[] = ['criteria', 'dishes', 'menus', 'servings', 'reviews', 'photos']
+export const WRITABLE_TABLES: readonly SyncTable[] = ['criteria', 'dishes', 'menus', 'servings', 'reviews', 'photos', 'basket', 'pantry']
+
+/**
+ * Tables that came later (migration 0009). A cloud that has not been updated yet does not
+ * know them: changes to them wait on the phone instead of being refused, and they get a
+ * live channel of their own so that their absence cannot disturb the rest.
+ */
+export const LATER_TABLES: readonly SyncTable[] = ['basket', 'pantry']
 
 export const newId = (): ID => crypto.randomUUID()
 export const nowIso = (): ISO => new Date().toISOString()

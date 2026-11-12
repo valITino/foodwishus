@@ -5,7 +5,7 @@ const base: SyncReportInput = {
   version: '0.1.0',
   backend: 'supabase',
   now: '2026-11-10T08:00:00.000Z',
-  status: { state: 'idle', pending: 0, uploads: 0, stuck: 0, lastSyncAt: '2026-11-10T07:59:00.000Z', lastError: null },
+  status: { state: 'idle', pending: 0, uploads: 0, stuck: 0, later: 0, lastSyncAt: '2026-11-10T07:59:00.000Z', lastError: null },
   online: true,
   demo: false,
   lang: 'en',
@@ -42,7 +42,7 @@ describe('the sync report for support', () => {
     const text = syncReport({
       ...base,
       online: false,
-      status: { state: 'error', pending: 3, uploads: 1, stuck: 12, lastSyncAt: null, lastError: 'forbidden' },
+      status: { state: 'error', pending: 3, uploads: 1, stuck: 12, later: 0, lastSyncAt: null, lastError: 'forbidden' },
       refused: Array.from({ length: 12 }, (_, i) => ({ table: 'dishes', kind: 'patch', lastError: i ? 'forbidden' : undefined, failedAt: '2026-11-10T07:00:00.000Z' })),
     })
     expect(text).toContain('State: error')

@@ -87,6 +87,13 @@ export function fakeCloud(): Plugin {
         return json(res, 200, { result: null })
       }
 
+      // The owner's side of the basket and the pantry: "there=false" is a cloud from before
+      // their migration.
+      if (url.pathname === '/later-tables' && req.method === 'POST') {
+        cloud.setLaterTables(url.searchParams.get('there') !== 'false')
+        return json(res, 200, { result: null })
+      }
+
       if (url.pathname === '/events') {
         const household = url.searchParams.get('household')
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' })

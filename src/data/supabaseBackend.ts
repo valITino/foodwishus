@@ -2,9 +2,9 @@
 // (supabase/migrations), all sync logic lives in sync.ts.
 
 import { createClient, isAuthRetryableFetchError, type SupabaseClient } from '@supabase/supabase-js'
-import { BackendError, type Backend, type Invite, type InvitePeek, type Membership, type PersonCard, type ProfileInput, type PullResult, type PushOp, type PushSubscriptionInput, type PushType, type RecipeFromLink, type RecipeFromLinkResult, type Session } from './backend'
+import { BackendError, type Backend, type Invite, type InvitePeek, type Membership, type PersonCard, type ProfileInput, type PullResult, type PushOp, type PushSubscriptionInput, type PushType, type HelperRequest, type HelperResult, type ResultOf, type Session } from './backend'
 import { camelKeys, reviveRow, snakeKeys } from './case'
-import { SYNC_TABLES, type ID, type ISO, type Role } from './types'
+import { LATER_TABLES, type SyncTable, SYNC_TABLES, type ID, type ISO, type Role } from './types'
 
 const BUCKET = 'photos'
 
@@ -52,6 +52,8 @@ function fromDatabase(error: { message: string; code?: string }, status: number)
   if (status === 401 || error.code === 'PGRST301' || error.code === 'PGRST303' || error.code === '28000') {
     return new BackendError('auth', 'session_invalid', error.message)
   }
+  // A table this cloud does not have yet (its migration has not been applied): not a refusal.
+  if (error.code === 'PGRST205' || error.code === '42P01') return new BackendError('setup', 'table_missing', error.message)
   // Two people in one kitchen cannot share a name: the unique index says no.
   if (error.code === '23505' && error.message.includes('members_household_name_key')) return new BackendError('rejected', 'name_taken', error.message)
   const known = KNOWN_CODES.find((code) => error.message === code)
@@ -69,9 +71,9 @@ function fromStorage(error: { message: string; status?: number; name?: string })
  * What the helper function's answer means, whichever way it arrives: as a body, or as an
  * error that carries the response (supabase-js does that for anything but a 2xx).
  */
-export async function helperResult(data: unknown, error: unknown): Promise<RecipeFromLinkResult> {
+export async function helperResult<T extends HelperResult = HelperResult>(data: unknown, error: unknown): Promise<T> {
   if (!error) {
-    const answer = data as RecipeFromLinkResult | { ok: false; code?: string } | null
+    const answer = data as T | { ok: false; code?: string } | null
     if (answer && answer.ok === true) return answer
     throw new BackendError('rejected', (answer && answer.code) || 'helper_down')
   }
@@ -248,21 +250,27 @@ export class SupabaseBackend implements Backend {
   }
 
   subscribe(householdId: ID, onChange: () => void): () => void {
-    const channel = this.client.channel(`kitchen:${householdId}`)
-    for (const table of SYNC_TABLES) {
-      const filter = table === 'households' ? `id=eq.${householdId}` : `household_id=eq.${householdId}`
-      channel.on('postgres_changes', { event: '*', schema: 'public', table, filter }, () => onChange())
+    // Two channels: a cloud that does not have the later tables yet refuses to listen for
+    // them, and that refusal must not take the first channel down with it.
+    const listen = (name: string, tables: readonly SyncTable[]) => {
+      const channel = this.client.channel(name)
+      for (const table of tables) {
+        const filter = table === 'households' ? `id=eq.${householdId}` : `household_id=eq.${householdId}`
+        channel.on('postgres_changes', { event: '*', schema: 'public', table, filter }, () => onChange())
+      }
+      channel.subscribe()
+      return channel
     }
-    channel.subscribe()
+    const channels = [listen(`kitchen:${householdId}`, SYNC_TABLES.filter((table) => !LATER_TABLES.includes(table))), listen(`kitchen:${householdId}:later`, LATER_TABLES)]
     return () => {
-      void this.client.removeChannel(channel)
+      for (const channel of channels) void this.client.removeChannel(channel)
     }
   }
 
-  async readRecipe(request: Omit<RecipeFromLink, 'job'>): Promise<RecipeFromLinkResult> {
+  async askHelper<R extends HelperRequest>(request: R): Promise<ResultOf<R>> {
     await this.ensureSession()
-    const { data, error } = await this.client.functions.invoke('ai', { body: { job: 'recipe-from-link', ...request } })
-    return helperResult(data, error)
+    const { data, error } = await this.client.functions.invoke('ai', { body: request })
+    return helperResult<ResultOf<R>>(data, error)
   }
 
   async uploadBlob(path: string, blob: Blob): Promise<void> {

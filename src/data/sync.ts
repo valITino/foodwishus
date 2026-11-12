@@ -26,6 +26,8 @@ export interface SyncStatus {
   uploads: number
   /** Changes the cloud refused. Shown in Settings so nothing disappears silently. */
   stuck: number
+  /** Changes to a list this cloud does not have yet (basket, pantry). They wait on the phone until it does. */
+  later: number
   lastSyncAt: ISO | null
   lastError: string | null
 }
@@ -45,7 +47,7 @@ export const MAX_UPLOAD_ATTEMPTS = 5
 const MISSING_RETRY_MS = 5 * 60_000
 
 export class SyncEngine {
-  status: SyncStatus = { state: 'idle', pending: 0, uploads: 0, stuck: 0, lastSyncAt: null, lastError: null }
+  status: SyncStatus = { state: 'idle', pending: 0, uploads: 0, stuck: 0, later: 0, lastSyncAt: null, lastError: null }
 
   /** True in the demo kitchen: nothing is ever sent or fetched. */
   disabled = false
@@ -60,6 +62,8 @@ export class SyncEngine {
   private missingBlobs = new Map<ID, number>()
   /** Whether the cloud has confirmed, since the app opened, that this phone still has its seat. */
   private seatConfirmed = false
+  /** Tables this cloud does not have yet (found out by asking). Their changes wait in the outbox. */
+  private readonly notYet = new Set<SyncTable>()
   private readonly opts: Required<SyncOptions>
 
   constructor(
@@ -199,7 +203,10 @@ export class SyncEngine {
   private async pushOutbox(): Promise<void> {
     let membershipChecked = false
     for (;;) {
-      const op = await this.db.outbox.orderBy('seq').first()
+      const op = await this.db.outbox
+        .orderBy('seq')
+        .filter((waiting) => !this.notYet.has(waiting.table))
+        .first()
       if (!op) return
       const seq = op.seq as number
       this.store.inFlightSeq = seq
@@ -207,6 +214,13 @@ export class SyncEngine {
         await this.backend.push({ table: op.table, kind: op.kind, id: op.rowId, data: op.data })
         await this.db.outbox.delete(seq)
       } catch (e) {
+        // The cloud does not have this table yet (the kitchen's owner has not applied its
+        // migration). Nothing is wrong with the change: it waits here, and everything
+        // else goes on. Asked again the next time the app starts.
+        if (isBackendError(e) && e.code === 'table_missing') {
+          this.notYet.add(op.table)
+          continue
+        }
         if (!isBackendError(e) || e.kind !== 'rejected') throw e
 
         // A refusal can mean this phone was unpaired. Never throw data away in that case.
@@ -432,13 +446,14 @@ export class SyncEngine {
 
   private async refreshCounts(): Promise<void> {
     // The demo kitchen never syncs, so nothing is ever "waiting".
-    if (this.disabled) return this.setStatus({ pending: 0, uploads: 0, stuck: 0 })
-    const [pending, uploads, stuck] = await Promise.all([
-      this.db.outbox.count(),
+    if (this.disabled) return this.setStatus({ pending: 0, uploads: 0, stuck: 0, later: 0 })
+    const [waiting, uploads, stuck] = await Promise.all([
+      this.db.outbox.toArray(),
       this.db.blobs.where('pending').equals(1).count(),
       this.db.deadLetters.count(),
     ])
-    this.setStatus({ pending, uploads, stuck })
+    const later = waiting.filter((op) => this.notYet.has(op.table)).length
+    this.setStatus({ pending: waiting.length - later, uploads, stuck, later })
   }
 
   private setStatus(patch: Partial<SyncStatus>): void {

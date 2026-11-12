@@ -2,21 +2,14 @@
 // rule can be unit-tested: reading typed ingredients, scaling and formatting amounts,
 // times, menu totals, search and sorting.
 
+import { normalize } from '../../lib/text'
 import type { Course, Dish, Effort, ID, Ingredient, Menu, MenuCourse, Nutrition, Recipe, Step } from '../../data/types'
 
 export type Lang = 'en' | 'de'
 
 // ------------------------------------------------------------------ text --
 
-/** Lower case, accents removed, so "Rösti" is found by "rosti". */
-export function normalize(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/ß/g, 'ss')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .trim()
-}
+export { normalize }
 
 const words = (text: string): string[] => normalize(text).split(/[^a-z0-9]+/).filter(Boolean)
 

@@ -1,7 +1,7 @@
 // In-process backend for unit tests: several "phones" share one FakeCloud and each
 // can be switched offline.
 
-import { BackendError, type Backend, type ProfileInput, type PushOp, type PushSubscriptionInput, type PushType, type RecipeFromLink } from '../backend'
+import { BackendError, type Backend, type ProfileInput, type PushOp, type PushSubscriptionInput, type PushType, type HelperRequest, type ResultOf } from '../backend'
 import type { ID, ISO } from '../types'
 import type { FakeCloud } from './cloudCore'
 
@@ -80,10 +80,10 @@ export class MemoryBackend implements Backend {
   async removePushSubscription(endpoint: string) {
     this.cloud.removePushSubscription(this.user(), endpoint)
   }
-  async readRecipe(request: Omit<RecipeFromLink, 'job'>) {
-    const { answer } = await this.cloud.helper(this.user(), { job: 'recipe-from-link', ...request })
+  async askHelper<R extends HelperRequest>(request: R): Promise<ResultOf<R>> {
+    const { answer } = await this.cloud.helper(this.user(), request)
     if (!answer.ok) throw new BackendError('rejected', answer.code)
-    return answer
+    return answer as ResultOf<R>
   }
   async uploadBlob(path: string, blob: Blob) {
     const user = this.user()

@@ -69,7 +69,7 @@ beforeEach(() => {
   seen.length = 0
 })
 
-const ask = (link: string) => new SupabaseBackend(address, KEY).readRecipe({ link, lang: 'de', translate: true, metric: true, photo: true, knownTags: ['Suppe'] })
+const ask = (link: string) => new SupabaseBackend(address, KEY).askHelper({ job: 'recipe-from-link', link, lang: 'de', translate: true, metric: true, photo: true, knownTags: ['Suppe'] })
 const outcome = (link: string) => ask(link).then(() => 'read', (error: { kind: string; code: string }) => `${error.kind}:${error.code}`)
 
 describe('the app asks the helper through the real Supabase client', () => {
