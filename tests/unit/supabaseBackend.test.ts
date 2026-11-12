@@ -31,6 +31,12 @@ describe("the helper's answer, whichever way it arrives", () => {
     expect(await outcome(null, null)).toBe('rejected:helper_down')
   })
 
+  it('knows a login that is no good any more, whoever refused it', async () => {
+    // Supabase checks the login before the function runs, and answers in its own words.
+    expect(await outcome(null, failed(new Response('{"code":401,"message":"Invalid JWT"}', { status: 401 })))).toBe('rejected:not_signed_in')
+    expect(await outcome(null, failed(new Response(JSON.stringify({ ok: false, code: 'not_signed_in' }), { status: 401 })))).toBe('rejected:not_signed_in')
+  })
+
   it('knows a helper that is not deployed from one that is down, and both from being offline', async () => {
     expect(await outcome(null, failed(new Response('{"code":"NOT_FOUND","message":"Requested function was not found"}', { status: 404 })))).toBe('rejected:helper_off')
     expect(await outcome(null, failed(new Response('<html>Bad gateway</html>', { status: 502 })))).toBe('network:offline')

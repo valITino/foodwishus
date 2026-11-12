@@ -241,7 +241,11 @@ const en = {
     readingHint: 'This takes a few seconds.',
     honest: 'Fork gets help from an AI (Claude). It can misread things, so you check the dish before it is saved.',
     byHand: 'Add it by hand',
+    knownTitle: 'Already in the recipe book',
+    knownBody: (name: string) => `This page is where "${name}" is from.`,
+    openKnown: 'Open that dish',
     problemTitle: 'That did not work',
+    demoTitle: 'Not in the demo kitchen',
     problems: {
       bad_request: 'The app and the helper do not understand each other. Update the app, then try again.',
       not_signed_in: 'This phone is not logged in to the kitchen any more. Log in again, then read the link.',
@@ -504,7 +508,11 @@ const de: typeof en = {
     readingHint: 'Das dauert ein paar Sekunden.',
     honest: 'Fork bekommt Hilfe von einer KI (Claude). Sie kann sich verlesen, darum prüfst du das Gericht, bevor es gespeichert wird.',
     byHand: 'Von Hand erfassen',
+    knownTitle: 'Schon im Rezeptbuch',
+    knownBody: (name) => `Von dieser Seite stammt «${name}».`,
+    openKnown: 'Dieses Gericht öffnen',
     problemTitle: 'Das hat nicht geklappt',
+    demoTitle: 'Nicht in der Demo-Küche',
     problems: {
       bad_request: 'Die App und der Helfer verstehen sich nicht. Aktualisiere die App und probier es nochmal.',
       not_signed_in: 'Dieses Handy ist nicht mehr in der Küche angemeldet. Melde dich wieder an und lies den Link dann.',

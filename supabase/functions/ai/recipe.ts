@@ -52,7 +52,8 @@ export function tidyCard(card: Partial<Record<keyof RecipeCard, unknown>>): Reci
     description: text(card.description, LIMITS.description),
     course: COURSES.find((course) => course === String(card.course).toLowerCase()) ?? 'main',
     effort: EFFORTS.find((effort) => effort === String(card.effort).toLowerCase()) ?? null,
-    tags: [...new Set(list(card.tags, LIMITS.tags * 2, LIMITS.tag).map((tag) => tag.toLowerCase()))].slice(0, LIMITS.tags),
+    // Written as they came ("Schweizer Küche"), each only once whatever its capitals.
+    tags: list(card.tags, LIMITS.tags * 2, LIMITS.tag).filter((tag, at, all) => all.findIndex((other) => other.toLowerCase() === tag.toLowerCase()) === at).slice(0, LIMITS.tags),
     servings: count(card.servings, 99),
     prepMinutes: count(card.prepMinutes, 24 * 60),
     cookMinutes: count(card.cookMinutes, 48 * 60),
@@ -121,11 +122,15 @@ export function stepTexts(instructions: unknown, depth = 0): string[] {
   return []
 }
 
-const words = (value: unknown): string[] =>
+/** A field that is a list or a comma-separated line, as its entries were written. */
+const entries = (value: unknown): string[] =>
   (Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[,;|]/) : [])
     .filter((item): item is string => typeof item === 'string')
-    .map((item) => plain(item).toLowerCase().trim())
+    .map((item) => plain(item).trim())
     .filter(Boolean)
+
+/** The same in small letters, for comparing. */
+const words = (value: unknown): string[] => entries(value).map((item) => item.toLowerCase())
 
 function pictureOf(image: unknown): string | null {
   if (typeof image === 'string') return image
@@ -180,7 +185,7 @@ export function cardFromData(data: Record<string, unknown>): PageRecipe | null {
     description: data.description,
     course: courseFrom(categories) ?? 'main',
     effort: null,
-    tags: words(data.recipeCuisine),
+    tags: entries(data.recipeCuisine),
     servings,
     prepMinutes: prep,
     // A page that only gives the total: count it as cooking time rather than lose it.

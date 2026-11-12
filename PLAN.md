@@ -27,6 +27,14 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
       with refused changes, Lighthouse measured, final README. *Open:* Lighthouse performance
       is around 80, the goal is 90 (the first load carries everything in one piece of JavaScript).
 
+- [x] **After M7: the short ways and the bell.** A meal for today from anywhere, serving
+      early, changing the cook, removing a mis-logged meal; a bell on Today with what the
+      other one did.
+- [ ] **Fork reads recipes.** Recipe from a link (pasted or shared to the app), with an AI
+      helper behind an Edge Function. *Built and tested against a pretend web; the function,
+      its migration and the key wait for the owner (`supabase/functions/ai/README.md`).*
+- [ ] **Pantry and shopping list**, with the same helper.
+
 ## What is verified so far, and how
 
 | Area | Verified by |
@@ -40,6 +48,12 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
 | Design in light and candlelight, English and German | Screenshots at 412 and 360 wide, looked at one by one |
 
 ## Not verified yet
+
+- **The recipe helper with the real AI and real recipe sites.** Everything around it is
+  tested: the function as the one file that gets deployed, the app's real Supabase client
+  calling it through a stand-in, the whole flow in a browser against a pretend web. The
+  Claude API itself and real sites' pages have not been met: the first real link is their
+  first meeting. Sharing a link to the installed app from Pinterest needs a real phone.
 
 - **The app talking to the real Supabase project.** The workspace this was built in cannot reach
   Supabase. The database side is tested for real (see above) and the app is tested against a

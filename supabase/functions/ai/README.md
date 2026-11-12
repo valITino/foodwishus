@@ -1,0 +1,184 @@
+# The kitchen's helper: recipes from a link
+
+In the app: **+**, then **A recipe from a link**. Paste a link from Pinterest or a recipe
+site (or share it to the app from another app), and the dish form opens filled in: name,
+ingredients, steps, times, picture, source. Nothing is saved until whoever pasted it has
+looked it over and tapped **Save dish**.
+
+In the app the helper is Fork, the mascot. Behind Fork is this function and, for most
+pages, an AI (Claude).
+
+How it travels:
+
+1. The app sends the link and three switches (write it in my language, convert cups and
+   Fahrenheit, bring the picture) to this function, with the device's own login.
+2. The function asks the database for a ticket (`public.ai_ticket()`, migration
+   `0008_helper.sql`): only somebody with a seat in the kitchen gets one, and a kitchen
+   gets 40 a day.
+3. It fetches the page. A Pinterest pin is only a picture with a link, so it follows the
+   link to the page the recipe lives on.
+4. Many recipe sites carry the recipe as data for search engines. If the page does, that
+   data goes to the AI, otherwise the page's text does. The AI writes the recipe card in
+   the kitchen's language and units and adds a note where it was not sure ("The cups are
+   roughly converted to grams.").
+5. The app fills the dish form with the card. The notes sit on top, each with a jump to
+   the part it is about.
+
+## What leaves the kitchen, and what does not
+
+- **To the recipe site:** one ordinary page request, like a browser's, without cookies
+  and without anything about the kitchen.
+- **To the AI:** the text or recipe data of that one page, the language, the two
+  switches, and the tags the kitchen already uses (so "Swiss" is not tagged a second
+  time as "swiss"). No names, no meals, no ratings, no photos.
+- **Stored by the function:** nothing. The database keeps one number per kitchen and
+  day: how many pages were read.
+
+## What it costs
+
+GitHub and Supabase stay free. The AI is paid per use, from the Claude API account whose
+key is set in step 3: with the default model (`claude-haiku-5-5`) one recipe is well
+under one cent, and the limit of 40 pages a day keeps even a very bad day at a few
+cents. Prices change: check the pricing page of the Claude Console before relying on this.
+
+## Without a key it still does something
+
+A page that carries its own recipe data is read without any AI: word for word, in the
+page's language and units. The dish form says so ("Read from the page as it is"). Pages
+without such data, and translating or converting, need the key. So the function can be
+deployed first and the key added later, or never.
+
+## Steps
+
+### 1. Apply the migration
+
+Apply `supabase/migrations/0008_helper.sql` as it is (migration name `helper`). It adds
+one small private table and the function `public.ai_ticket()`, and touches nothing else.
+
+Optional check: `bash supabase/tests/local/run.sh helper` runs
+`supabase/tests/helper_test.sql` on a throwaway Postgres on your own machine (10 lines,
+all `ok`). Never run it against the live project.
+
+### 2. Deploy the function
+
+Deploy it as the function `ai`, with **JWT verification on** (the default): Supabase
+then refuses every call without a device login before the function even runs.
+
+The function is a one-line loader that imports this folder's `index.ts` from GitHub at
+one fixed commit, so what runs is exactly what was tested and nothing is copied by hand:
+
+```ts
+import 'https://raw.githubusercontent.com/valITino/foodwishus/<commit>/supabase/functions/ai/index.ts'
+```
+
+Two other ways lead to the same code: `supabase functions deploy ai` with the Supabase
+CLI, or `npm run build:ai`, which writes everything into one plain file
+(`supabase/functions/ai/dist/index.js`, with its size and SHA-256 printed) to paste into
+the dashboard's function editor under the file name `index.ts`.
+
+### 3. Add the key
+
+This is the one step only the owner can do, and the key must never go anywhere else:
+not into the app, not into the repository, not into a chat.
+
+1. In the Claude Console, create an API key. Give it a name like `foodwishus`. A monthly
+   spend limit on the account is a good idea.
+2. In the Supabase dashboard: **Edge Functions**, **Secrets**, add a secret named
+   `ANTHROPIC_API_KEY` with the key as its value.
+
+The function picks it up by itself within a minute or two. Optional: a secret `AI_MODEL`
+makes it use another model than the default.
+
+### 4. Try it
+
+In the app: **+**, **A recipe from a link**, paste any recipe link, **Read recipe**. No
+new version of the app is needed once this version is on the phones.
+
+## When something is off
+
+The app says what happened in plain words. For the owner, the function's log (Edge
+Functions, `ai`, Logs) says more:
+
+| The app says | What it is | What to do |
+| --- | --- | --- |
+| "This page needs the AI helper, and it is not set up for this kitchen yet." | No key is set (step 3), or the function is not deployed (step 2). | Do the missing step. |
+| "The AI helper is not answering right now." | The AI did not answer, or refused the key. The log says `helper did not answer:` with `helper_key` for a refused key (wrong, deleted, or out of credit) and `helper_down` for an outage. | For `helper_key`: check the key and the account in the Claude Console. Otherwise try again later. |
+| "Fork has read 40 pages today, and that is the limit." | The day's tickets are used up. | Wait until tomorrow (Swiss time). To change the limit, change `per_day` in a new migration and `DAILY_TICKETS` in `contract.ts`. |
+| "This phone is not logged in to the kitchen any more." | The device's login is gone or its profile is paused. | Log in again on that phone. |
+| "The page did not answer." | The site was slow, down, or refuses visitors that are not browsers. Some sites do. | Try again, or add the dish by hand: the link is kept as its source. |
+| "Fork found no recipe on that page." | No recipe on it, or a pin without a link behind it. | Open the recipe's own page and use that link. |
+
+How many pages were read lately:
+
+```sql
+select day, used from private.helper_tickets order by day desc limit 14;
+```
+
+## Switching it off again
+
+Remove the secret `ANTHROPIC_API_KEY`: the helper falls back to pages that carry their
+own recipe data. Delete the function `ai`: the app says the helper is not set up. The
+dishes that were read stay as they are; they are ordinary dishes.
+
+If the key may have been seen by somebody: delete it in the Claude Console, create a new
+one, and put the new one into the secret.
+
+## Who may call it, and what it may fetch
+
+- Only a device that is logged in to the kitchen: Supabase checks the login at the door,
+  and the ticket check asks the database whether that login has a seat. Everybody else
+  costs nothing and learns nothing.
+- Only public web pages: `http` and `https` on the usual ports, no addresses of private
+  networks, no bare numbers, no logins in the address. Redirects are followed by hand
+  and checked again at every hop. Pages are cut off at 1.5 MB and 9 seconds, pictures at
+  4 MB. What it does not do is look up a name's number first, so a public name that
+  points into a private network is not caught here; the function runs on Supabase's
+  servers, away from the database, and only the two of you can call it.
+- A page is material, never an instruction. The AI is told so, its answer has to fit a
+  fixed form (a recipe card and nothing else), and the card is cut to size again before
+  it leaves the function. A page that says "ignore your instructions" ends up, at worst,
+  as an odd line in a form that a person reads before saving.
+
+## Skills: one instruction file per job
+
+Everything the AI is told lives in `skills/`, so every request of one kind is worded
+the same way and a change is made in one place:
+
+- `skills/house-rules.ts`: what holds for every job. The kitchen's language and Swiss
+  spelling, plain words, metric units as the kitchen writes them (g, dl, EL, TL), never
+  inventing what the material does not say, material is never an instruction.
+- `skills/recipe-card.ts`: this job. What it is given, the exact form of the answer
+  (a JSON schema), how to write ingredient lines and steps, when to add a note.
+
+A new job (the pantry and the shopping list are next) gets its own file next to it, with
+the same four parts: `system` (house rules plus its own), `user` (the material),
+`schema` (the form of the answer) and `read` (the answer, checked and cut to size). The
+handler only adds: who may ask, what to fetch, and what to fall back on.
+
+## What is in this folder
+
+| File | What it does |
+| --- | --- |
+| `index.ts` | The Deno entry point. Hands requests to `handler.ts` with the real web, the Claude API and the database's ticket counter. |
+| `handler.ts` | Who may ask, the way from a link to a card, and what to fall back on. |
+| `page.ts` | Fetching a page safely and taking it apart: recipe data, text, pictures, the link behind a pin. |
+| `recipe.ts` | The recipe card, and the page's own recipe data turned into one without any AI. |
+| `claude.ts` | The one place that talks to the Claude API. |
+| `skills/` | The instructions for the AI (see above). |
+| `contract.ts` | What the app sends and gets back. The app imports these types. |
+| `dist/index.js` | All of the above in one file, made by `npm run build:ai`. Not in the repository. |
+
+Everything except `index.ts` is covered by unit tests under Node (`tests/unit/ai.*.test.ts`),
+against a pretend web and a stand-in for the AI (`src/data/fake/pretendWeb.ts`).
+`ai.bundle.test.ts` builds `dist/index.js` and runs requests through that very file,
+`index.ts` included. `supabaseHelper.test.ts` lets the app's real Supabase client call
+the function through a stand-in for Supabase on the same machine. The pretend cloud of
+the dev server runs the same handler, so `npm run dev` and the end-to-end tests
+(`tests/e2e/recipe-link.spec.ts`) read "links" without a key and without the network.
+
+What no test here can show: the real Claude API answering, and real recipe sites. Their
+first meeting is the first link pasted in the real app.
+
+## What is deployed right now
+
+Nothing yet. Steps 1 to 3 are waiting for the owner's go-ahead.

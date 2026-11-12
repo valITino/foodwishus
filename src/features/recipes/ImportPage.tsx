@@ -12,7 +12,7 @@ import { useLang } from '../../i18n'
 import { Button, Card, Field, PageHeader, Screen, SteamLoader, toast, Toggle } from '../../ui/components'
 import { Mascot } from '../../ui/deco/Deco'
 import { useRecipesCopy } from './copy'
-import { draftFromCard, handOver, linkIn, pictureFile, siteName } from './importLogic'
+import { dishFromPage, draftFromCard, handOver, linkIn, pictureFile, siteName } from './importLogic'
 import { emptyDraft } from './logic'
 import { BottomBar, LineIcon } from './parts'
 
@@ -41,6 +41,14 @@ export function ImportPage({ route }: { route: Route }) {
       here.current = false
     }
   }, [])
+
+  /** The dish that was made from this page before, so nothing ends up in the book twice by accident. */
+  const known = (address: string | null) => {
+    const dish = address ? dishFromPage(dishes ?? [], address) : null
+    return dish ? { id: dish.id, name: dish.name } : null
+  }
+  const already = known(linkIn(link))
+  const problemBox = useRef<HTMLDivElement>(null)
 
   const paste = async () => {
     let text: string
@@ -76,7 +84,7 @@ export function ImportPage({ route }: { route: Route }) {
       const ticket = handOver({
         draft: draftFromCard(result.card, result.source.url, mostUsedTags(dishes ?? [], 200)),
         cover: pictureFile(result.photo),
-        read: { site: siteName(result.source), by: result.by, checks: result.card.checks },
+        read: { site: siteName(result.source), by: result.by, checks: result.card.checks, already: known(result.source.url) },
       })
       // The form takes this page's place: back from it leads to where she came from.
       navigate(`/recipes/new?from=${ticket}`, { replace: true })
@@ -84,6 +92,8 @@ export function ImportPage({ route }: { route: Route }) {
       if (!here.current) return
       setReading(false)
       setProblem(readProblem(error))
+      // The button that was tapped is back, but focus is not: hand it to the message.
+      requestAnimationFrame(() => problemBox.current?.focus())
     }
   }
 
@@ -140,16 +150,28 @@ export function ImportPage({ route }: { route: Route }) {
           </Card>
         </form>
 
-        {problem && (
-          <Card tone="blush" role="alert" data-testid="link-problem">
-            <p className="text-sm font-extrabold">{c.problemTitle}</p>
-            <p className="mt-1 text-sm leading-snug">{problem === 'limit' ? c.problems.limit(DAILY_TICKETS) : c.problems[problem]}</p>
-            {!NO_WAY_AROUND.includes(problem) && linkIn(link) && (
-              <Button variant="secondary" className="mt-3" onClick={byHand}>
-                {c.byHand}
-              </Button>
-            )}
+        {already && !reading && (
+          <Card tone="blush" data-testid="link-known">
+            <p className="text-sm font-extrabold">{c.knownTitle}</p>
+            <p className="mt-1 break-words text-sm leading-snug">{c.knownBody(already.name)}</p>
+            <Button variant="secondary" className="mt-3" onClick={() => navigate(`/recipes/${already.id}`, { replace: true })}>
+              {c.openKnown}
+            </Button>
           </Card>
+        )}
+
+        {problem && (
+          <div ref={problemBox} tabIndex={-1} role="alert" className="rounded-card focus:outline-none">
+            <Card tone="blush" data-testid="link-problem">
+              <p className="text-sm font-extrabold">{problem === 'demo' ? c.demoTitle : c.problemTitle}</p>
+              <p className="mt-1 text-sm leading-snug">{problem === 'limit' ? c.problems.limit(DAILY_TICKETS) : c.problems[problem]}</p>
+              {!NO_WAY_AROUND.includes(problem) && linkIn(link) && (
+                <Button variant="secondary" className="mt-3" onClick={byHand}>
+                  {c.byHand}
+                </Button>
+              )}
+            </Card>
+          </div>
         )}
 
         <section aria-labelledby="link-options">

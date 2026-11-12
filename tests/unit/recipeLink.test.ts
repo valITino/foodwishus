@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { BackendError } from '../../src/data/backend'
 import { mostUsedTags, ReadError, readProblem } from '../../src/data/helper'
-import { draftFromCard, dropHandover, handOver, handoverFor, kitchenTag, linkIn, pictureFile, sectionFor, shownChecks, siteName } from '../../src/features/recipes/importLogic'
+import { dishFromPage, draftFromCard, dropHandover, handOver, handoverFor, kitchenTag, linkIn, pictureFile, sectionFor, shownChecks, siteName } from '../../src/features/recipes/importLogic'
 import { dishInputFromDraft, emptyDraft } from '../../src/features/recipes/logic'
 import { PRETEND_JPEG } from '../../src/data/fake/pretendWeb'
 import type { RecipeCard } from '../../src/data/backend'
@@ -111,7 +111,7 @@ describe('handing the card to the dish form', () => {
   it('is picked up with its ticket, and only the newest waits', () => {
     const first = handOver({ draft: emptyDraft(), cover: null, read: null })
     expect(handoverFor(first)?.read).toBeNull()
-    const second = handOver({ draft: emptyDraft(), cover: null, read: { site: 'x.ch', by: 'page', checks: [] } })
+    const second = handOver({ draft: emptyDraft(), cover: null, read: { site: 'x.ch', by: 'page', checks: [], already: null } })
     expect(handoverFor(first)).toBeNull()
     expect(handoverFor(second)?.read?.site).toBe('x.ch')
     dropHandover(second)
@@ -166,7 +166,7 @@ describe('a link shared to the app from another one', () => {
     const { SHARE_PARAMS } = await import('../../src/pwa/share')
     const { readFileSync } = await import('node:fs')
     const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8')) as { share_target: { action: string; method: string; params: Record<string, string> } }
-    expect(manifest.share_target).toEqual({ action: './', method: 'GET', params: SHARE_PARAMS })
+    expect(manifest.share_target).toEqual({ action: './', method: 'GET', enctype: 'application/x-www-form-urlencoded', params: SHARE_PARAMS })
   })
 })
 
@@ -178,8 +178,10 @@ describe('tags the way the kitchen writes them', () => {
 
   it("follows the kitchen's habit for a new one", () => {
     expect(kitchenTag('pasta', ['Swiss', 'Quick', 'soulfood'])).toBe('Pasta')
-    expect(kitchenTag('pasta', ['swiss', 'quick', 'Soulfood'])).toBe('pasta')
-    expect(kitchenTag('pasta', [])).toBe('pasta')
+    expect(kitchenTag('Pasta', ['swiss', 'quick', 'Soulfood'])).toBe('pasta')
+    // A kitchen without tags yet starts with capitals.
+    expect(kitchenTag('pasta', [])).toBe('Pasta')
+    expect(kitchenTag('Schweizer Küche', [])).toBe('Schweizer Küche')
   })
 
   it('is how a card arrives in the form', () => {
@@ -193,5 +195,27 @@ describe('what to call the place a recipe was read from', () => {
     expect(siteName({ url: 'https://www.lecker-kochen.ch/rezepte/zopf', site: 'Lecker Kochen' })).toBe('Lecker Kochen')
     expect(siteName({ url: 'https://www.sunnykitchen.com/cornbread', site: null })).toBe('sunnykitchen.com')
     expect(siteName({ url: 'https://www.pinterest.ch/pin/99/', site: 'pinterest' })).toBe('Pinterest')
+  })
+})
+
+describe('a page the recipe book already has a dish from', () => {
+  const dishes = [
+    { name: 'Rösti', recipe: {} },
+    { name: 'Grandma book', recipe: { sourceUrl: "Grandma's book, p. 12" } },
+    { name: 'Rüeblisuppe', recipe: { sourceUrl: 'https://www.lecker-kochen.ch/rezepte/rueeblisuppe' } },
+    { name: 'Kuchen', recipe: { sourceUrl: 'https://kochen.example.org/rezept?id=42' } },
+  ]
+
+  it('is found whatever tail the link has', () => {
+    expect(dishFromPage(dishes, 'https://www.lecker-kochen.ch/rezepte/rueeblisuppe')?.name).toBe('Rüeblisuppe')
+    expect(dishFromPage(dishes, 'lecker-kochen.ch/rezepte/rueeblisuppe/?utm_source=pin#kommentare')?.name).toBe('Rüeblisuppe')
+    expect(dishFromPage(dishes, 'https://kochen.example.org/rezept?id=42&fbclid=abc')?.name).toBe('Kuchen')
+  })
+
+  it('is not mistaken for another page of the same site', () => {
+    expect(dishFromPage(dishes, 'https://www.lecker-kochen.ch/rezepte/zopf')).toBeNull()
+    expect(dishFromPage(dishes, 'https://kochen.example.org/rezept?id=43')).toBeNull()
+    expect(dishFromPage(dishes, 'https://www.lecker-kochen.ch/')).toBeNull()
+    expect(dishFromPage(dishes, 'not a link')).toBeNull()
   })
 })

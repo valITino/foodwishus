@@ -261,6 +261,44 @@ the partner's arrival.
 - The push notifications stay as they are (five events, sent by the cloud). The bell is
   the history inside the app, also for people who never allowed notifications.
 
+## 14. Fork reads recipes: an AI helper behind one function
+
+**+**, **A recipe from a link**: paste a link from Pinterest or a recipe site, and the dish
+form opens filled in. The reading is done by an Edge Function (`supabase/functions/ai`)
+that fetches the page and asks the Claude API for a recipe card.
+
+- **Why a function and not the app.** The key of a paid API cannot live in an app whose
+  code is public: it sits in the function's secrets, typed in by the owner, and is never
+  seen by the app, the repository or anybody else. A browser also cannot fetch other
+  sites' pages; a server can.
+- **It fills a form, it never saves.** The AI can misread a page. So its card goes into
+  the same dish form as a hand-typed dish, through the same parsers, and counts as unsaved
+  work. What it was not sure about is listed on top, each note with a jump to the part in
+  question. That is also how it "asks": with a short list to look at, not with a chat.
+- **Three switches instead of a conversation.** Write it in my language, convert cups and
+  Fahrenheit, bring the picture. They are remembered on the device.
+- **The page's own data first.** Most recipe sites carry the recipe as data for search
+  engines. That is what the AI gets when it is there (shorter, cleaner, cheaper), and it is
+  also the fallback: without a key, or when the AI is down, such pages are still read, word
+  for word, and the form says so.
+- **Skills.** What the AI is told lives in `supabase/functions/ai/skills`: house rules that
+  hold for every job, and one file per job with its instructions and the exact form of its
+  answer. The next jobs (pantry, shopping list) get a file each, so every request of a kind
+  is worded the same way.
+- **Tickets.** Only a login with a seat in the kitchen may ask, and a kitchen gets 40 pages
+  a day (`public.ai_ticket()`), so a mistake or a stranger cannot run up a bill.
+- **Fork is the face.** The app calls the helper Fork and says once, plainly, that an AI
+  (Claude) is behind him and can misread things.
+- **Sharing into the app.** The installed app is a share target: "Share" in Pinterest or
+  the browser offers FoodwishUs, and the link arrives in the reader. Android only, and only
+  for the installed app; pasting works everywhere.
+- **The same code everywhere.** The pretend cloud runs the very same handler with a
+  pretend web and a stand-in for the AI, so development and tests need neither key nor network.
+- **Cost:** reading needs a connection (everything else in the app works offline), some
+  sites refuse visitors that are not browsers, and a pin without a link behind it has no
+  recipe to read. In each case the app says so and offers the empty form with the link
+  kept as the source.
+
 ## Limits to know
 
 | Limit | Value | What happens at the limit |
@@ -269,6 +307,7 @@ the partner's arrival.
 | Photo storage | 1 GB | About 2,500 photos; old photos would need exporting and pruning |
 | Egress | 5 GB a month | Photos are cached on the phones, so each is downloaded once |
 | Inactivity | about 7 days | Project pauses; keep-alive pings prevent it |
+| Recipes read from links | 40 a day per kitchen | The app says so; tomorrow there is room again. The only part that costs money (see section 14) |
 
 Figures as published in November 2026. Check them again before relying on them.
 
@@ -289,4 +328,6 @@ Things added beyond the written spec. Keep or veto.
 - **Focus follows you:** a sheet takes the keyboard focus and gives it back, and a new
   page hands it to its title, so screen readers say where you are.
 - **Quote of the day:** the same quote all day, a new one tomorrow.
+- **Timers set by themselves** on a dish read from a link, wherever a step names a time.
+- **Tags in the kitchen's own spelling** on a dish read from a link ("Swiss", not "swiss").
 - **`/#/lab`** in development: a workbench to watch sync between two browser windows.

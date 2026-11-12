@@ -577,6 +577,18 @@ function ReadNote({ read, showCalories }: { read: NonNullable<Handover['read']>;
           <p className="text-sm leading-snug">{c.link.lookOver}</p>
         </div>
       </div>
+      {read.already && (
+        <div className="mt-3 border-t border-line pt-3 text-sm leading-snug" data-testid="read-known">
+          <p className="break-words">{c.link.knownBody(read.already.name)}</p>
+          <button
+            type="button"
+            className="-ml-1 inline-flex min-h-11 items-center px-1 text-sm font-extrabold underline decoration-2 underline-offset-4"
+            onClick={() => navigate(`/recipes/${read.already?.id}`, { replace: true })}
+          >
+            {c.link.openKnown}
+          </button>
+        </div>
+      )}
       {checks.length > 0 && (
         <div className="mt-3 border-t border-line pt-3">
           <h2 className="text-sm font-extrabold">{c.link.checks}</h2>

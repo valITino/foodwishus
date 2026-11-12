@@ -46,3 +46,33 @@ test('Chrome finds the app installable: manifest, icons and worker are in order'
     expect(size, icon.src).toBe(icon.sizes)
   }
 })
+
+// Installed on Android, the app shows up in other apps' share sheets (Pinterest, the
+// browser). A shared link opens the app's start address with the text behind a question
+// mark; the app turns that into the page that reads recipe links.
+test('a link shared to the installed app opens the link reader, with or without a connection', async ({ page, context }) => {
+  await page.addInitScript(() => localStorage.setItem('foodwishus.prefs', '{"demoData":true,"demoEmpty":true}'))
+  await page.goto('./')
+  await workerInCharge(page)
+  const home = new URL('./', page.url()).href
+
+  const manifest = (await (await page.request.get(`${home}manifest.webmanifest`)).json()) as { share_target: { action: string; method: string; params: Record<string, string> } }
+  // The share lands on the app's own start address, inside its scope.
+  expect(new URL(manifest.share_target.action, `${home}manifest.webmanifest`).href).toBe(home)
+  expect(manifest.share_target.method).toBe('GET')
+  // Chrome reads the manifest, share target included, without complaints.
+  const tools = await context.newCDPSession(page)
+  expect(((await tools.send('Page.getAppManifest')) as { errors: unknown[] }).errors).toEqual([])
+
+  const shared = `${home}?${manifest.share_target.params.text}=${encodeURIComponent('Look at this pin: https://pin.it/AbC')}`
+  await page.goto(shared)
+  await expect(page.getByRole('heading', { level: 1, name: 'Recipe from a link' })).toBeVisible()
+  await expect(page.getByLabel('Link to the recipe')).toHaveValue('https://pin.it/AbC')
+  expect(page.url()).toBe(`${home}#/recipes/import?link=${encodeURIComponent('https://pin.it/AbC')}`)
+
+  // Shared on the train: the app still opens on the reader, and the link is kept.
+  await context.setOffline(true)
+  await page.goto(shared)
+  await expect(page.getByRole('heading', { level: 1, name: 'Recipe from a link' })).toBeVisible()
+  await expect(page.getByLabel('Link to the recipe')).toHaveValue('https://pin.it/AbC')
+})

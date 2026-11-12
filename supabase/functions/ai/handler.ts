@@ -19,11 +19,17 @@ export interface HelperDeps {
   /** The Claude API key, or null while none is set. */
   apiKey: string | null
   model?: string
-  /** Checks that the caller sits in a kitchen and takes one of today's tickets. Gets the request's Authorization header. */
-  ticket: (authorization: string) => Promise<Ticket>
+  /**
+   * Checks that the caller sits in a kitchen and takes one of today's tickets. Gets the
+   * request's Authorization header and the project key the app sent along with it.
+   */
+  ticket: (authorization: string, apikey: string | null) => Promise<Ticket>
 }
 
-const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type', 'access-control-allow-methods': 'POST, OPTIONS' }
+// The app is a web page on another address, so the browser asks first. Every header the
+// Supabase client may send has to be on this list, or the browser refuses the call
+// (tests/unit/ai.bundle.test.ts compares it with the client's own list).
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type, x-retry-count, traceparent, tracestate, baggage', 'access-control-allow-methods': 'POST, OPTIONS' }
 
 const json = (body: HelperAnswer, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } })
 const refuse = (code: HelperFailure, status = 200): Response => json({ ok: false, code }, status)
@@ -91,6 +97,8 @@ async function recipeFromLink(request: RecipeFromLink, deps: HelperDeps, left: n
       else if (!fromPage) return { ok: false, code: 'not_a_recipe' }
     } catch (error) {
       if (!(error instanceof HelperError)) throw error
+      // For the function's log: the owner sees a refused key or an outage there. Never the key itself.
+      console.warn('helper did not answer:', error.message)
       helperFailed = 'helper_down'
     }
   }
@@ -123,7 +131,7 @@ export function helperHandler(deps: HelperDeps): (request: Request) => Promise<R
 
     const authorization = request.headers.get('authorization') ?? ''
     if (!/^Bearer\s+\S+/i.test(authorization)) return refuse('not_signed_in', 401)
-    const ticket = await deps.ticket(authorization)
+    const ticket = await deps.ticket(authorization, request.headers.get('apikey'))
     if (!ticket.ok) return refuse(ticket.code, ticket.code === 'limit' ? 200 : 403)
 
     try {

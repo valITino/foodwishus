@@ -13,9 +13,13 @@ import { helperHandler, type Ticket } from './handler.ts'
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 
-/** Ask the database, as the caller: is this somebody from the kitchen, and is there a ticket left today? */
-async function ticket(authorization: string): Promise<Ticket> {
-  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/ai_ticket`, { method: 'POST', headers: { apikey: anonKey, authorization, 'content-type': 'application/json' }, body: '{}' })
+/**
+ * Ask the database, as the caller: is this somebody from the kitchen, and is there a
+ * ticket left today? The project key is the one the app sent (it is public, and it is
+ * the one this project accepts); the function's own is the fallback.
+ */
+async function ticket(authorization: string, apikey: string | null): Promise<Ticket> {
+  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/ai_ticket`, { method: 'POST', headers: { apikey: apikey || anonKey, authorization, 'content-type': 'application/json' }, body: '{}' })
   if (response.status === 401) return { ok: false, code: 'not_signed_in' }
   if (!response.ok) {
     const problem = await response.text()

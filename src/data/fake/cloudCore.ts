@@ -476,7 +476,7 @@ export class FakeCloud {
       fetch: pretendFetch(),
       askFetch: pretendHelper({ down: this.helperDown }),
       apiKey: this.helperKey,
-      ticket: async (authorization) => {
+      ticket: async (authorization, _apikey) => {
         try {
           return { ok: true, left: this.aiTicket(authorization.replace(/^Bearer\s+/i, '')) }
         } catch (error) {

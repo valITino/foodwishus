@@ -165,6 +165,29 @@ test('the switches decide how it is written, and are remembered', async ({ brows
   await expect(page.getByRole('switch', { name: 'Write it in English' })).toBeChecked()
 })
 
+test('a page that is already in the recipe book is noticed, before and after reading', async ({ browser }) => {
+  const page = await openKitchen(browser, contexts)
+  await openReader(page)
+  await read(page, SOUP)
+  await page.getByRole('button', { name: 'Save dish' }).click()
+  await expect(page.getByTestId('dish-name')).toHaveText('Rüeblisuppe mit Ingwer')
+
+  await test.step('the same link again: said as soon as it is in the field', async () => {
+    await page.getByRole('button', { name: 'Back' }).click()
+    await openReader(page)
+    await page.getByLabel('Link to the recipe').fill(`${SOUP}?utm_source=newsletter`)
+    await expect(page.getByTestId('link-known')).toContainText('This page is where "Rüeblisuppe mit Ingwer" is from.')
+  })
+
+  await test.step('through a pin the address is only known after reading: the form says it', async () => {
+    await read(page, PIN)
+    await expect(page.getByTestId('read-known')).toContainText('This page is where "Rüeblisuppe mit Ingwer" is from.')
+    await page.getByTestId('read-known').getByRole('button', { name: 'Open that dish' }).click()
+    await expect(page.getByTestId('dish-name')).toHaveText('Rüeblisuppe mit Ingwer')
+    expect(await storedDishes(page)).toHaveLength(1)
+  })
+})
+
 test('a pin leads to the recipe behind it, pasted with one tap', async ({ browser }) => {
   const page = await openKitchen(browser, contexts)
   await openReader(page)
@@ -295,5 +318,6 @@ test('the demo kitchen says up front that it cannot read links', async ({ page }
   await useDemo(page, { empty: true })
   await page.goto('/#/recipes/import')
   await expect(page.getByRole('heading', { level: 1, name: 'Recipe from a link' })).toBeVisible()
+  await expect(problem(page)).toContainText('Not in the demo kitchen')
   await expect(problem(page)).toContainText('The demo kitchen cannot read links. Leave the demo and try it in your own kitchen.')
 })

@@ -16,6 +16,7 @@ npm run e2e         # Playwright, Android viewport, against the dev server
 npm run build       # production build (talks to Supabase), also writes dist/sw.js
 npm run e2e:pwa     # offline, update note, install and push tests against the production build
 npm run build:push  # bundles the push Edge Function into one file for deploying
+npm run build:ai    # the same for the helper function (recipes from links)
 node tools/shots.mjs <outDir> [scale]   # screenshots; needs the dev server running
 ```
 
@@ -56,6 +57,14 @@ config and the screenshot tool read the same variable).
 - **The bell:** `src/data/news.ts` decides what an arriving change is worth telling; the sync
   writes the lines into the local `news` table while it applies a pull (never on the first
   one). `src/features/news` words and shows them. Nothing about it lives in the cloud.
+- **The helper (AI):** the Edge Function `supabase/functions/ai` reads a recipe from a link
+  and answers with a recipe card; `README.md` there has the owner's steps. What the AI is
+  told lives in `skills/` (house rules plus one file per job: instructions, the form of the
+  answer, and a reader that checks it). The Claude API key is a secret of the function and
+  never appears in the app, the repository, a test or a chat. Screens reach the helper
+  through `src/data/helper.ts`; the pretend cloud runs the same handler with a pretend web
+  (`src/data/fake/pretendWeb.ts`). A card only ever fills the dish form
+  (`src/features/recipes/importLogic.ts`): the AI never writes to the kitchen by itself.
 - **Refused changes** (`deadLetters`) leave the list only through `sync.retryRefused` and
   `sync.discardRefused`; `src/data/refused.ts` puts them into words for the Sync page.
 - The real backend is Supabase (`supabaseBackend.ts`); rules live in `supabase/migrations`.

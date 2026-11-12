@@ -35,7 +35,7 @@ export const CARD_SCHEMA = {
     description: { type: 'string', description: 'One short sentence about the dish, or empty.' },
     course: { type: 'string', enum: [...COURSES] },
     effort: { type: 'string', enum: [...EFFORTS, 'unknown'] },
-    tags: { type: 'array', items: { type: 'string' }, description: 'Up to 4 lowercase tags for cuisine or kind (for example "swiss", "vegetarian", "pasta").' },
+    tags: { type: 'array', items: { type: 'string' }, description: 'Up to 4 short tags for cuisine or kind, each starting with a capital letter (for example "Swiss", "Vegetarian", "Pasta").' },
     servings: { type: 'integer', description: 'For how many people. 0 when the material does not say.' },
     prepMinutes: { type: 'integer', description: 'Hands-on time in minutes. 0 when not given.' },
     cookMinutes: { type: 'integer', description: 'Cooking, baking and resting time in minutes. 0 when not given.' },

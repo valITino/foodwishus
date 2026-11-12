@@ -31,7 +31,7 @@ describe("a page's own recipe data", () => {
         description: 'Eine cremige Suppe für kalte Tage.',
         course: 'starter',
         effort: null,
-        tags: ['schweizer küche'],
+        tags: ['Schweizer Küche'],
         servings: 4,
         prepMinutes: 15,
         cookMinutes: 25,
@@ -75,7 +75,7 @@ describe('a card stays within what the app can hold', () => {
     })
     expect(card.name).toHaveLength(LIMITS.name)
     expect(card.name.startsWith('Very long x')).toBe(true)
-    expect(card).toMatchObject({ description: '', course: 'dessert', effort: null, tags: ['swiss', 'pasta', 'a', 'b', 'c'], servings: 4, prepMinutes: null, cookMinutes: 2880, steps: [], notes: 'Tip & trick', kcalPerServing: null })
+    expect(card).toMatchObject({ description: '', course: 'dessert', effort: null, tags: ['Swiss', 'Pasta', 'a', 'b', 'c'], servings: 4, prepMinutes: null, cookMinutes: 2880, steps: [], notes: 'Tip & trick', kcalPerServing: null })
     expect(card.ingredientLines.slice(0, 3)).toEqual(['250 g flour', '2 eggs', '1 pinch salt'])
     expect(card.ingredientLines).toHaveLength(LIMITS.lines)
     expect(card.checks).toEqual([{ about: 'servings', note: 'Check it' }, { about: 'other', note: 'Odd' }, { about: 'times', note: 'A' }, { about: 'times', note: 'B' }])

@@ -2,13 +2,27 @@
 // two screens. The card's lines go through the same parsers as typed ones, so a dish
 // read from a link is no different from one written by hand.
 
-import { cleanLink } from '../../../supabase/functions/ai/page.ts'
+import { cleanLink, withoutTracking } from '../../../supabase/functions/ai/page.ts'
 import type { Check, CheckTopic, RecipeCard } from '../../data/backend'
 import { addTag, DEFAULT_SERVINGS, detectTimerMinutes, draftKey, emptyDraft, normalize, parseIngredientLine, type DishDraft } from './logic'
 
 /** The web address in whatever was pasted or shared ("Look at this pin: https://pin.it/AbC"), or null. */
 export function linkIn(text: string): string | null {
   return cleanLink(text)?.href ?? null
+}
+
+/** What makes two addresses the same page: tracking tails, "www." and a last slash do not count. */
+function pageKey(link: string): string | null {
+  const typed = cleanLink(link)
+  const url = typed ? cleanLink(withoutTracking(typed.href)) : null
+  return url ? `${url.hostname.toLowerCase().replace(/^www\./, '')}${url.pathname.replace(/\/+$/, '')}${url.search}` : null
+}
+
+/** The dish that was already made from this page, if there is one. */
+export function dishFromPage<T extends { recipe: { sourceUrl?: string } }>(dishes: T[], link: string): T | null {
+  const key = pageKey(link)
+  if (!key) return null
+  return dishes.find((dish) => dish.recipe.sourceUrl !== undefined && pageKey(dish.recipe.sourceUrl) === key) ?? null
 }
 
 /** A step's own time as its timer, when it names one a kitchen timer makes sense for. */
@@ -19,13 +33,15 @@ function timerFor(step: string): string {
 
 /**
  * A tag the way this kitchen writes it: its own spelling when it has the tag already
- * ("Swiss", not "swiss"), and a capital first letter when that is the kitchen's habit.
+ * ("Swiss", not "swiss"). A new one starts with a capital letter, unless the kitchen
+ * mostly writes its tags small.
  */
 export function kitchenTag(tag: string, knownTags: string[]): string {
   const own = knownTags.find((known) => normalize(known) === normalize(tag))
   if (own) return own
-  const capitals = knownTags.filter((known) => /^\p{Lu}/u.test(known)).length
-  return knownTags.length > 0 && capitals * 2 > knownTags.length ? tag.charAt(0).toUpperCase() + tag.slice(1) : tag
+  const small = knownTags.filter((known) => /^\p{Ll}/u.test(known)).length
+  const first = small * 2 > knownTags.length ? tag.charAt(0).toLowerCase() : tag.charAt(0).toUpperCase()
+  return first + tag.slice(1)
 }
 
 /** The dish form, filled in from a card. `sourceUrl` is where the recipe really lives; `knownTags` are the kitchen's own. */
@@ -93,8 +109,11 @@ export function shownChecks(checks: Check[], showCalories: boolean): Check[] {
 export interface Handover {
   draft: DishDraft
   cover: File | null
-  /** Set when a page was read: where from, by whom, and what to look at. Not set when the form is just started with a source. */
-  read: { site: string; by: 'helper' | 'page'; checks: Check[] } | null
+  /**
+   * Set when a page was read: where from, by whom, what to look at, and the dish the
+   * recipe book already has from that page. Not set when the form is just started with a source.
+   */
+  read: { site: string; by: 'helper' | 'page'; checks: Check[]; already: { id: string; name: string } | null } | null
 }
 
 const waiting = new Map<string, Handover>()

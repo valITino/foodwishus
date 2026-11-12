@@ -79,13 +79,15 @@ export async function helperResult(data: unknown, error: unknown): Promise<Recip
   if (!(context instanceof Response)) return Promise.reject(new BackendError('network', 'offline', (error as { message?: string }).message))
   // No function of that name: the owner has not deployed the helper yet.
   if (context.status === 404) throw new BackendError('rejected', 'helper_off')
-  let code: string | undefined
+  // Refused at the door, by Supabase or by the helper: this device's login is no good any more.
+  if (context.status === 401) throw new BackendError('rejected', 'not_signed_in')
+  let code: unknown
   try {
-    code = ((await context.clone().json()) as { code?: string } | null)?.code
+    code = ((await context.clone().json()) as { code?: unknown } | null)?.code
   } catch {
     /* a gateway's error page, not the helper's answer */
   }
-  if (code) throw new BackendError('rejected', code)
+  if (typeof code === 'string' && code !== '') throw new BackendError('rejected', code)
   if (looksOffline(undefined, context.status)) throw new BackendError('network', 'offline')
   throw new BackendError('rejected', 'helper_down')
 }
