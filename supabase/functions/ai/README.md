@@ -206,4 +206,20 @@ first meeting is the first link pasted in the real app.
 
 ## What is deployed right now
 
-Nothing yet. Steps 1 to 3 are waiting for the owner's go-ahead.
+Switched on for the live project on 12 Nov 2026, after the owner's go-ahead:
+
+- Migration `helper` (`0008_helper.sql`) is applied: the ticket counter and
+  `public.ai_ticket()`. Checked in the catalogue: the counter is private, tickets are for
+  logged-in devices only.
+- The function `ai` is deployed (version 1, JWT verification on) as the one-line loader,
+  at commit `03a28bbbd546d068e0248616cbb7b89338d6b4cf`. The ten files GitHub serves at
+  that commit are byte for byte the tested ones.
+- The secret `ANTHROPIC_API_KEY` is the owner's step. Until it is set, pages that carry
+  their own recipe data are read as they are, and Fork compares names.
+
+Not seen yet: a first call from the app. The workspace this was deployed from cannot
+reach Supabase's function address, so whether the function starts and answers shows with
+the first link pasted in the app. If it does not, Edge Functions, `ai`, Logs says why.
+
+To ship a change to the function: merge it, then deploy the loader again with the new
+commit in the address.

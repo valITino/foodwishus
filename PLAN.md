@@ -30,12 +30,13 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
 - [x] **After M7: the short ways and the bell.** A meal for today from anywhere, serving
       early, changing the cook, removing a mis-logged meal; a bell on Today with what the
       other one did.
-- [ ] **Fork reads recipes.** Recipe from a link (pasted or shared to the app), with an AI
-      helper behind an Edge Function. *Built and tested against a pretend web; the function,
-      its migration and the key wait for the owner (`supabase/functions/ai/README.md`).*
-- [ ] **The basket and the pantry.** A shared shopping list, a pantry, and Fork checking
+- [x] **Fork reads recipes.** Recipe from a link (pasted or shared to the app), with an AI
+      helper behind an Edge Function. *Live since 12 Nov 2026: migration `helper` applied,
+      function `ai` deployed. The Claude API key is the owner's to set; a first real link
+      is still to be seen (`supabase/functions/ai/README.md`).*
+- [x] **The basket and the pantry.** A shared shopping list, a pantry, and Fork checking
       the planned meals against it (by himself when the plan changes), with the same helper.
-      *Built and tested against the pretend cloud; migration 0009 waits for the owner.*
+      *Live since 12 Nov 2026: migration `basket` applied.*
 
 ## What is verified so far, and how
 
