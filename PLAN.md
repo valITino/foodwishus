@@ -32,11 +32,20 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
       other one did.
 - [x] **Fork reads recipes.** Recipe from a link (pasted or shared to the app), with an AI
       helper behind an Edge Function. *Live since 12 Nov 2026: migration `helper` applied,
-      function `ai` deployed. The Claude API key is the owner's to set; a first real link
-      is still to be seen (`supabase/functions/ai/README.md`).*
+      function `ai` deployed. The Claude API key is the owner's to set
+      (`supabase/functions/ai/README.md` says what is deployed and what the log showed).*
 - [x] **The basket and the pantry.** A shared shopping list, a pantry, and Fork checking
       the planned meals against it (by himself when the plan changes), with the same helper.
       *Live since 12 Nov 2026: migration `basket` applied.*
+- [x] **Calories the recipe does not give.** Fork estimates calories, protein, carbs and
+      fat from the ingredients, when reading a link and for any dish, always marked as an
+      estimate. *Live since 12 Nov 2026.*
+- [x] **Any day, from anywhere.** Proposing a dish with good days as far ahead as you
+      like, or straight onto a day; a calendar whose meals take a second dish.
+      *Live since 12 Nov 2026.*
+- [x] **Ask Fork.** A kitchen assistant to talk to: cooking, this kitchen, the app. He
+      offers buttons and never changes anything himself. *Live since 12 Nov 2026. How good
+      the real answers are is for the two cooks to say: no test here can.*
 
 ## What is verified so far, and how
 
