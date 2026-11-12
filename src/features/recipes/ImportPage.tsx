@@ -1,4 +1,4 @@
-// "Recipe from a link": paste a link (or share one to the app), set three switches, and
+// "Recipe from a link": paste a link (or share one to the app), set the switches, and
 // Fork fills in the dish form. Nothing is saved here: the form is where she checks it.
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
@@ -26,6 +26,9 @@ export function ImportPage({ route }: { route: Route }) {
   const translate = usePref('linkTranslate')
   const metric = usePref('linkMetric')
   const photo = usePref('linkPhoto')
+  // Calories are a kitchen's choice: where they are not shown, nothing is estimated.
+  const showCalories = usePref('showCalories')
+  const calories = usePref('linkCalories')
   const dishes = useDishes({ includeArchived: true })
   const [link, setLink] = useState(() => route.query.get('link') ?? '')
   const [reading, setReading] = useState(false)
@@ -79,7 +82,7 @@ export function ImportPage({ route }: { route: Route }) {
     setProblem(null)
     setReading(true)
     try {
-      const result = await readRecipe(found, { lang, translate, metric, photo })
+      const result = await readRecipe(found, { lang, translate, metric, photo, nutrition: showCalories && calories })
       if (!here.current) return
       const ticket = handOver({
         draft: draftFromCard(result.card, result.source.url, mostUsedTags(dishes ?? [], 200)),
@@ -182,6 +185,7 @@ export function ImportPage({ route }: { route: Route }) {
             <Toggle label={c.translate} checked={translate} onChange={(on) => setPref('linkTranslate', on)} />
             <Toggle label={c.metric} checked={metric} onChange={(on) => setPref('linkMetric', on)} />
             <Toggle label={c.photo} checked={photo} onChange={(on) => setPref('linkPhoto', on)} />
+            {showCalories && <Toggle label={c.calories} checked={calories} onChange={(on) => setPref('linkCalories', on)} />}
           </Card>
         </section>
 

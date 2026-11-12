@@ -63,7 +63,10 @@ export function draftFromCard(card: RecipeCard, sourceUrl: string, knownTags: st
     notes: card.notes,
     sourceUrl,
     kcal: card.kcalPerServing ? String(card.kcalPerServing) : '',
-    // A number from a web page is somebody's estimate, and scaling it is ours.
+    protein: card.proteinPerServing ? String(card.proteinPerServing) : '',
+    carbs: card.carbsPerServing ? String(card.carbsPerServing) : '',
+    fat: card.fatPerServing ? String(card.fatPerServing) : '',
+    // A number from a web page is somebody's estimate, and one of Fork's is his.
     isEstimate: card.kcalPerServing !== null,
   }
 }

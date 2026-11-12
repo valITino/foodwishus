@@ -8,6 +8,7 @@
 
 import { CHECK_TOPICS, COURSES, EFFORTS, LIMITS, tidyCard, type RecipeCard } from '../recipe.ts'
 import { houseRules, type Lang } from './house-rules.ts'
+import { NUTRITION_RULES } from './nutrition.ts'
 
 export interface CardRequest {
   lang: Lang
@@ -15,6 +16,8 @@ export interface CardRequest {
   translate: boolean
   /** Convert cups, ounces, pounds and Fahrenheit. */
   metric: boolean
+  /** Estimate calories, protein, carbs and fat when the material does not give them. */
+  nutrition: boolean
   /** Tags the kitchen already uses, so the same thing is not tagged in two ways. */
   knownTags: string[]
   /** Where the recipe was found, for the helper to know what it is looking at. */
@@ -28,7 +31,7 @@ export interface CardRequest {
 export const CARD_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['isRecipe', 'name', 'description', 'course', 'effort', 'tags', 'servings', 'prepMinutes', 'cookMinutes', 'ingredientLines', 'steps', 'notes', 'kcalPerServing', 'checks'],
+  required: ['isRecipe', 'name', 'description', 'course', 'effort', 'tags', 'servings', 'prepMinutes', 'cookMinutes', 'ingredientLines', 'steps', 'notes', 'kcalPerServing', 'proteinPerServing', 'carbsPerServing', 'fatPerServing', 'nutritionEstimated', 'checks'],
   properties: {
     isRecipe: { type: 'boolean', description: 'False when the material is not a recipe for one dish. Then leave everything else empty.' },
     name: { type: 'string', description: 'The name of the dish, without the site, without "recipe", without "the best".' },
@@ -42,7 +45,11 @@ export const CARD_SCHEMA = {
     ingredientLines: { type: 'array', items: { type: 'string' }, description: 'One line per ingredient: amount, unit, name. "250 g flour", "2 eggs", "1 pinch salt". Without an amount, the name alone.' },
     steps: { type: 'array', items: { type: 'string' }, description: 'One step per entry, in order, with its temperatures and times.' },
     notes: { type: 'string', description: 'Tips or variations the material gives, or empty.' },
-    kcalPerServing: { type: 'integer', description: 'Kilocalories per serving when the material states them. 0 otherwise. Never estimate.' },
+    kcalPerServing: { type: 'integer', description: 'Kilocalories per serving. 0 when not known.' },
+    proteinPerServing: { type: 'integer', description: 'Protein per serving in grams. 0 when not known.' },
+    carbsPerServing: { type: 'integer', description: 'Carbohydrates per serving in grams. 0 when not known.' },
+    fatPerServing: { type: 'integer', description: 'Fat per serving in grams. 0 when not known.' },
+    nutritionEstimated: { type: 'boolean', description: 'True when the four numbers above are your own estimate from the ingredients. False when the material states them, and when they are 0.' },
     checks: {
       type: 'array',
       description: 'At most 4 real doubts the cook should look at before saving. Empty when there are none.',
@@ -75,7 +82,14 @@ export const recipeCardSkill = {
       '- Steps: one action per step, in the order of the material, as an instruction ("Fry the onions until golden."). Keep every temperature and every time. Do not number them.',
       `- course is what the dish mostly is. effort: "easy" for up to about 30 minutes and few steps, "fancy" for long or tricky recipes, "medium" in between, "unknown" when the material is too thin to tell.`,
       request.knownTags.length > 0 ? `- For tags, prefer these, which the kitchen already uses, when they fit: ${request.knownTags.slice(0, 40).join(', ')}.` : '- Tags are optional.',
-      '- servings, times and calories only as the material states them. 0 means "not given".',
+      '- servings and times only as the material states them. 0 means "not given".',
+      ...(request.nutrition
+        ? [
+            '- Nutrition: when the material states calories per serving, use its numbers as they are (also protein, carbohydrates and fat, when given) and set nutritionEstimated to false.',
+            '- When the material states no calories, estimate the four numbers yourself and set nutritionEstimated to true. This is the one exception to "never invent facts", and the app shows it as an estimate. Do not add a check about it: the app says so itself.',
+            ...NUTRITION_RULES.map((rule) => `  ${rule}`),
+          ]
+        : ['- Nutrition only as the material states it. 0 means "not given". Never estimate, and nutritionEstimated stays false.']),
       '- checks: for example a missing number of servings, an amount like "1 can" without a size, a rough conversion, steps that refer to a video, or a recipe that is cut off. Not for things that are fine.',
       '- If the material is not a recipe for one dish (a list of recipes, a shop, a login page, an article): isRecipe false, and every other field empty or 0.',
       `- Limits: name up to ${LIMITS.name} characters, at most ${LIMITS.lines} ingredient lines and ${LIMITS.steps} steps.`,

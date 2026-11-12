@@ -82,7 +82,8 @@ describe('the one file that gets deployed as the helper', () => {
     expect([...new Set([...bundle.matchAll(/Deno\.env\.get\("(\w+)"\)/g)].map(([, name]) => name))].sort()).toEqual(['AI_MODEL', 'ANTHROPIC_API_KEY', 'SUPABASE_ANON_KEY', 'SUPABASE_URL'])
     // Readable: not minified.
     expect(bundle.split('\n').length).toBeGreaterThan(400)
-    expect(bundle.length).toBeLessThan(45_000)
+    // Four jobs and their instructions. Much more than this would mean something else got bundled in.
+    expect(bundle.length).toBeLessThan(70_000)
   })
 
   it('is the file whose size and checksum the build prints', () => {

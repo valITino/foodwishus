@@ -77,8 +77,8 @@ test('a pasted link becomes a dish: read, look over, save', async ({ browser }) 
   const page = await openKitchen(browser, contexts)
   await openReader(page)
 
-  await test.step('the three switches start switched on', async () => {
-    for (const name of ['Write it in English', 'Convert cups, ounces and Fahrenheit', 'Bring the picture along']) await expect(page.getByRole('switch', { name })).toBeChecked()
+  await test.step('the four switches start switched on', async () => {
+    for (const name of ['Write it in English', 'Convert cups, ounces and Fahrenheit', 'Bring the picture along', 'Estimate calories when the page has none']) await expect(page.getByRole('switch', { name })).toBeChecked()
   })
 
   await read(page, SOUP)
@@ -129,6 +129,17 @@ test('an English blog with cups: converted, with a note that points to the ingre
   await expect(steps(page).first()).toHaveValue('Heat the oven to 200 degrees with the skillet inside.')
   await expect(page.getByRole('button', { name: 'Servings: +1' })).toBeVisible()
 
+  await test.step('the blog gives no calories: Fork estimates them, says so, and marks them as an estimate', async () => {
+    await expect(note(page)).toContainText('The page gives no calories. The numbers are an estimate from the ingredients.')
+    await expect(page.getByLabel('Calories per serving, kcal')).toHaveValue('310')
+    await expect(page.getByLabel('Protein, g')).toHaveValue('7')
+    await expect(page.getByLabel('Carbs, g')).toHaveValue('38')
+    await expect(page.getByLabel('Fat, g')).toHaveValue('14')
+    await expect(page.getByRole('switch', { name: 'This is an estimate' })).toBeChecked()
+    await note(page).getByRole('button', { name: 'Go to Calories' }).click()
+    await expect(page.getByRole('heading', { name: 'Calories' })).toBeInViewport()
+  })
+
   await test.step('what the helper was not sure about is listed, and one tap leads there', async () => {
     await expect(note(page).getByRole('heading', { name: 'Please check' })).toBeVisible()
     await expect(note(page)).toContainText('The cups are roughly converted to grams.')
@@ -150,18 +161,22 @@ test('the switches decide how it is written, and are remembered', async ({ brows
   await openReader(page)
   await page.getByRole('switch', { name: 'Convert cups, ounces and Fahrenheit' }).click()
   await page.getByRole('switch', { name: 'Bring the picture along' }).click()
+  await page.getByRole('switch', { name: 'Estimate calories when the page has none' }).click()
   await read(page, CORNBREAD)
 
   await expect(ingredients(page).first()).toHaveText('1½ cupscornmeal')
   await expect(steps(page).first()).toHaveValue('Heat the oven to 400 °F with the skillet inside.')
   await expect(page.getByTestId('cover-preview')).toHaveCount(0)
   await expect(note(page).getByRole('heading', { name: 'Please check' })).toHaveCount(0)
+  // No estimate was asked for, so the calories stay empty.
+  await expect(page.getByLabel('Calories per serving, kcal')).toHaveValue('')
 
   await page.getByRole('button', { name: 'Back' }).click()
   await page.getByRole('button', { name: 'Discard changes' }).click()
   await openReader(page)
   await expect(page.getByRole('switch', { name: 'Convert cups, ounces and Fahrenheit' })).not.toBeChecked()
   await expect(page.getByRole('switch', { name: 'Bring the picture along' })).not.toBeChecked()
+  await expect(page.getByRole('switch', { name: 'Estimate calories when the page has none' })).not.toBeChecked()
   await expect(page.getByRole('switch', { name: 'Write it in English' })).toBeChecked()
 })
 
@@ -311,7 +326,61 @@ test('auf Deutsch: übersetzt, umgerechnet, mit Hinweis', async ({ browser }) =>
   await expect(note(page)).toContainText('Gelesen von sunnykitchen.com')
   await expect(note(page).getByRole('heading', { name: 'Bitte prüfen' })).toBeVisible()
   await expect(note(page)).toContainText('Die Tassen sind grob in Gramm umgerechnet.')
+  await expect(note(page)).toContainText('Die Seite nennt keine Kalorien. Die Zahlen sind aus den Zutaten geschätzt.')
   await expect(note(page).getByRole('button', { name: 'Zu Zutaten' })).toBeVisible()
+})
+
+test('any dish: Fork estimates calories, protein, carbs and fat from the ingredients', async ({ browser }) => {
+  const page = await openKitchen(browser, contexts)
+  await page.goto('/#/recipes/new')
+  await expect(page.getByRole('heading', { level: 1, name: 'New dish' })).toBeVisible()
+  await page.getByLabel('Name', { exact: true }).fill('Rüeblisuppe')
+  const estimateNote = page.getByTestId('estimate-note')
+  await expect(estimateNote).toHaveText('Fork works it out from the ingredients and the servings above. It stays an estimate.')
+
+  await test.step('without ingredients there is nothing to add up', async () => {
+    await page.getByRole('button', { name: 'Let Fork estimate' }).click()
+    await expect(estimateNote).toHaveText('Fork needs ingredients with amounts for this. Add them above, then try again.')
+  })
+
+  const quick = page.getByLabel('Add an ingredient')
+  for (const line of ['500 g Rüebli', '1 dl Rahm', '1 Zwiebel']) {
+    await quick.fill(line)
+    await quick.press('Enter')
+  }
+  await expect(page.getByTestId('ingredient-row')).toHaveCount(3)
+
+  await test.step('the numbers are filled in and marked as an estimate', async () => {
+    await page.getByRole('button', { name: 'Let Fork estimate' }).click()
+    await expect(estimateNote).toHaveText('Estimated from the ingredients.')
+    await expect(page.getByLabel('Calories per serving, kcal')).toHaveValue('640')
+    await expect(page.getByLabel('Protein, g')).toHaveValue('32')
+    await expect(page.getByLabel('Carbs, g')).toHaveValue('80')
+    await expect(page.getByLabel('Fat, g')).toHaveValue('26')
+    await expect(page.getByRole('switch', { name: 'This is an estimate' })).toBeChecked()
+  })
+
+  await test.step('for more people it is less per plate', async () => {
+    await page.getByRole('button', { name: 'Servings: +1' }).click()
+    await page.getByRole('button', { name: 'Servings: +1' }).click()
+    await page.getByRole('button', { name: 'Let Fork estimate' }).click()
+    await expect(page.getByLabel('Calories per serving, kcal')).toHaveValue('320')
+  })
+
+  await test.step('saved, the dish shows them as an estimate', async () => {
+    await page.getByRole('button', { name: 'Save dish' }).click()
+    await expect(page.getByTestId('dish-name')).toHaveText('Rüeblisuppe')
+    const [dish] = await storedDishes(page)
+    expect(dish.nutrition).toMatchObject({ kcalPerServing: 320, proteinG: 16, carbsG: 40, fatG: 13, isEstimate: true })
+  })
+
+  await test.step('without the helper it says why, and the numbers stay as they are', async () => {
+    await setHelper(page, 'key=')
+    await page.getByRole('button', { name: 'Edit' }).click()
+    await page.getByRole('button', { name: 'Let Fork estimate' }).click()
+    await expect(estimateNote).toHaveText('The AI helper is not set up for this kitchen yet.')
+    await expect(page.getByLabel('Calories per serving, kcal')).toHaveValue('320')
+  })
 })
 
 test('the demo kitchen says up front that it cannot read links', async ({ page }) => {

@@ -35,6 +35,12 @@ export interface RecipeCard {
   steps: string[]
   notes: string
   kcalPerServing: number | null
+  /** Grams per serving. */
+  proteinPerServing: number | null
+  carbsPerServing: number | null
+  fatPerServing: number | null
+  /** True when the numbers above are the helper's estimate from the ingredients, not the page's own. */
+  nutritionEstimated: boolean
   checks: Check[]
 }
 
@@ -60,6 +66,11 @@ export function tidyCard(card: Partial<Record<keyof RecipeCard, unknown>>): Reci
     ingredientLines: list(card.ingredientLines, LIMITS.lines, LIMITS.line),
     steps: list(card.steps, LIMITS.steps, LIMITS.step),
     notes: text(card.notes, LIMITS.notes),
+    proteinPerServing: count(card.proteinPerServing, 500),
+    carbsPerServing: count(card.carbsPerServing, 900),
+    fatPerServing: count(card.fatPerServing, 500),
+    // An estimate of nothing is nothing.
+    nutritionEstimated: card.nutritionEstimated === true && count(card.kcalPerServing, 5000) !== null,
     kcalPerServing: count(card.kcalPerServing, 5000),
     checks: checks
       .map((check): Check => {
@@ -177,7 +188,12 @@ export function cardFromData(data: Record<string, unknown>): PageRecipe | null {
   const total = isoMinutes(data.totalTime)
   const categories = [...words(data.recipeCategory), ...words(data.keywords)]
   const nutrition = (data.nutrition ?? {}) as Record<string, unknown>
-  const kcal = typeof nutrition.calories === 'number' ? nutrition.calories : typeof nutrition.calories === 'string' ? Number(/(\d+(?:[.,]\d+)?)/.exec(nutrition.calories)?.[1]?.replace(',', '.')) : NaN
+  // "210 kcal", "12 g", 12: the first number, whatever stands around it.
+  const amount = (value: unknown): number | null => {
+    const found = typeof value === 'number' ? value : typeof value === 'string' ? Number(/(\d+(?:[.,]\d+)?)/.exec(value)?.[1]?.replace(',', '.')) : NaN
+    return Number.isFinite(found) ? found : null
+  }
+  const kcal = amount(nutrition.calories)
   const servings = servingsFrom(data.recipeYield)
 
   const card = tidyCard({
@@ -193,7 +209,11 @@ export function cardFromData(data: Record<string, unknown>): PageRecipe | null {
     ingredientLines,
     steps,
     notes: '',
-    kcalPerServing: Number.isFinite(kcal) ? kcal : null,
+    kcalPerServing: kcal,
+    proteinPerServing: amount(nutrition.proteinContent),
+    carbsPerServing: amount(nutrition.carbohydrateContent),
+    fatPerServing: amount(nutrition.fatContent),
+    nutritionEstimated: false,
     checks: [],
   })
   return { card, image: pictureOf(data.image), language: typeof data.inLanguage === 'string' ? data.inLanguage.slice(0, 2).toLowerCase() : null }

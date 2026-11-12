@@ -19,6 +19,10 @@ const card = (over: Partial<RecipeCard> = {}): RecipeCard => ({
   steps: ['Rüebli schälen und in Stücke schneiden.', 'Alles 25 Minuten köcheln lassen.', 'Pürieren, 30 Sekunden reichen.', 'Über Nacht, also 12 Stunden, ziehen lassen.'],
   notes: 'Mit einem Klecks Rahm servieren.',
   kcalPerServing: 180,
+  proteinPerServing: null,
+  carbsPerServing: null,
+  fatPerServing: null,
+  nutritionEstimated: false,
   checks: [],
   ...over,
 })
@@ -51,6 +55,11 @@ describe('a recipe card becomes the dish form', () => {
 
   it('sets a timer where a step names a time a kitchen timer is for', () => {
     expect(draft.steps.map((s) => s.timerMinutes)).toEqual(['', '25', '', ''])
+  })
+
+  it('brings protein, carbs and fat along when the card has them', () => {
+    expect(draftFromCard(card({ kcalPerServing: 310, proteinPerServing: 7, carbsPerServing: 38, fatPerServing: 14, nutritionEstimated: true }), '')).toMatchObject({ kcal: '310', protein: '7', carbs: '38', fat: '14', isEstimate: true })
+    expect(draft).toMatchObject({ protein: '', carbs: '', fat: '' })
   })
 
   it('marks calories from a page as an estimate', () => {

@@ -39,6 +39,10 @@ describe("a page's own recipe data", () => {
         steps: ['Rüebli und Zwiebel schälen und in Stücke schneiden.', 'In Butter 5 Minuten andämpfen, Ingwer dazugeben.', 'Mit Bouillon ablöschen und 20 Minuten köcheln.', 'Pürieren, Rahm einrühren, abschmecken.'],
         notes: '',
         kcalPerServing: 210,
+        proteinPerServing: null,
+        carbsPerServing: null,
+        fatPerServing: null,
+        nutritionEstimated: false,
         checks: [],
       },
       image: 'https://www.lecker-kochen.ch/bilder/rueeblisuppe-gross.jpg',
@@ -83,7 +87,7 @@ describe('a card stays within what the app can hold', () => {
 })
 
 describe('the recipe-card skill', () => {
-  const request: CardRequest = { lang: 'de', translate: true, metric: true, knownTags: ['schweizer küche', 'pasta'], site: 'Sunny Kitchen', data: null, text: 'Cornbread ...' }
+  const request: CardRequest = { lang: 'de', translate: true, metric: true, nutrition: false, knownTags: ['schweizer küche', 'pasta'], site: 'Sunny Kitchen', data: null, text: 'Cornbread ...' }
 
   it('starts with the house rules and says what this job is', () => {
     const system = recipeCardSkill.system(request)
@@ -125,11 +129,31 @@ describe('the recipe-card skill', () => {
 
   it('reads the answer: unknown numbers become "not known", and no recipe is no card', () => {
     const answer = { isRecipe: true, name: 'Maisbrot aus der Pfanne', description: '', course: 'side', effort: 'unknown', tags: ['amerikanisch'], servings: 8, prepMinutes: 0, cookMinutes: 25, ingredientLines: ['210 g Maisgriess', '2 Eier'], steps: ['Ofen auf 200 Grad vorheizen.'], notes: '', kcalPerServing: 0, checks: [{ about: 'ingredients', note: 'Die Tassen sind grob umgerechnet.' }] }
-    expect(recipeCardSkill.read(answer)).toEqual({ name: 'Maisbrot aus der Pfanne', description: '', course: 'side', effort: null, tags: ['amerikanisch'], servings: 8, prepMinutes: null, cookMinutes: 25, ingredientLines: ['210 g Maisgriess', '2 Eier'], steps: ['Ofen auf 200 Grad vorheizen.'], notes: '', kcalPerServing: null, checks: [{ about: 'ingredients', note: 'Die Tassen sind grob umgerechnet.' }] })
+    expect(recipeCardSkill.read(answer)).toEqual({ name: 'Maisbrot aus der Pfanne', description: '', course: 'side', effort: null, tags: ['amerikanisch'], servings: 8, prepMinutes: null, cookMinutes: 25, ingredientLines: ['210 g Maisgriess', '2 Eier'], steps: ['Ofen auf 200 Grad vorheizen.'], notes: '', kcalPerServing: null, proteinPerServing: null, carbsPerServing: null, fatPerServing: null, nutritionEstimated: false, checks: [{ about: 'ingredients', note: 'Die Tassen sind grob umgerechnet.' }] })
+    // Its own estimate is kept and marked; an "estimate" without calories is none.
+    expect(recipeCardSkill.read({ ...answer, kcalPerServing: 310, proteinPerServing: 7, carbsPerServing: 38, fatPerServing: 14, nutritionEstimated: true })).toMatchObject({ kcalPerServing: 310, proteinPerServing: 7, carbsPerServing: 38, fatPerServing: 14, nutritionEstimated: true })
+    expect(recipeCardSkill.read({ ...answer, kcalPerServing: 0, proteinPerServing: 7, nutritionEstimated: true })).toMatchObject({ kcalPerServing: null, proteinPerServing: 7, nutritionEstimated: false })
     expect(recipeCardSkill.read({ ...answer, isRecipe: false })).toBeNull()
     expect(recipeCardSkill.read({ ...answer, name: '' })).toBeNull()
     expect(recipeCardSkill.read({ ...answer, ingredientLines: [], steps: [] })).toBeNull()
     expect(recipeCardSkill.read('I cannot help with that')).toBeNull()
     expect(recipeCardSkill.read(null)).toBeNull()
+  })
+})
+
+describe('nutrition', () => {
+  it("is taken from the page's own data when it is there: calories, protein, carbohydrates, fat", () => {
+    const page = cardFromData({ name: 'Linsensuppe', recipeYield: '4', recipeIngredient: ['250 g Linsen'], recipeInstructions: 'Kochen.', nutrition: { '@type': 'NutritionInformation', calories: '320 kcal', proteinContent: '18 g', carbohydrateContent: '41,5 g', fatContent: 9 } })
+    expect(page?.card).toMatchObject({ kcalPerServing: 320, proteinPerServing: 18, carbsPerServing: 42, fatPerServing: 9, nutritionEstimated: false })
+  })
+
+  it('is only estimated when asked for: the instructions say which', () => {
+    const base = { lang: 'en' as const, translate: true, metric: true, knownTags: [], site: null, data: null, text: 'x' }
+    const on = recipeCardSkill.system({ ...base, nutrition: true })
+    expect(on).toContain('When the material states no calories, estimate the four numbers yourself and set nutritionEstimated to true.')
+    expect(on).toContain('Count what is eaten.')
+    const off = recipeCardSkill.system({ ...base, nutrition: false })
+    expect(off).toContain('Never estimate, and nutritionEstimated stays false.')
+    expect(off).not.toContain('Count what is eaten.')
   })
 })

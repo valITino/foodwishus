@@ -17,6 +17,8 @@ export interface RecipeFromLink {
   metric: boolean
   /** Bring the page's picture along as the cover. */
   photo: boolean
+  /** Estimate calories, protein, carbs and fat when the page does not give them. */
+  nutrition: boolean
   /** Tags the kitchen already uses. */
   knownTags: string[]
 }
@@ -47,7 +49,17 @@ export interface PantryNotes {
   known: string[]
 }
 
-export type HelperRequest = RecipeFromLink | ShoppingCheck | PantryNotes
+/** Estimate a dish's nutrition per serving from its ingredients. */
+export interface NutritionEstimate {
+  job: 'nutrition-estimate'
+  lang: 'en' | 'de'
+  name: string
+  servings: number
+  /** One ingredient per line, amount first: "500 g Rüebli". */
+  ingredients: string[]
+}
+
+export type HelperRequest = RecipeFromLink | ShoppingCheck | PantryNotes | NutritionEstimate
 
 export type HelperFailure =
   | 'bad_request'
@@ -60,6 +72,7 @@ export type HelperFailure =
   | 'too_big'
   | 'not_a_page' // a PDF, a picture, a download
   | 'not_a_recipe' // a page, but no recipe on it
+  | 'not_enough' // too little to go on (an estimate without amounts, or without ingredients)
   | 'helper_off' // no key is set, and the page has no recipe data of its own
   | 'helper_down' // the helper did not answer, and the page has no recipe data of its own
 
@@ -97,16 +110,28 @@ export interface PantryNotesResult {
   left: number
 }
 
+export interface NutritionEstimateResult {
+  ok: true
+  /** Per serving. Always an estimate. */
+  kcal: number
+  protein: number | null
+  carbs: number | null
+  fat: number | null
+  /** How rough it is, when that is worth saying. */
+  note: string
+  left: number
+}
+
 export interface HelperRefusal {
   ok: false
   code: HelperFailure
 }
 
-export type HelperResult = RecipeFromLinkResult | ShoppingCheckResult | PantryNotesResult
+export type HelperResult = RecipeFromLinkResult | ShoppingCheckResult | PantryNotesResult | NutritionEstimateResult
 export type HelperAnswer = HelperResult | HelperRefusal
 
 /** The answer each job gets. */
-export type ResultOf<R extends HelperRequest> = R extends RecipeFromLink ? RecipeFromLinkResult : R extends ShoppingCheck ? ShoppingCheckResult : R extends PantryNotes ? PantryNotesResult : never
+export type ResultOf<R extends HelperRequest> = R extends RecipeFromLink ? RecipeFromLinkResult : R extends ShoppingCheck ? ShoppingCheckResult : R extends PantryNotes ? PantryNotesResult : R extends NutritionEstimate ? NutritionEstimateResult : never
 
 /** What a kitchen can send per request: enough for a full week and a full pantry, not for a book. */
 export const SHOPPING_LIMITS = { meals: 30, cooked: 20, pantry: 200, basket: 100, line: 600, text: 2000, known: 200, items: 20 }

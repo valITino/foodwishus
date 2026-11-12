@@ -122,7 +122,23 @@ export function pretendFetch(seen?: string[]): FetchLike {
 const unknown = (value: number | null): number => value ?? 0
 
 /** The cornbread from the blog, the way the helper is asked to write it: translated and metric, or left as it is. */
-export function cornbreadAnswer(german: boolean, metric: boolean) {
+/**
+ * The stand-in's nutrition table: it weighs the lines (grams as written, a guess for the
+ * rest) and makes numbers of that. No food knowledge, but the same lines always give the
+ * same numbers, and more food gives more.
+ */
+export function pretendNutrition(lines: string[], servings: number): { kcalPerServing: number; proteinPerServing: number; carbsPerServing: number; fatPerServing: number } | null {
+  const amounts = lines.map((line) => /^(\d+(?:[.,]\d+)?)\s?(g|kg|ml|dl|l)\b/.exec(line)).filter((found): found is RegExpExecArray => found !== null)
+  // Like the real one: no estimate when most lines have no amount, or nobody says for how many.
+  if (servings < 1 || lines.length === 0 || lines.filter((line) => /^\d/.test(line)).length * 2 < lines.length) return null
+  const grams = amounts.reduce((sum, [, number, unit]) => sum + Number(number.replace(',', '.')) * (unit === 'kg' || unit === 'l' ? 1000 : unit === 'dl' ? 100 : 1), 0)
+  const kcal = Math.round(((grams * 2 + (lines.length - amounts.length) * 80) / servings) / 10) * 10
+  return { kcalPerServing: kcal, proteinPerServing: Math.round(kcal / 20), carbsPerServing: Math.round(kcal / 8), fatPerServing: Math.round(kcal / 25) }
+}
+
+const NO_NUTRITION = { kcalPerServing: 0, proteinPerServing: 0, carbsPerServing: 0, fatPerServing: 0, nutritionEstimated: false }
+
+export function cornbreadAnswer(german: boolean, metric: boolean, estimate = false) {
   const cups = ['1 1/2 cups cornmeal', '1 cup all-purpose flour', '1 stick butter, melted', '2 eggs', '1 1/4 cups buttermilk', '1 tsp salt']
   const grams = german ? ['210 g Maisgriess', '125 g Mehl', '115 g Butter, geschmolzen', '2 Eier', '3 dl Buttermilch', '1 TL Salz'] : ['210 g cornmeal', '125 g all-purpose flour', '115 g butter, melted', '2 eggs', '300 ml buttermilk', '1 tsp salt']
   return {
@@ -140,12 +156,13 @@ export function cornbreadAnswer(german: boolean, metric: boolean) {
       ? [`Ofen mit der Pfanne auf ${metric ? '200 Grad' : '400 °F'} vorheizen.`, 'Trockene Zutaten mischen, dann Eier, Buttermilch und Butter unterrühren.', 'In die heisse Pfanne giessen und 25 Minuten backen.']
       : [`Heat the oven to ${metric ? '200 degrees' : '400 °F'} with the skillet inside.`, 'Whisk the dry ingredients, then stir in eggs, buttermilk and butter.', 'Pour into the hot skillet and bake for 25 minutes.'],
     notes: '',
-    kcalPerServing: 0,
+    // The blog gives no calories: an estimate when asked for one, nothing otherwise.
+    ...(estimate ? { kcalPerServing: 310, proteinPerServing: 7, carbsPerServing: 38, fatPerServing: 14, nutritionEstimated: true } : NO_NUTRITION),
     checks: metric ? [{ about: 'ingredients', note: german ? 'Die Tassen sind grob in Gramm umgerechnet.' : 'The cups are roughly converted to grams.' }] : [],
   }
 }
 
-const NOT_A_RECIPE = { isRecipe: false, name: '', description: '', course: 'main', effort: 'unknown', tags: [], servings: 0, prepMinutes: 0, cookMinutes: 0, ingredientLines: [], steps: [], notes: '', kcalPerServing: 0, checks: [] }
+const NOT_A_RECIPE = { isRecipe: false, name: '', description: '', course: 'main', effort: 'unknown', tags: [], servings: 0, prepMinutes: 0, cookMinutes: 0, ingredientLines: [], steps: [], notes: '', ...NO_NUTRITION, checks: [] }
 
 const firstCapital = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1)
 const part = (user: string, title: string): string[] =>
@@ -215,12 +232,24 @@ export function pretendAnswer(system: string, user: string): unknown {
   if (system.includes('Job: work out what has to be bought')) return pretendCheck(german, user)
   if (system.includes('Job: turn what the cook wrote or dictated')) return pretendNotes(user)
   const metric = system.includes('Convert cups')
-  if (user.includes('cornmeal')) return cornbreadAnswer(german && !system.includes('Keep the language of the material'), metric)
+  const estimate = system.includes('estimate the four numbers yourself')
+  if (system.includes('Job: estimate the nutrition per serving')) {
+    const lines = (/<material>\n([\s\S]*)\n<\/material>/.exec(user)?.[1] ?? '').split('\n').map((line) => line.replace(/^- /, '').trim()).filter(Boolean)
+    const numbers = pretendNutrition(lines, Number(/Servings: (\d+)/.exec(user)?.[1] ?? 0))
+    return numbers ? { canEstimate: true, ...numbers, note: '' } : { canEstimate: false, ...NO_NUTRITION, note: german ? 'Bei den meisten Zutaten fehlt die Menge.' : 'Most ingredients have no amount.' }
+  }
+  if (user.includes('cornmeal')) return cornbreadAnswer(german && !system.includes('Keep the language of the material'), metric, estimate)
   const material = /<material>\n([\s\S]*)\n<\/material>/.exec(user)?.[1] ?? ''
   if (user.includes("The page's own recipe data")) {
     try {
       const found = cardFromData(JSON.parse(material) as Record<string, unknown>)
-      if (found) return { isRecipe: true, ...found.card, effort: found.card.effort ?? 'unknown', servings: unknown(found.card.servings), prepMinutes: unknown(found.card.prepMinutes), cookMinutes: unknown(found.card.cookMinutes), kcalPerServing: unknown(found.card.kcalPerServing) }
+      if (found) {
+        const { card } = found
+        // The page's own numbers when it has them; an estimate when it has none and one is asked for.
+        const guessed = card.kcalPerServing === null && estimate ? pretendNutrition(card.ingredientLines, card.servings ?? 0) : null
+        const nutrition = guessed ? { ...guessed, nutritionEstimated: true } : { kcalPerServing: unknown(card.kcalPerServing), proteinPerServing: unknown(card.proteinPerServing), carbsPerServing: unknown(card.carbsPerServing), fatPerServing: unknown(card.fatPerServing), nutritionEstimated: false }
+        return { isRecipe: true, ...card, effort: card.effort ?? 'unknown', servings: unknown(card.servings), prepMinutes: unknown(card.prepMinutes), cookMinutes: unknown(card.cookMinutes), ...nutrition }
+      }
     } catch {
       /* falls through */
     }

@@ -111,6 +111,19 @@ const en = {
     carbs: 'Carbs, g',
     fat: 'Fat, g',
     isEstimate: 'This is an estimate',
+    estimate: 'Let Fork estimate',
+    estimating: 'Fork is doing the sums',
+    estimateHint: 'Fork works it out from the ingredients and the servings above. It stays an estimate.',
+    estimated: 'Estimated from the ingredients.',
+    estimateProblems: {
+      not_enough: 'Fork needs ingredients with amounts for this. Add them above, then try again.',
+      offline: 'No connection. Estimating needs the internet.',
+      demo: 'In the demo kitchen Fork cannot estimate.',
+      limit: 'Fork has been asked often enough for today. Tomorrow there is room again.',
+      helper_off: 'The AI helper is not set up for this kitchen yet.',
+      not_signed_in: 'This phone is not logged in to the kitchen any more. Log in again.',
+      other: 'The AI helper is not answering right now. Try again in a moment.',
+    },
     save: 'Save dish',
     discardTitle: 'Discard your changes?',
     discardBody: 'Everything you typed since the last save will be lost.',
@@ -236,6 +249,7 @@ const en = {
     translate: 'Write it in English',
     metric: 'Convert cups, ounces and Fahrenheit',
     photo: 'Bring the picture along',
+    calories: 'Estimate calories when the page has none',
     read: 'Read recipe',
     reading: 'Fork is reading the page',
     readingHint: 'This takes a few seconds.',
@@ -257,6 +271,7 @@ const en = {
       too_big: 'That page is too big to read. Add the dish by hand.',
       not_a_page: 'That link leads to a file, not to a page. Use the link to the recipe page.',
       not_a_recipe: 'Fork found no recipe on that page. If it is a pin, open the site behind it and use that link.',
+      not_enough: 'Fork found too little on that page to make a dish of it. Add the dish by hand.',
       helper_off: 'This page needs the AI helper, and it is not set up for this kitchen yet. Add the dish by hand, or ask whoever runs the kitchen to set it up.',
       helper_down: 'The AI helper is not answering right now. Try again in a moment, or add the dish by hand.',
       offline: 'No connection. Reading a link needs the internet.',
@@ -378,6 +393,19 @@ const de: typeof en = {
     carbs: 'Kohlenhydrate, g',
     fat: 'Fett, g',
     isEstimate: 'Das ist eine Schätzung',
+    estimate: 'Fork schätzen lassen',
+    estimating: 'Fork rechnet',
+    estimateHint: 'Fork rechnet es aus den Zutaten und den Portionen oben aus. Es bleibt eine Schätzung.',
+    estimated: 'Aus den Zutaten geschätzt.',
+    estimateProblems: {
+      not_enough: 'Dafür braucht Fork Zutaten mit Mengen. Trag sie oben ein und probier es dann nochmal.',
+      offline: 'Keine Verbindung. Zum Schätzen braucht es Internet.',
+      demo: 'In der Demo-Küche kann Fork nicht schätzen.',
+      limit: 'Fork wurde heute schon oft genug gefragt. Morgen ist wieder Platz.',
+      helper_off: 'Der KI-Helfer ist für diese Küche noch nicht eingerichtet.',
+      not_signed_in: 'Dieses Handy ist nicht mehr in der Küche angemeldet. Melde dich wieder an.',
+      other: 'Der KI-Helfer antwortet gerade nicht. Probier es gleich nochmal.',
+    },
     save: 'Gericht speichern',
     discardTitle: 'Änderungen verwerfen?',
     discardBody: 'Alles, was du seit dem letzten Speichern getippt hast, geht verloren.',
@@ -503,6 +531,7 @@ const de: typeof en = {
     translate: 'Auf Deutsch schreiben',
     metric: 'Cups, Unzen und Fahrenheit umrechnen',
     photo: 'Das Bild mitnehmen',
+    calories: 'Kalorien schätzen, wenn die Seite keine nennt',
     read: 'Rezept lesen',
     reading: 'Fork liest die Seite',
     readingHint: 'Das dauert ein paar Sekunden.',
@@ -524,6 +553,7 @@ const de: typeof en = {
       too_big: 'Diese Seite ist zu gross zum Lesen. Erfasse das Gericht von Hand.',
       not_a_page: 'Dieser Link führt zu einer Datei, nicht zu einer Seite. Nimm den Link zur Rezeptseite.',
       not_a_recipe: 'Fork hat auf dieser Seite kein Rezept gefunden. Wenn es ein Pin ist, öffne die Seite dahinter und nimm deren Link.',
+      not_enough: 'Fork hat auf dieser Seite zu wenig gefunden, um ein Gericht daraus zu machen. Erfasse das Gericht von Hand.',
       helper_off: 'Für diese Seite braucht es den KI-Helfer, und der ist für diese Küche noch nicht eingerichtet. Erfasse das Gericht von Hand oder bitte die Person, die die Küche führt, ihn einzurichten.',
       helper_down: 'Der KI-Helfer antwortet gerade nicht. Probier es gleich nochmal oder erfasse das Gericht von Hand.',
       offline: 'Keine Verbindung. Zum Lesen eines Links braucht es Internet.',
@@ -537,6 +567,13 @@ const de: typeof en = {
 }
 
 export type RecipesCopy = typeof en
+
+/** The sentence for why Fork could not estimate a dish's nutrition. */
+export function estimateProblem(e: RecipesCopy['editor'], why: string): string {
+  if (why === 'not_enough' || why === 'offline' || why === 'demo' || why === 'limit' || why === 'helper_off') return e.estimateProblems[why]
+  if (why === 'not_signed_in' || why === 'not_member') return e.estimateProblems.not_signed_in
+  return e.estimateProblems.other
+}
 
 /** The Recipe Book's own words in the current language. */
 export function useRecipesCopy(): RecipesCopy {

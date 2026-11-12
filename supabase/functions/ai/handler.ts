@@ -4,9 +4,10 @@
 // the pretend cloud exactly as it runs on Supabase.
 
 import { ask, DEFAULT_MODEL, HelperError, type AskFetch } from './claude.ts'
-import { SHOPPING_LIMITS, type HelperAnswer, type HelperFailure, type HelperRequest, type PantryNotes, type RecipeFromLink, type ShoppingCheck } from './contract.ts'
+import { SHOPPING_LIMITS, type HelperAnswer, type HelperFailure, type HelperRequest, type NutritionEstimate, type PantryNotes, type RecipeFromLink, type ShoppingCheck } from './contract.ts'
 import { cleanLink, hostFamily, PageError, pageMeta, pageText, pinTarget, readPage, readPicture, recipeData, withoutTracking, type FetchLike } from './page.ts'
 import { cardFromData, type Check, type RecipeCard } from './recipe.ts'
+import { nutritionSkill } from './skills/nutrition.ts'
 import { pantryNotesSkill } from './skills/pantry-notes.ts'
 import { recipeCardSkill } from './skills/recipe-card.ts'
 import { shoppingCheckSkill } from './skills/shopping-check.ts'
@@ -37,8 +38,8 @@ const json = (body: HelperAnswer, status = 200): Response => new Response(JSON.s
 const refuse = (code: HelperFailure, status = 200): Response => json({ ok: false, code }, status)
 
 const WORDS = {
-  en: { servings: 'The page does not say for how many people this is.', asIs: 'Read from the page as it is: nothing translated, no units converted.' },
-  de: { servings: 'Die Seite sagt nicht, für wie viele Personen das Rezept ist.', asIs: 'So von der Seite übernommen: nichts übersetzt, keine Einheiten umgerechnet.' },
+  en: { servings: 'The page does not say for how many people this is.', asIs: 'Read from the page as it is: nothing translated, no units converted.', estimated: 'The page gives no calories. The numbers are an estimate from the ingredients.' },
+  de: { servings: 'Die Seite sagt nicht, für wie viele Personen das Rezept ist.', asIs: 'So von der Seite übernommen: nichts übersetzt, keine Einheiten umgerechnet.', estimated: 'Die Seite nennt keine Kalorien. Die Zahlen sind aus den Zutaten geschätzt.' },
 }
 
 const lines = (value: unknown, max: number, each: number = SHOPPING_LIMITS.line): string[] =>
@@ -56,6 +57,11 @@ function parse(body: unknown): HelperRequest | null {
     if (typeof raw.text !== 'string' || raw.text.trim() === '' || raw.text.length > SHOPPING_LIMITS.text) return null
     return { job: 'pantry-notes', lang, text: raw.text.trim(), known: lines(raw.known, SHOPPING_LIMITS.known, 80) }
   }
+  if (raw.job === 'nutrition-estimate') {
+    const servings = typeof raw.servings === 'number' && Number.isFinite(raw.servings) ? Math.round(raw.servings) : 0
+    if (servings < 1 || servings > 99) return null
+    return { job: 'nutrition-estimate', lang, name: typeof raw.name === 'string' ? raw.name.replace(/\s+/g, ' ').trim().slice(0, 80) : '', servings, ingredients: lines(raw.ingredients, 60, 140) }
+  }
   if (raw.job !== 'recipe-from-link' || typeof raw.link !== 'string' || raw.link.length > 2000) return null
   return {
     job: 'recipe-from-link',
@@ -64,6 +70,8 @@ function parse(body: unknown): HelperRequest | null {
     translate: raw.translate !== false,
     metric: raw.metric !== false,
     photo: raw.photo !== false,
+    // An app from before this switch does not send it: for that app nothing is estimated.
+    nutrition: raw.nutrition === true,
     knownTags: Array.isArray(raw.knownTags) ? raw.knownTags.filter((tag): tag is string => typeof tag === 'string' && tag.length <= 24).slice(0, 40) : [],
   }
 }
@@ -72,6 +80,13 @@ function base64(bytes: Uint8Array): string {
   let binary = ''
   for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000))
   return btoa(binary)
+}
+
+/** Numbers the helper estimated are said to be an estimate, in the same words every time. Said once. */
+function withEstimateCheck(card: RecipeCard, lang: 'en' | 'de'): RecipeCard {
+  if (!card.nutritionEstimated) return card
+  const note: Check = { about: 'calories', note: WORDS[lang].estimated }
+  return { ...card, checks: [...card.checks.filter((check) => check.about !== 'calories'), note].slice(-4) }
 }
 
 /** A missing number of servings is worth a note, whoever wrote the card. Said once. */
@@ -103,10 +118,12 @@ async function recipeFromLink(request: RecipeFromLink, deps: HelperDeps, left: n
 
   if (deps.apiKey) {
     const skill = recipeCardSkill
-    const ask_ = { lang: request.lang, translate: request.translate, metric: request.metric, knownTags: request.knownTags, site: source.site, data: data ? JSON.stringify(data).slice(0, 30_000) : null, text: data ? null : pageText(page.html) }
+    const ask_ = { lang: request.lang, translate: request.translate, metric: request.metric, nutrition: request.nutrition, knownTags: request.knownTags, site: source.site, data: data ? JSON.stringify(data).slice(0, 30_000) : null, text: data ? null : pageText(page.html) }
     try {
       const answer = await ask({ apiKey: deps.apiKey, model: deps.model ?? DEFAULT_MODEL, system: skill.system(ask_), user: skill.user(ask_), schema: skill.schema, maxTokens: skill.maxTokens }, deps.askFetch)
       card = skill.read(answer)
+      // Without the switch nothing is an estimate, whatever came back.
+      if (card && card.nutritionEstimated && !request.nutrition) card = { ...card, kcalPerServing: null, proteinPerServing: null, carbsPerServing: null, fatPerServing: null, nutritionEstimated: false }
       if (card) by = 'helper'
       else if (!fromPage) return { ok: false, code: 'not_a_recipe' }
     } catch (error) {
@@ -125,7 +142,7 @@ async function recipeFromLink(request: RecipeFromLink, deps: HelperDeps, left: n
 
   const image = request.photo ? (fromPage?.image ?? meta.image) : null
   const picture = image ? await readPicture(image, page.url, deps.fetch) : null
-  return { ok: true, card: withServingsCheck(card, request.lang), source, photo: picture ? { type: picture.type, base64: base64(picture.bytes) } : null, by, left }
+  return { ok: true, card: withServingsCheck(withEstimateCheck(card, request.lang), request.lang), source, photo: picture ? { type: picture.type, base64: base64(picture.bytes) } : null, by, left }
 }
 
 /** One question to the helper for a job that is nothing without it. Null: it did not answer. */
@@ -157,6 +174,18 @@ async function pantryNotes(request: PantryNotes, deps: HelperDeps, left: number)
   return read ? { ok: true, lines: read, left } : { ok: false, code: 'helper_down' }
 }
 
+async function nutritionEstimate(request: NutritionEstimate, deps: HelperDeps, left: number): Promise<HelperAnswer> {
+  // Nothing to add up: said without asking anybody.
+  if (request.ingredients.length === 0) return { ok: false, code: 'not_enough' }
+  if (!deps.apiKey) return { ok: false, code: 'helper_off' }
+  const skill = nutritionSkill
+  const answer = await askSkill(deps, { system: skill.system(request), user: skill.user(request), schema: skill.schema, maxTokens: skill.maxTokens })
+  const read = answer === null ? null : skill.read(answer)
+  if (!read) return { ok: false, code: 'helper_down' }
+  if (read.kcal === null) return { ok: false, code: 'not_enough' }
+  return { ok: true, ...read, left }
+}
+
 /** The handler. Every expected outcome is an answer with status 200; only a broken request is not. */
 export function helperHandler(deps: HelperDeps): (request: Request) => Promise<Response> {
   return async (request) => {
@@ -180,6 +209,7 @@ export function helperHandler(deps: HelperDeps): (request: Request) => Promise<R
     try {
       if (asked.job === 'shopping-check') return json(await shoppingCheck(asked, deps, ticket.left))
       if (asked.job === 'pantry-notes') return json(await pantryNotes(asked, deps, ticket.left))
+      if (asked.job === 'nutrition-estimate') return json(await nutritionEstimate(asked, deps, ticket.left))
       return json(await recipeFromLink(asked, deps, ticket.left))
     } catch (error) {
       if (error instanceof PageError) return refuse(error.code)

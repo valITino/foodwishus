@@ -3,7 +3,7 @@
 // here is queued: it answers now or says why not.
 
 import { backend, db, isDemo } from './app'
-import { BackendError, type HelperFailure, type HelperRequest, type PantryNotesResult, type RecipeFromLinkResult, type ResultOf, type ShoppingCheck, type ShoppingCheckResult } from './backend'
+import { BackendError, type HelperFailure, type HelperRequest, type NutritionEstimate, type NutritionEstimateResult, type PantryNotesResult, type RecipeFromLinkResult, type ResultOf, type ShoppingCheck, type ShoppingCheckResult } from './backend'
 import type { BasketItem, Dish, Menu, PantryItem, Serving } from './types'
 
 /** Why a link could not be read. The helper's own words, plus two only the app knows. */
@@ -21,9 +21,11 @@ export interface ReadOptions {
   translate: boolean
   metric: boolean
   photo: boolean
+  /** Estimate calories, protein, carbs and fat when the page gives none. */
+  nutrition: boolean
 }
 
-const KNOWN: readonly HelperFailure[] = ['bad_request', 'not_signed_in', 'not_member', 'limit', 'bad_link', 'blocked', 'unreachable', 'too_big', 'not_a_page', 'not_a_recipe', 'helper_off', 'helper_down']
+const KNOWN: readonly HelperFailure[] = ['bad_request', 'not_signed_in', 'not_member', 'limit', 'bad_link', 'blocked', 'unreachable', 'too_big', 'not_a_page', 'not_a_recipe', 'not_enough', 'helper_off', 'helper_down']
 
 /** What went wrong, in one of the words the screens have a sentence for. */
 export function readProblem(error: unknown): ReadProblem {
@@ -61,6 +63,11 @@ export async function readRecipe(link: string, options: ReadOptions): Promise<Re
   if (isDemo) throw new ReadError('demo')
   const knownTags = mostUsedTags(await db.dishes.toArray())
   return ask({ job: 'recipe-from-link', link, ...options, knownTags })
+}
+
+/** Have Fork estimate a dish's nutrition per serving from its ingredient lines. Rejects with a ReadError. */
+export function estimateNutrition(request: Omit<NutritionEstimate, 'job'>): Promise<NutritionEstimateResult> {
+  return ask({ job: 'nutrition-estimate', ...request })
 }
 
 /** Have Fork compare the planned meals with the pantry. Rejects with a ReadError. */

@@ -275,8 +275,19 @@ that fetches the page and asks the Claude API for a recipe card.
   the same dish form as a hand-typed dish, through the same parsers, and counts as unsaved
   work. What it was not sure about is listed on top, each note with a jump to the part in
   question. That is also how it "asks": with a short list to look at, not with a chat.
-- **Three switches instead of a conversation.** Write it in my language, convert cups and
-  Fahrenheit, bring the picture. They are remembered on the device.
+- **Four switches instead of a conversation.** Write it in my language, convert cups and
+  Fahrenheit, bring the picture, estimate calories when the page has none. They are
+  remembered on the device.
+- **Calories the page does not give are estimated, and called that.** The house rule is
+  "never invent what the material does not say". Calories are the one exception, and a
+  marked one: they follow from the ingredients, which the material does say. The AI adds
+  them up per serving, the form switches "This is an estimate" on, and a note on top says
+  that the page gave none. It is done in the same answer as the card, so it costs no
+  second question. For dishes that are already in the book the Calories part of the dish
+  form has **Let Fork estimate**. People who have calories switched off never see either
+  and nothing is asked for them. An estimate is worked out from what the AI knows about
+  food, not looked up on the web for every ingredient: that would take many times as
+  long and cost many times as much for numbers that stay an estimate either way.
 - **The page's own data first.** Most recipe sites carry the recipe as data for search
   engines. That is what the AI gets when it is there (shorter, cleaner, cheaper), and it is
   also the fallback: without a key, or when the AI is down, such pages are still read, word
