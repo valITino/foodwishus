@@ -14,9 +14,9 @@ import {
   dayMarks,
   dayPart,
   defaultCook,
+  daysBeyond,
   defaultSlot,
   eatenInWeek,
-  freeSlots,
   groupByDayAndSlot,
   linkedDay,
   mealsOf,
@@ -29,7 +29,9 @@ import {
   shiftMonth,
   skippedServings,
   slotForHour,
+  STRIP_DAYS,
   suggestedFor,
+  tapDay,
   upcomingDays,
   upNext,
   wishesForDay,
@@ -172,13 +174,24 @@ describe('what can go into a slot', () => {
     expect(names(mealChoices(servings, book, menus, { day: TODAY, slot: 'lunch' }).open)).toEqual(['dinner today'])
   })
 
-  it('lists the rest of the recipe book by name, without archived recipes, empty menus and what is on its way already', () => {
+  it('lists the recipe book by name, without archived recipes, empty menus, wishes and what sits in this slot', () => {
     const servings = [wish('rösti'), planned('fondue', TODAY, 'dinner'), wish('brunch', { dishId: null, menuId: 'menu-brunch' }), wish('pizza', { status: 'eaten' })]
     const choices = mealChoices(servings, book, menus, target)
     // Rösti is a wish, Fondue sits in this slot. Pizza was eaten before: it can be had again.
     expect(choices.dishes.map((d) => d.name)).toEqual(['Älplermagronen', 'Pizza'])
     expect(choices.menus).toEqual([])
     expect(mealChoices([], book, menus, target).menus.map((m) => m.name)).toEqual(['Brunch'])
+  })
+
+  it('a dish that is planned for another moment can be moved here, or be had a second time', () => {
+    const servings = [planned('fondue', '2026-11-13', 'dinner'), planned('rösti', TODAY, 'breakfast')]
+    const choices = mealChoices(servings, book, menus, target)
+    // Both are offered as the meals they are (to move them here) ...
+    expect(names(choices.open)).toEqual(['rösti', 'fondue'])
+    // ... and both recipes stay in the book: Rösti for breakfast and again for dinner is two meals.
+    expect(choices.dishes.map((d) => d.name)).toEqual(['Älplermagronen', 'Fondue', 'Pizza', 'Rösti'])
+    // In the slot it already sits in, a dish is not offered again.
+    expect(mealChoices(servings, book, menus, { day: TODAY, slot: 'breakfast' }).dishes.map((d) => d.name)).toEqual(['Älplermagronen', 'Fondue', 'Pizza'])
   })
 
   it('finds names without accents, in any case, by every word typed', () => {
@@ -370,6 +383,26 @@ describe('planning', () => {
     expect(nextDays(TODAY, 14)).toHaveLength(14)
   })
 
+  it('has two weeks to tap, and knows which days lie after them', () => {
+    const strip = nextDays(TODAY, STRIP_DAYS)
+    expect(strip.at(-1)).toBe('2026-11-23')
+    // Christmas Eve and a day next year are beyond the strip, a day inside it is not. Doubles count once.
+    expect(daysBeyond(['2027-01-02', '2026-11-12', '2026-12-24', '2026-11-23', '2026-12-24'], strip)).toEqual(['2026-12-24', '2027-01-02'])
+    expect(daysBeyond([], strip)).toEqual([])
+    expect(daysBeyond(['2026-11-24'], strip)).toEqual(['2026-11-24'])
+  })
+
+  it('a tapped day replaces the one day, or joins and leaves the several', () => {
+    // Planning: one day. Tapping another one changes it, tapping it again keeps it.
+    expect(tapDay([], '2026-11-12', false)).toEqual(['2026-11-12'])
+    expect(tapDay(['2026-11-12'], '2026-12-24', false)).toEqual(['2026-12-24'])
+    expect(tapDay(['2026-11-12'], '2026-11-12', false)).toEqual(['2026-11-12'])
+    // Good days for a wish: as many as you like, kept in order, any distance away.
+    expect(tapDay(['2026-12-24'], '2026-11-12', true)).toEqual(['2026-11-12', '2026-12-24'])
+    expect(tapDay(['2026-11-12', '2026-12-24'], '2027-03-01', true)).toEqual(['2026-11-12', '2026-12-24', '2027-03-01'])
+    expect(tapDay(['2026-11-12', '2026-12-24'], '2026-11-12', true)).toEqual(['2026-12-24'])
+  })
+
   it('keeps only suggested days that are still ahead', () => {
     expect(upcomingDays(['2026-11-12', '2026-11-08', '2026-11-10', '2026-11-12'], TODAY)).toEqual(['2026-11-10', '2026-11-12'])
     expect(upcomingDays([], TODAY)).toEqual([])
@@ -457,8 +490,6 @@ describe('the calendar', () => {
     expect(names(mealsOf(plan['2026-11-12']))).toEqual(['thu breakfast', 'thu dinner', 'thu dinner two'])
     expect(names(plan['2026-11-09'].lunch)).toEqual(['mon'])
     expect(mealsOf(plan['2026-11-11'])).toEqual([])
-    expect(freeSlots(plan['2026-11-12'])).toEqual(['lunch', 'dessert'])
-    expect(freeSlots(plan['2026-11-11'])).toEqual(['breakfast', 'lunch', 'dinner', 'dessert'])
   })
 
   it('marks each day for the month view', () => {

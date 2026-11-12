@@ -8,10 +8,10 @@ import { useDishes, useMembers, useMenus, usePartner, useServings } from '../../
 import type { Day, Dish, ID, Member, Menu, Serving, Slot } from '../../data/types'
 import { useCopy, useLang, useT, type Lang } from '../../i18n'
 import { diffDays, formatDay, today } from '../../lib/dates'
-import { Chip, cx, DishThumb } from '../../ui/components'
+import { Chip, cx, DishThumb, Field } from '../../ui/components'
 import { Heart } from '../../ui/deco/Deco'
 import { planningCopy } from './copy'
-import { SLOTS } from './logic'
+import { daysBeyond, linkedDay, nextDays, SLOTS, STRIP_DAYS, tapDay } from './logic'
 
 // ----------------------------------------------------------------- kitchen --
 
@@ -242,6 +242,74 @@ export function DayStrip({ label, days, selected, onToggle, today: todayDay, mar
           </button>
         )
       })}
+    </div>
+  )
+}
+
+interface DayChoiceProps {
+  label: string
+  /** The label of the date field for any day after the ones to tap. */
+  laterLabel: string
+  today: Day
+  chosen: Day[]
+  onChange: (days: Day[]) => void
+  /** Several days are welcome (good days for a wish). Without it exactly one is wanted (the day a meal is planned for). */
+  many?: boolean
+  /** Days that carry a little heart, for example the days somebody suggested. */
+  marked?: Day[]
+  markLabel?: string
+  /** A line under the days to tap, for example who suggested the marked ones. */
+  note?: ReactNode
+}
+
+/**
+ * Any day from today on: the next two weeks to tap, and a date field for every day
+ * after them. Later days that are chosen or marked show as chips between the two, so
+ * nothing that was picked is out of sight.
+ */
+export function DayChoice({ label, laterLabel, today: todayDay, chosen, onChange, many = false, marked = [], markLabel, note }: DayChoiceProps) {
+  const lang = useLang()
+  const c = useCopy(planningCopy).shared
+  const strip = nextDays(todayDay, STRIP_DAYS)
+  const later = daysBeyond(many ? [...chosen, ...marked] : marked, strip)
+  const tap = (day: Day) => onChange(tapDay(chosen, day, many))
+  const year = todayDay.slice(0, 4)
+  const words = (day: Day) => (day.startsWith(year) ? formatDay(day, lang, 'full') : `${formatDay(day, lang, 'full')} ${day.slice(0, 4)}`)
+  // One day: the field shows the later day that is chosen. Several: it only ever adds, and empties itself.
+  const typed = !many && chosen[0] && !strip.includes(chosen[0]) ? chosen[0] : ''
+
+  return (
+    <div>
+      <DayStrip label={label} days={strip} selected={chosen} today={todayDay} marked={marked} markLabel={markLabel} onToggle={tap} />
+      {note}
+      {later.length > 0 && (
+        <div role="group" aria-label={c.laterDays} className="mt-2 flex flex-wrap gap-2" data-testid="later-days">
+          {later.map((day) => {
+            const mark = marked.includes(day)
+            return (
+              <Chip key={day} selected={chosen.includes(day)} onClick={() => tap(day)}>
+                {mark && <Heart size={16} />}
+                <span data-day={day}>{words(day)}</span>
+                {mark && markLabel && <span className="sr-only">, {markLabel}</span>}
+              </Chip>
+            )
+          })}
+        </div>
+      )}
+      <Field
+        className="mt-3"
+        type="date"
+        label={laterLabel}
+        min={todayDay}
+        value={typed}
+        onChange={(event) => {
+          const picked = linkedDay(event.target.value, todayDay)
+          if (many) {
+            if (picked && !chosen.includes(picked)) onChange(tapDay(chosen, picked, true))
+          } else if (picked) onChange([picked])
+          else if (!event.target.value) onChange([])
+        }}
+      />
     </div>
   )
 }
