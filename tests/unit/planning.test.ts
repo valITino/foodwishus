@@ -3,6 +3,12 @@ import type { Serving } from '../../src/data/types'
 import {
   calendarPlace,
   canServe,
+  canServeEarly,
+  isDue,
+  mealChoices,
+  mealToServe,
+  nameMatches,
+  slotForNow,
   cookOf,
   currentStreak,
   dayMarks,
@@ -121,6 +127,93 @@ describe('roles belong to each meal', () => {
     expect(canServe(planned('overdue', '2026-11-08'), MIA, TODAY)).toBe(true)
     expect(canServe(planned('tomorrow', '2026-11-11'), MIA, TODAY)).toBe(false)
     expect(canServe(wish('not planned'), MIA, TODAY)).toBe(false)
+  })
+
+  it('knows when a planned meal is due: on its day and after', () => {
+    expect(isDue(planned('today', TODAY), TODAY)).toBe(true)
+    expect(isDue(planned('overdue', '2026-11-08'), TODAY)).toBe(true)
+    expect(isDue(planned('tomorrow', '2026-11-11'), TODAY)).toBe(false)
+    expect(isDue(wish('a wish'), TODAY)).toBe(false)
+    expect(isDue(wish('on the table', { status: 'served', plannedDate: TODAY }), TODAY)).toBe(false)
+  })
+
+  it('lets the cook serve a meal early: planned for another day, or only a wish', () => {
+    expect(canServeEarly(planned('tomorrow', '2026-11-11'), MIA, TODAY)).toBe(true)
+    expect(canServeEarly(wish('a wish'), MIA, TODAY)).toBe(true)
+    // Not the eater, and not what is due anyway (that has the big "Served" button).
+    expect(canServeEarly(planned('tomorrow', '2026-11-11'), LEO, TODAY)).toBe(false)
+    expect(canServeEarly(planned('today', TODAY), MIA, TODAY)).toBe(false)
+    // Nothing that is already on the table, eaten or skipped.
+    for (const status of ['served', 'eaten', 'skipped'] as const) expect(canServeEarly(wish(status, { status }), MIA, TODAY)).toBe(false)
+  })
+
+  it('guesses the next main meal for something decided right now', () => {
+    expect([0, 6, 9].map(slotForNow)).toEqual(['breakfast', 'breakfast', 'breakfast'])
+    expect([10, 12, 13].map(slotForNow)).toEqual(['lunch', 'lunch', 'lunch'])
+    expect([14, 16, 19, 23].map(slotForNow)).toEqual(['dinner', 'dinner', 'dinner', 'dinner'])
+  })
+})
+
+describe('what can go into a slot', () => {
+  const dish = (id: string, name: string, archived = false) => ({ id, name, archived })
+  const menu = (id: string, name: string, courses: unknown[] = [1], archived = false) => ({ id, name, archived, courses })
+  const book = [dish('dish-rösti', 'Rösti'), dish('dish-pizza', 'Pizza'), dish('dish-fondue', 'Fondue'), dish('dish-old', 'An old one', true), dish('dish-älpler', 'Älplermagronen')]
+  const menus = [menu('menu-brunch', 'Brunch'), menu('menu-empty', 'No courses yet', []), menu('menu-gone', 'Put away', [1], true)]
+  const target = { day: TODAY, slot: 'dinner' as const }
+
+  it('offers wishes first (the ones hoped for on this day on top), then meals planned for another moment', () => {
+    const servings = [wish('rösti'), wish('pizza', { suggestedDays: [TODAY] }), planned('fondue', '2026-11-13'), planned('lunch today', TODAY, 'lunch'), wish('eaten', { status: 'eaten' }), wish('skipped', { status: 'skipped' })]
+    expect(names(mealChoices(servings, book, menus, target).open)).toEqual(['pizza', 'rösti', 'lunch today', 'fondue'])
+  })
+
+  it('does not offer what already sits in that very slot', () => {
+    const servings = [planned('dinner today', TODAY, 'dinner'), planned('fondue', TODAY, 'lunch')]
+    expect(names(mealChoices(servings, book, menus, target).open)).toEqual(['fondue'])
+    expect(names(mealChoices(servings, book, menus, { day: TODAY, slot: 'lunch' }).open)).toEqual(['dinner today'])
+  })
+
+  it('lists the rest of the recipe book by name, without archived recipes, empty menus and what is on its way already', () => {
+    const servings = [wish('rösti'), planned('fondue', TODAY, 'dinner'), wish('brunch', { dishId: null, menuId: 'menu-brunch' }), wish('pizza', { status: 'eaten' })]
+    const choices = mealChoices(servings, book, menus, target)
+    // Rösti is a wish, Fondue sits in this slot. Pizza was eaten before: it can be had again.
+    expect(choices.dishes.map((d) => d.name)).toEqual(['Älplermagronen', 'Pizza'])
+    expect(choices.menus).toEqual([])
+    expect(mealChoices([], book, menus, target).menus.map((m) => m.name)).toEqual(['Brunch'])
+  })
+
+  it('finds names without accents, in any case, by every word typed', () => {
+    expect(nameMatches('Älplermagronen', 'alpler')).toBe(true)
+    expect(nameMatches('Zürcher Geschnetzeltes', 'ZURCHER gesch')).toBe(true)
+    expect(nameMatches('Pizza Margherita', 'margherita pizza')).toBe(true)
+    expect(nameMatches('Pizza Margherita', 'pizza funghi')).toBe(false)
+    expect(nameMatches('Rösti', '')).toBe(true)
+    expect(nameMatches('Rösti', '   ')).toBe(true)
+  })
+})
+
+describe('Served at the end of cook mode', () => {
+  const rösti = (name: string, overrides: Partial<Serving> = {}) => wish(name, { dishId: 'rösti', ...overrides })
+
+  it("is a new meal when the dish is on nobody's list", () => {
+    expect(mealToServe([wish('something else'), rösti('eaten before', { status: 'eaten' })], 'rösti', MIA, TODAY)).toBe('new')
+  })
+
+  it('takes the meal that is due, then the next planned one, then a wish', () => {
+    const due = rösti('today', { status: 'planned', plannedDate: TODAY })
+    const overdue = rösti('sunday', { status: 'planned', plannedDate: '2026-11-08' })
+    const later = rösti('friday', { status: 'planned', plannedDate: '2026-11-13' })
+    const muchLater = rösti('next week', { status: 'planned', plannedDate: '2026-11-18' })
+    const wished = rösti('a wish')
+    const pick = (list: Serving[]) => (mealToServe(list, 'rösti', MIA, TODAY) as Serving).id
+    expect(pick([wished, muchLater, later, overdue, due])).toBe('today')
+    expect(pick([wished, muchLater, later, overdue])).toBe('sunday')
+    expect(pick([wished, muchLater, later])).toBe('friday')
+    expect(pick([wished])).toBe('a wish')
+  })
+
+  it('leaves a meal alone that the partner is going to cook', () => {
+    expect(mealToServe([rösti('his turn', { cookedBy: LEO })], 'rösti', MIA, TODAY)).toBeNull()
+    expect((mealToServe([rösti('his turn', { cookedBy: LEO }), rösti('hers')], 'rösti', MIA, TODAY) as Serving).id).toBe('hers')
   })
 })
 

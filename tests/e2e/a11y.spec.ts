@@ -66,7 +66,8 @@ for (const lang of ['en', 'de'] as const) {
     test.setTimeout(180_000)
     await useDemo(page, { lang })
     await page.goto('/#/')
-    await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
+    const nav = page.getByRole('navigation', { name: lang === 'de' ? 'Hauptnavigation' : 'Main' })
+    await expect(nav).toBeVisible()
     const ids = await examples(page)
 
     const screens: [name: string, path: string][] = [
@@ -107,11 +108,16 @@ for (const lang of ['en', 'de'] as const) {
       await basics(page, `${name} (${lang})`)
     }
 
-    // Sheets: the add sheet, a criterion, and the review details.
+    // Sheets: the add sheet, the choice of a meal, a criterion, and the review details.
     await page.goto('/#/')
-    await page.getByRole('navigation', { name: 'Main' }).locator('..').getByRole('button').last().click()
+    await page.getByRole('button', { name: lang === 'de' ? 'Etwas hinzufügen' : 'Add something' }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
     await basics(page, `add sheet (${lang})`, { sheet: true })
+    await page.getByRole('dialog').getByRole('button', { name: lang === 'de' ? /Ein Essen für heute/ : /A meal for today/ }).click()
+    await expect(page.getByRole('dialog').getByTestId('pick-when')).toBeVisible()
+    await basics(page, `meal picker (${lang})`, { sheet: true })
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
 
     await page.goto('/#/settings/criteria')
     await page.getByTestId('criterion-row').first().click()
@@ -168,7 +174,7 @@ test('the start screens keep the basics, and so do the pages that need a real ki
   await expect(page.getByRole('heading', { name: 'Your kitchen is open' })).toBeVisible()
   await basics(page, 'the kitchen is open')
   await page.getByRole('button', { name: 'Done' }).click()
-  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: /^(Main|Hauptnavigation)$/ })).toBeVisible()
 
   for (const [name, path, landmark] of [
     ['Today, empty', '/', 'navigation'],

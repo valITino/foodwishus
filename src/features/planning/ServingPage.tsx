@@ -2,16 +2,17 @@
 
 import { useState } from 'react'
 import { back, navigate } from '../../app/router'
-import { markServed, planServing, proposeServing, removeServing, reviveServing, setCraving, skipServing, undoServed, unplanServing, updateServingNote } from '../../data/actions'
+import { ActionError, isSealed, markServed, planServing, proposeServing, removeServing, reviveServing, setCook, setCraving, skipServing, undoServed, unplanServing, updateServingNote } from '../../data/actions'
+import { useReviews } from '../../data/queries'
 import type { Day, ID, Serving, Slot } from '../../data/types'
 import { useCopy, useLang, useT } from '../../i18n'
 import { formatDay, toDay } from '../../lib/dates'
-import { Button, Card, Chip, cx, EmptyState, Field, HeartMeter, PageHeader, Screen, Sheet, TextArea, toast } from '../../ui/components'
+import { Button, Card, Chip, cx, EmptyState, Field, HeartMeter, PageHeader, Screen, Segmented, Sheet, TextArea, toast } from '../../ui/components'
 import { Heart } from '../../ui/deco/Deco'
 import { Icon, type IconName } from '../../ui/deco/Icon'
 import { EarlyProof, MealReview, ProofCard } from '../review'
 import { planningCopy } from './copy'
-import { canServe, cookOf, defaultSlot, eatenDay, isOpen, linkedDay, nextDays, roleIn, upcomingDays } from './logic'
+import { canServe, canServeEarly, cookOf, defaultSlot, eatenDay, isDue, isOpen, linkedDay, nextDays, roleIn, upcomingDays } from './logic'
 import { DayStrip, MealThumb, nameOf, NoteBox, SlotChips, TextAction, useKitchen, useMealInfo, useWhen, type Kitchen, type MealInfo } from './shared'
 
 const STATUS_ICON: Record<Serving['status'], IconName> = { wishlist: 'wishlist', planned: 'calendar', served: 'clock', eaten: 'check', skipped: 'close' }
@@ -23,10 +24,23 @@ interface PartProps {
 }
 
 /** Picture, name, where it stands and who does what. */
-function Summary({ serving, kitchen, info }: PartProps) {
+function Summary({ serving, kitchen, info, canSwapCook }: PartProps & { canSwapCook: boolean }) {
+  const t = useT()
   const lang = useLang()
   const c = useCopy(planningCopy)
   const when = useWhen(kitchen.today)
+  const [swapping, setSwapping] = useState(false)
+
+  /** Plans change: tonight the other one cooks. The hearts start over with the new eater. */
+  async function swapCook(cookId: ID) {
+    try {
+      await setCook(serving.id, cookId)
+      setSwapping(false)
+      toast(t.common.saved)
+    } catch (error) {
+      toast(error instanceof ActionError && error.code === 'cook_fixed' ? c.serving.cookFixed : t.common.somethingWrong, 'oops')
+    }
+  }
   const partnerName = kitchen.partner?.name ?? ''
   const iCook = roleIn(serving, kitchen.meId) === 'cook'
   const mine = serving.proposedBy === kitchen.meId || !kitchen.partner
@@ -64,6 +78,26 @@ function Summary({ serving, kitchen, info }: PartProps) {
         <span className="min-w-0">{status}</span>
       </p>
       <p className="mt-2.5 px-0.5 text-sm text-ink-soft">{people}</p>
+      {canSwapCook &&
+        kitchen.partner &&
+        (swapping ? (
+          <div className="mt-2">
+            <p className="mb-1.5 px-0.5 text-xs font-extrabold">{c.propose.cookLabel}</p>
+            <Segmented
+              label={c.propose.cookLabel}
+              value={cookOf(serving) ?? kitchen.meId}
+              options={[
+                { value: kitchen.meId, label: c.propose.me },
+                { value: kitchen.partner.id, label: kitchen.partner.name },
+              ]}
+              onChange={(cookId) => void swapCook(cookId)}
+            />
+          </div>
+        ) : (
+          <TextAction className="ml-0.5" aria-expanded={false} onClick={() => setSwapping(true)}>
+            {c.serving.changeCook}
+          </TextAction>
+        ))}
     </Card>
   )
 }
@@ -274,6 +308,7 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
   const t = useT()
   const c = useCopy(planningCopy)
   const kitchen = useKitchen()
+  const reviews = useReviews()
   const mealInfo = useMealInfo()
   const [changing, setChanging] = useState(false)
   const [sheet, setSheet] = useState<'skip' | 'remove' | null>(null)
@@ -304,6 +339,15 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
   const partnerName = kitchen.partner?.name ?? ''
   const iCook = roleIn(serving, kitchen.meId) === 'cook'
   const serveNow = canServe(serving, kitchen.meId, kitchen.today)
+  // Plans change: a meal that is not due yet can still come to the table today.
+  const serveEarly = canServeEarly(serving, kitchen.meId, kitchen.today)
+  const proofEarly = isOpen(serving) && !isDue(serving, kitchen.today) && !iCook
+  const said = (reviews ?? []).filter((review) => review.servingId === serving.id)
+  // Roles can swap until somebody has started the verdict.
+  const canSwapCook = isOpen(serving) && kitchen.partner !== null && reviews !== undefined && said.length === 0
+  // An eaten meal can go for as long as its verdict can still be changed.
+  const removable = isOpen(serving) || serving.status === 'skipped' || (serving.status === 'eaten' && reviews !== undefined && !said.some((review) => isSealed(review)))
+  const skippable = isOpen(serving) || serving.status === 'served'
   const part = { serving, kitchen, info }
 
   /** Run an action, say what happened, and show an error if it did not work. */
@@ -326,9 +370,9 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
       await action()
       toast(done)
       back('/wishlist')
-    } catch {
+    } catch (error) {
       setLeaving(false)
-      toast(t.common.somethingWrong, 'oops')
+      toast(error instanceof ActionError && error.code === 'review_sealed' ? c.serving.removeSealed : t.common.somethingWrong, 'oops')
     }
   }
 
@@ -336,7 +380,7 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
     <Screen>
       <PageHeader title={t.status[serving.status]} backTo="/wishlist" />
       <main className="app-column flex flex-col gap-4 px-4 pt-4">
-        <Summary {...part} />
+        <Summary {...part} canSwapCook={canSwapCook} />
 
         {serveNow && !changing && (
           <Card pad={false} className="flex flex-col gap-2 p-4">
@@ -413,16 +457,28 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
             </div>
           ))}
 
-        {(isOpen(serving) || serving.status === 'skipped') && (
+        {serveEarly && !changing && (
+          <div className="flex flex-col gap-1.5" data-testid="serve-early">
+            <Button variant="secondary" block disabled={busy} onClick={() => void act(() => markServed(serving.id), t.actions.served)}>
+              {c.serving.serveNow}
+            </Button>
+            <p className="text-center text-xs text-ink-soft">{c.serving.serveNowHint}</p>
+          </div>
+        )}
+        {proofEarly && !changing && <EarlyProof servingId={serving.id} className="self-center" />}
+
+        {(skippable || removable) && (
           <div className="mt-2 flex flex-wrap justify-center gap-x-2 border-t border-line pt-3">
-            {isOpen(serving) && (
+            {skippable && (
               <Button variant="quiet" onClick={() => setSheet('skip')}>
                 {c.serving.skip}
               </Button>
             )}
-            <Button variant="quiet" onClick={() => setSheet('remove')}>
-              {t.common.remove}
-            </Button>
+            {removable && (
+              <Button variant="quiet" onClick={() => setSheet('remove')}>
+                {serving.status === 'eaten' ? c.serving.removeMeal : t.common.remove}
+              </Button>
+            )}
           </div>
         )}
       </main>
@@ -444,8 +500,9 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
           </div>
         }
       >
-        <p className="text-sm">{c.serving.removeBody}</p>
+        <p className="text-sm">{serving.status === 'eaten' ? c.serving.removeEatenBody : c.serving.removeBody}</p>
         {isOpen(serving) && <p className="mt-3 text-sm text-ink-soft">{c.serving.removeHint}</p>}
+        {serving.status === 'eaten' && <p className="mt-3 text-sm text-ink-soft">{c.serving.removeEatenHint}</p>}
       </Sheet>
     </Screen>
   )

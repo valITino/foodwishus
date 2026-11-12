@@ -562,7 +562,19 @@ test.describe('Today', () => {
     await expect(rows).toHaveText([/Capuns.*lunch/, /Rösti.*Not planned yet/, /Fondue.*Not planned yet/, 'See the whole wishlist'])
     await expect(page.getByTestId('today-empty')).toContainText('The table is free. The wishlist is not.')
 
-    await page.getByTestId('today-empty').getByRole('button', { name: 'Open the wishlist' }).click()
+    // The invitation: pick today's meal right here. The wishes come first, in their order,
+    // then what is planned for another day.
+    await page.getByTestId('today-empty').getByRole('button', { name: "Pick today's meal" }).click()
+    const picker = page.getByRole('dialog', { name: 'What shall it be?' })
+    await expect(picker.getByTestId('wish-option')).toHaveText([/Rösti/, /Fondue/, /Zopf/, /Capuns.*Planned for/])
+    await picker.getByRole('button', { name: 'Dinner', exact: true }).click()
+    await picker.getByTestId('wish-option').first().click()
+    await expect(page.getByTestId('serving-status')).toHaveText('Planned for today, dinner')
+
+    // It is today's meal now, and still on the wishlist board with the others.
+    await page.goto('/#/')
+    await expect(page.getByTestId('today-meal')).toContainText('Rösti')
+    await page.getByRole('navigation', { name: /^(Main|Hauptnavigation)$/ }).getByRole('button', { name: 'Wishlist' }).click()
     await expect(page).toHaveURL(/#\/wishlist$/)
     await expect.poll(() => board(page)).toEqual(['Rösti', 'Fondue', 'Zopf', 'Capuns'])
   })

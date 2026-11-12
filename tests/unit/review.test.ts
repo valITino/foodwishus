@@ -13,10 +13,16 @@ import {
   proposeServing,
   reactToMeal,
   removeProofPhoto,
+  removeServing,
   reviewDishes,
   reviewIdFor,
+  reviveServing,
   saveReview,
+  setCook,
+  setCraving,
   setEatenAt,
+  skipServing,
+  undoServed,
 } from '../../src/data/actions'
 import { db } from '../../src/data/app'
 import { META } from '../../src/data/db'
@@ -209,6 +215,103 @@ describe('finishing a meal', () => {
 
   it('says so when the meal does not exist', async () => {
     await expect(reactToMeal(newId(), 5)).rejects.toBeInstanceOf(ActionError)
+  })
+})
+
+describe('plans change', () => {
+  const queued = async () => (await db.outbox.orderBy('seq').toArray()).map((op) => `${op.kind} ${op.table}`)
+
+  it('puts a meal straight onto the calendar in one step', async () => {
+    const dish = await createDish({ name: 'Rösti' })
+    await db.outbox.clear()
+    const serving = await proposeServing({ dishId: dish.id, cookedBy: mia, plan: { date: '2026-11-12', slot: 'lunch' } })
+    expect(await db.servings.get(serving.id)).toMatchObject({ status: 'planned', plannedDate: '2026-11-12', plannedSlot: 'lunch', cookedBy: mia, proposedBy: leo, craving: null })
+    expect(await queued()).toEqual(['put servings'])
+  })
+
+  it('serves a wish that was never planned, and takes it back as a meal for today', async () => {
+    const dish = await createDish({ name: 'Rösti' })
+    const serving = await proposeServing({ dishId: dish.id, cookedBy: mia })
+    await markServed(serving.id)
+    expect(await db.servings.get(serving.id)).toMatchObject({ status: 'served', plannedDate: null, plannedSlot: null, cookedBy: mia })
+    expect((await db.servings.get(serving.id))?.servedAt).not.toBeNull()
+
+    await undoServed(serving.id, '2026-11-10')
+    expect(await db.servings.get(serving.id)).toMatchObject({ status: 'planned', plannedDate: '2026-11-10', plannedSlot: 'dinner', servedAt: null })
+  })
+
+  it('swaps the cook, and the hearts start over with the new eater', async () => {
+    const dish = await createDish({ name: 'Rösti' })
+    const serving = await proposeServing({ dishId: dish.id, cookedBy: mia })
+    await setCraving(serving.id, 5)
+    await db.outbox.clear()
+
+    await setCook(serving.id, mia) // she cooks already: nothing to do
+    expect(await queued()).toEqual([])
+    expect((await db.servings.get(serving.id))?.craving).toBe(5)
+
+    await setCook(serving.id, leo)
+    expect(await db.servings.get(serving.id)).toMatchObject({ cookedBy: leo, craving: null })
+  })
+
+  it('keeps the roles once a verdict has been started', async () => {
+    const { servingId } = await served()
+    await reactToMeal(servingId, 5)
+    await expect(setCook(servingId, leo)).rejects.toMatchObject({ code: 'cook_fixed' })
+    expect((await db.servings.get(servingId))?.cookedBy).toBe(mia)
+  })
+
+  it('forgets that a skipped meal was on the table once it is back on the wishlist', async () => {
+    const { servingId } = await served()
+    await skipServing(servingId, 'Burnt')
+    expect(await db.servings.get(servingId)).toMatchObject({ status: 'skipped', skippedReason: 'Burnt' })
+    await reviveServing(servingId)
+    expect(await db.servings.get(servingId)).toMatchObject({ status: 'wishlist', servedAt: null, plannedDate: null, skippedReason: null })
+  })
+
+  it('removes a meal with its photos and what was said about it', async () => {
+    const { dish, servingId } = await served()
+    const photo = await addProofPhoto(servingId, { image: picture(), source: 'camera' })
+    await reactToMeal(servingId, 2)
+    await finishMeal(servingId)
+    const reviewId = await reviewIdFor(servingId, dish.id, leo)
+
+    await removeServing(servingId)
+    expect((await db.servings.get(servingId))?.deletedAt).not.toBeNull()
+    expect((await db.reviews.get(reviewId))?.deletedAt).not.toBeNull()
+    expect((await db.photos.get(photo.photoId))?.deletedAt).not.toBeNull()
+    // The recipe stays.
+    expect((await db.dishes.get(dish.id))?.deletedAt).toBeNull()
+    // Removing it again does nothing.
+    await db.outbox.clear()
+    await removeServing(servingId)
+    expect(await queued()).toEqual([])
+  })
+
+  it('keeps an eaten meal once its verdict is sealed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-10T19:00:00Z'))
+    const { dish, servingId } = await served()
+    await addProofPhoto(servingId, { image: picture(), source: 'camera' })
+    await reactToMeal(servingId, 5)
+    await finishMeal(servingId)
+
+    vi.setSystemTime(new Date('2026-11-11T19:00:01Z'))
+    await expect(removeServing(servingId)).rejects.toMatchObject({ code: 'review_sealed' })
+    expect((await db.servings.get(servingId))?.deletedAt).toBeNull()
+    expect((await db.reviews.get(await reviewIdFor(servingId, dish.id, leo)))?.deletedAt).toBeNull()
+  })
+
+  it('lets a meal go that never happened, and leaves an old sealed face where the cloud keeps it', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-10T19:00:00Z'))
+    const { dish, servingId } = await served()
+    await reactToMeal(servingId, 4) // tapped once, never handed in
+    vi.setSystemTime(new Date('2026-11-13T08:00:00Z'))
+
+    await removeServing(servingId)
+    expect((await db.servings.get(servingId))?.deletedAt).not.toBeNull()
+    expect((await db.reviews.get(await reviewIdFor(servingId, dish.id, leo)))?.deletedAt).toBeNull()
   })
 })
 

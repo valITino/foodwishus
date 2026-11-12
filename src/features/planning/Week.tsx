@@ -5,22 +5,20 @@ import { motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import { navigate } from '../../app/router'
 import { planServing } from '../../data/actions'
-import type { Day, ID, Serving, Slot } from '../../data/types'
+import type { Day, ID, Serving } from '../../data/types'
 import { useCopy, useLang, useT } from '../../i18n'
 import { addDays, formatDay, monthGrid, weekOf } from '../../lib/dates'
-import { AwningHeader, Button, buzz, Card, cx, EmptyState, HeartMeter, IconButton, Screen, Segmented, Sheet, Tag, toast } from '../../ui/components'
+import { AwningHeader, buzz, Card, cx, HeartMeter, IconButton, Screen, Segmented, Tag, toast } from '../../ui/components'
 import { Heart } from '../../ui/deco/Deco'
 import { Icon } from '../../ui/deco/Icon'
 import { planningCopy } from './copy'
-import { dayMarks, freeSlots, groupByDayAndSlot, mealsOf, sameMonth, shiftMonth, suggestedFor, wishesForDay, type DayPlan } from './logic'
+import { dayMarks, freeSlots, groupByDayAndSlot, mealsOf, sameMonth, shiftMonth, suggestedFor, type DayPlan } from './logic'
+import { MealPicker, type PickTarget } from './MealPicker'
 import { MealThumb, nameOf, noTouchMenu, useDragSensors, useKitchen, useMealInfo, useWhen, type Kitchen } from './shared'
 
 type Mode = 'week' | 'month'
 
-interface SlotTarget {
-  day: Day
-  slot: Slot
-}
+type SlotTarget = PickTarget
 
 // Where you were looking, kept while the app stays open: coming back from a meal's page
 // should not throw you back to this week.
@@ -307,79 +305,6 @@ function MonthView({ anchor, selected, kitchen, onSelect, onEmptySlot }: MonthVi
   )
 }
 
-// ------------------------------------------------------------- empty slots --
-
-/** "What shall it be?": the wishlist, offered for one empty slot. */
-function SlotSheet({ target, open, kitchen, onClose }: { target: SlotTarget | null; open: boolean; kitchen: Kitchen; onClose: () => void }) {
-  const t = useT()
-  const c = useCopy(planningCopy)
-  const when = useWhen(kitchen.today)
-  const info = useMealInfo()
-  const wishes = target ? wishesForDay(kitchen.servings, target.day) : []
-
-  async function pick(serving: Serving) {
-    if (!target) return
-    try {
-      await planServing(serving.id, target.day, target.slot)
-      toast(c.shared.plannedFor(when.atInline(target.day, target.slot)))
-      onClose()
-    } catch {
-      toast(t.common.somethingWrong, 'oops')
-    }
-  }
-
-  return (
-    <Sheet open={open} onClose={onClose} title={c.week.pickTitle}>
-      {target && <p className="text-sm font-bold text-ink-soft">{when.at(target.day, target.slot, 'long')}</p>}
-      {wishes.length === 0 ? (
-        <EmptyState
-          title={c.week.pickEmptyTitle}
-          body={c.week.pickEmptyBody}
-          action={
-            <Button
-              onClick={() => {
-                onClose()
-                navigate('/recipes')
-              }}
-            >
-              {c.shared.openRecipes}
-            </Button>
-          }
-        />
-      ) : (
-        <ul className="mt-3 flex flex-col gap-2 pb-2">
-          {wishes.map((serving) => {
-            const meal = info(serving, kitchen)
-            const suggested = target !== null && serving.suggestedDays.includes(target.day)
-            return (
-              <li key={serving.id}>
-                <button
-                  type="button"
-                  data-testid="wish-option"
-                  onClick={() => void pick(serving)}
-                  className="flex w-full items-center gap-3 rounded-card border-[1.5px] border-line-strong bg-surface p-3 text-left active:translate-y-[2px]"
-                >
-                  <MealThumb info={meal} seed={serving.id} size={52} />
-                  <span className="min-w-0 flex-1">
-                    <span className="line-clamp-2 text-sm font-extrabold leading-snug">{meal.name}</span>
-                    {suggested && (
-                      <span className="mt-1 block">
-                        <Tag tone="sage">{serving.proposedBy === kitchen.meId ? c.week.suggestedByMe : c.week.suggestedBy(nameOf(kitchen, serving.proposedBy))}</Tag>
-                      </span>
-                    )}
-                    {serving.note && !suggested && <span className="block truncate font-script text-xl leading-tight text-rose-ink">{serving.note}</span>}
-                  </span>
-                  {serving.craving !== null && <HeartMeter value={serving.craving} size={13} showLabel={false} />}
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </Sheet>
-  )
-}
-
 // ------------------------------------------------------------------ screen --
 
 export function WeekScreen() {
@@ -496,7 +421,7 @@ export function WeekScreen() {
         )}
       </main>
 
-      <SlotSheet target={target} open={picking} kitchen={kitchen} onClose={() => setPicking(false)} />
+      <MealPicker target={target} open={picking} kitchen={kitchen} onClose={() => setPicking(false)} />
     </Screen>
   )
 }

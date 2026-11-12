@@ -5,13 +5,13 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { boot, isDemo, leaveDemo, useSyncStatus } from '../data/app'
 import { useMe } from '../data/hooks'
 import { Onboarding, PausedScreen, usePaused } from '../features/onboarding'
-import { PlanningRoutes, TodayScreen, WeekScreen, WishlistScreen } from '../features/planning'
+import { PlanningRoutes, TodayPicker, TodayScreen, WeekScreen, WishlistScreen } from '../features/planning'
 import { RecipeBookScreen, RecipesRoutes } from '../features/recipes'
 import { isReviewPath, ReviewRoutes } from '../features/review'
 import { SettingsRoutes } from '../features/settings'
 import { useT } from '../i18n'
 import { Screen, Sheet, SteamLoader, TabBar, Toaster, type TabId } from '../ui/components'
-import { Cloche, Flower } from '../ui/deco/Deco'
+import { Cherry, Cloche, Flower } from '../ui/deco/Deco'
 import { currentPath, navigate, useRoute } from './router'
 import { startSettingsSync } from './settingsSync'
 
@@ -35,7 +35,7 @@ const SyncLab = import.meta.env.DEV ? lazy(() => import('../features/lab/SyncLab
 export const TAB_PATHS: Record<TabId, string> = { today: '/', wishlist: '/wishlist', week: '/week', cockpit: '/cockpit', recipes: '/recipes' }
 const TAB_BY_PATH = Object.fromEntries(Object.entries(TAB_PATHS).map(([id, path]) => [path, id])) as Record<string, TabId>
 
-function AddSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+function AddSheet({ open, onClose, onToday }: { open: boolean; onClose: () => void; onToday: () => void }) {
   const t = useT()
   const go = (to: string) => {
     onClose()
@@ -45,6 +45,21 @@ function AddSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <Sheet open={open} onClose={onClose} title={t.addSheet.title}>
       <div className="flex flex-col gap-3 pb-2">
+        {/* The spontaneous way: no wish, no planning ahead. Pick it, and it is today's meal. */}
+        <button
+          type="button"
+          className={choice}
+          onClick={() => {
+            onClose()
+            onToday()
+          }}
+        >
+          <Cherry size={44} />
+          <span>
+            <span className="block text-base font-extrabold">{t.addSheet.today}</span>
+            <span className="block text-xs text-ink-soft">{t.addSheet.todayHint}</span>
+          </span>
+        </button>
         <button type="button" className={choice} onClick={() => go('/recipes/new')}>
           <Cloche size={44} />
           <span>
@@ -85,6 +100,7 @@ export function Shell() {
   const status = useSyncStatus()
   const paused = usePaused()
   const [adding, setAdding] = useState(false)
+  const [pickingToday, setPickingToday] = useState(false)
   const { path } = route
 
   useEffect(() => {
@@ -180,7 +196,8 @@ export function Shell() {
       {isDemo && <DemoBanner />}
       {page}
       {tab && <TabBar active={tab} onSelect={(id) => navigate(TAB_PATHS[id], { replace: true })} onAdd={() => setAdding(true)} />}
-      <AddSheet open={adding} onClose={() => setAdding(false)} />
+      <AddSheet open={adding} onClose={() => setAdding(false)} onToday={() => setPickingToday(true)} />
+      <TodayPicker open={pickingToday} onClose={() => setPickingToday(false)} />
       <Toaster />
     </>
   )

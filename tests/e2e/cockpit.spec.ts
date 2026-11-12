@@ -328,9 +328,9 @@ test.describe('the filter bar', () => {
     await choose(page, 'Dessert')
     await expect(tile(page, 'meals')).toHaveText('1meal eaten')
 
-    await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Wishlist' }).click()
+    await page.getByRole('navigation', { name: /^(Main|Hauptnavigation)$/ }).getByRole('button', { name: 'Wishlist' }).click()
     await expect(page.getByRole('heading', { level: 1, name: 'Wishlist' })).toBeVisible()
-    await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Cockpit' }).click()
+    await page.getByRole('navigation', { name: /^(Main|Hauptnavigation)$/ }).getByRole('button', { name: 'Cockpit' }).click()
 
     await expect(chips(page)).toHaveText(['Dessert'])
     await expect(tile(page, 'meals')).toHaveText('1meal eaten')

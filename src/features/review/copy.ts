@@ -101,7 +101,7 @@ const en = {
   },
   submit: {
     handIn: 'Hand in the verdict',
-    noProof: 'No proof yet. Take the photo first, then hand it in.',
+    noProof: 'No proof yet. Take the photo first, then hand it in. Plate already empty? A clean plate counts too.',
     noVerdict: 'No verdict yet. Tap a face, then hand it in.',
     sealed: 'This verdict is sealed. It can no longer be changed.',
     gone: 'This meal is gone. Maybe it was removed.',
@@ -275,7 +275,7 @@ const de: ReviewCopy = {
   },
   submit: {
     handIn: 'Urteil abgeben',
-    noProof: 'Noch kein Beweis. Mach zuerst das Foto, dann gib das Urteil ab.',
+    noProof: 'Noch kein Beweis. Mach zuerst das Foto, dann gib das Urteil ab. Teller schon leer? Ein leerer Teller zählt auch.',
     noVerdict: 'Noch kein Urteil. Tippe ein Gesicht an, dann gib es ab.',
     sealed: 'Dieses Urteil ist besiegelt. Es lässt sich nicht mehr ändern.',
     gone: 'Diese Mahlzeit gibt es nicht mehr. Vielleicht wurde sie entfernt.',

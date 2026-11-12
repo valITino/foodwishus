@@ -349,7 +349,7 @@ test.describe('proof and verdict', () => {
     await flow(page, servingId)
 
     await handIn(page).click()
-    await expect(page.getByRole('alert')).toHaveText('No proof yet. Take the photo first, then hand it in.')
+    await expect(page.getByRole('alert')).toHaveText('No proof yet. Take the photo first, then hand it in. Plate already empty? A clean plate counts too.')
     expect((await serving(page, servingId)).status).toBe('served')
 
     await shoot(page, 'Take the proof photo', await plateJpeg(page, 800, 600))
@@ -826,7 +826,7 @@ test.describe('auf Deutsch', () => {
     await expect(page.getByRole('button', { name: 'Aus der Galerie wählen' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Urteil abgeben' }).click()
-    await expect(page.getByRole('alert')).toHaveText('Noch kein Beweis. Mach zuerst das Foto, dann gib das Urteil ab.')
+    await expect(page.getByRole('alert')).toHaveText('Noch kein Beweis. Mach zuerst das Foto, dann gib das Urteil ab. Teller schon leer? Ein leerer Teller zählt auch.')
 
     await shoot(page, 'Beweisfoto machen', await plateJpeg(page, 800, 600))
     await expect(page.getByTestId('proof-photo')).toContainText('Live')
