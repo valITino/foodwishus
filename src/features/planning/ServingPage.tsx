@@ -12,8 +12,8 @@ import { Heart } from '../../ui/deco/Deco'
 import { Icon, type IconName } from '../../ui/deco/Icon'
 import { EarlyProof, MealReview, ProofCard } from '../review'
 import { planningCopy } from './copy'
-import { canServe, canServeEarly, cookOf, defaultSlot, eatenDay, isDue, isOpen, linkedDay, nextDays, roleIn, upcomingDays } from './logic'
-import { DayStrip, MealThumb, nameOf, NoteBox, SlotChips, TextAction, useKitchen, useMealInfo, useWhen, type Kitchen, type MealInfo } from './shared'
+import { canServe, canServeEarly, cookOf, defaultSlot, eatenDay, isDue, isOpen, linkedDay, roleIn, upcomingDays } from './logic'
+import { DayChoice, MealThumb, nameOf, NoteBox, SlotChips, TextAction, useKitchen, useMealInfo, useWhen, type Kitchen, type MealInfo } from './shared'
 
 const STATUS_ICON: Record<Serving['status'], IconName> = { wishlist: 'wishlist', planned: 'calendar', served: 'clock', eaten: 'check', skipped: 'close' }
 
@@ -197,12 +197,11 @@ interface PlannerProps extends PartProps {
   onCancel?: () => void
 }
 
-/** Day and slot: the next two weeks as a strip, a date field for anything later. */
+/** Day and slot: any day from today on. Days somebody suggested carry a heart, however far away they are. */
 function Planner({ serving, kitchen, info, title, preferred, onDone, onCancel }: PlannerProps) {
   const t = useT()
   const c = useCopy(planningCopy)
   const when = useWhen(kitchen.today)
-  const strip = nextDays(kitchen.today, 14)
   const suggested = upcomingDays(serving.suggestedDays, kitchen.today)
   const [day, setDay] = useState<Day | null>(preferred ?? (serving.plannedDate && serving.plannedDate >= kitchen.today ? serving.plannedDate : (suggested[0] ?? null)))
   const [slot, setSlot] = useState<Slot>(serving.plannedSlot ?? defaultSlot(info.kind === 'dish' ? info.dish?.course : null))
@@ -227,32 +226,21 @@ function Planner({ serving, kitchen, info, title, preferred, onDone, onCancel }:
       <h2 className="text-lg">{title}</h2>
 
       <p className="mt-3 text-xs font-extrabold">{c.serving.dayLabel}</p>
-      <DayStrip
+      <DayChoice
         label={c.serving.dayLabel}
-        days={strip}
-        selected={day ? [day] : []}
+        laterLabel={c.serving.laterDay}
         today={kitchen.today}
+        chosen={day ? [day] : []}
         marked={suggested}
         markLabel={c.serving.suggestedDay}
-        onToggle={setDay}
-      />
-      {suggested.length > 0 && (
-        <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-soft">
-          <Heart size={16} /> {suggester}
-        </p>
-      )}
-
-      <Field
-        className="mt-4"
-        type="date"
-        label={c.serving.laterDay}
-        min={kitchen.today}
-        value={day && !strip.includes(day) ? day : ''}
-        onChange={(event) => {
-          const picked = event.target.value
-          if (!picked) setDay(null)
-          else if (picked >= kitchen.today) setDay(picked)
-        }}
+        onChange={(days) => setDay(days[0] ?? null)}
+        note={
+          suggested.length > 0 && (
+            <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-soft">
+              <Heart size={16} /> {suggester}
+            </p>
+          )
+        }
       />
 
       <p className="mb-2 mt-4 text-xs font-extrabold">{c.serving.slotLabel}</p>

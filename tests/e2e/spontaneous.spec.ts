@@ -168,7 +168,7 @@ test.describe('a meal for today', () => {
 
 // ------------------------------------------------------------- our week --
 
-test('an empty slot in Our Week takes a wish, a meal planned for another day, or anything from the recipe book', async ({ page }) => {
+test('a slot in Our Week takes a wish, a meal planned for another day, or anything from the recipe book, also a second time', async ({ page }) => {
   const people = await openKitchen(page)
   const tomorrow = addDays(today(), 1)
   const rösti = await addDish(page, 'Rösti')
@@ -183,10 +183,10 @@ test('an empty slot in Our Week takes a wish, a meal planned for another day, or
   await day.locator('[data-slot=lunch]').click()
   await expect(sheet(page).getByTestId('pick-when')).toHaveText('Today, lunch')
 
-  // What is on its way already comes first, each once: the wish, and tomorrow's pizza.
+  // What is on its way already comes first: the wish, and tomorrow's pizza.
   await expect(sheet(page).getByTestId('wish-option')).toHaveText([/Rösti/, /Pizza.*Planned for tomorrow, dinner/])
-  // The rest of the recipe book: menus, then dishes by name. Rösti and Pizza are not repeated.
-  await expect(sheet(page).getByTestId('book-option')).toHaveText([/Brunch.*Menu with 1 course/, /Fondue/, /Zopf/])
+  // The recipe book: menus, then dishes by name. The wish is not repeated. Pizza is: it can be had twice.
+  await expect(sheet(page).getByTestId('book-option')).toHaveText([/Brunch.*Menu with 1 course/, /Fondue/, /Pizza/, /Zopf/])
 
   await sheet(page).getByTestId('book-option').filter({ hasText: 'Fondue' }).click()
   await expect(toast(page, 'Planned for today, lunch')).toBeVisible()
@@ -198,6 +198,28 @@ test('an empty slot in Our Week takes a wish, a meal planned for another day, or
   await expect(toast(page, 'Moved to today, dinner')).toBeVisible()
   expect(await serving(page, pizza)).toMatchObject({ status: 'planned', plannedDate: today(), plannedSlot: 'dinner' })
   await expect(day.getByTestId('week-meal')).toHaveCount(2)
+
+  // Dinner is taken and takes a second dish all the same: bread with the pizza.
+  await day.locator('[data-slot=dinner]').click()
+  await expect(sheet(page).getByTestId('pick-when')).toHaveText('Today, dinner')
+  // What sits in this very slot is not offered again.
+  await expect(sheet(page).getByTestId('book-option').filter({ hasText: 'Pizza' })).toHaveCount(0)
+  await sheet(page).getByTestId('book-option').filter({ hasText: 'Zopf' }).click()
+  await expect(toast(page, 'Planned for today, dinner')).toBeVisible()
+  await expect(day.getByTestId('week-meal')).toHaveText([/Lunch.*Fondue/, /Dinner.*Pizza/, /Dinner.*Zopf/])
+
+  // The same dish on a second day is a second meal: today's fondue stays where it is.
+  await day.locator('[data-slot=dessert]').click()
+  await expect(sheet(page).getByTestId('wish-option').filter({ hasText: 'Fondue' })).toContainText('Planned for today, lunch')
+  await sheet(page).getByTestId('book-option').filter({ hasText: 'Fondue' }).click()
+  await expect(toast(page, 'Planned for today, dessert')).toBeVisible()
+  await expect(day.getByTestId('week-meal')).toHaveCount(4)
+  const fondues = await page.evaluate(async () => {
+    const { db } = window.__foodwishus
+    const fondue = (await db.dishes.toArray()).find((dish: { name: string }) => dish.name === 'Fondue')
+    return (await db.servings.toArray()).filter((s: { dishId: string; status: string }) => s.dishId === fondue.id && s.status === 'planned').map((s: { plannedSlot: string }) => s.plannedSlot).sort()
+  })
+  expect(fondues).toEqual(['dessert', 'lunch'])
 })
 
 // ------------------------------------------------------------ on the meal --

@@ -12,7 +12,7 @@ import { AwningHeader, buzz, Card, cx, HeartMeter, IconButton, Screen, Segmented
 import { Heart } from '../../ui/deco/Deco'
 import { Icon } from '../../ui/deco/Icon'
 import { planningCopy } from './copy'
-import { dayMarks, freeSlots, groupByDayAndSlot, mealsOf, sameMonth, shiftMonth, suggestedFor, type DayPlan } from './logic'
+import { dayMarks, groupByDayAndSlot, mealsOf, sameMonth, shiftMonth, SLOTS, suggestedFor, type DayPlan } from './logic'
 import { MealPicker, type PickTarget } from './MealPicker'
 import { MealThumb, nameOf, noTouchMenu, useDragSensors, useKitchen, useMealInfo, useWhen, type Kitchen } from './shared'
 
@@ -98,7 +98,8 @@ function DayCard({ day, plan, kitchen, dragging = false, draggable = false, onEm
   const { setNodeRef, isOver } = useDroppable({ id: day, disabled: past })
   const info = useMealInfo()
   const meals = mealsOf(plan)
-  const free = past ? [] : freeSlots(plan)
+  // Every meal of a day that is not over can take something, also a second thing: soup and bread are two dishes.
+  const slots = past ? [] : SLOTS
   // A wish somebody hoped to eat on this very day: one tap away from being planned.
   const suggestions = past ? [] : suggestedFor(kitchen.servings, day).slice(0, 2)
 
@@ -162,9 +163,9 @@ function DayCard({ day, plan, kitchen, dragging = false, draggable = false, onEm
         </div>
       )}
 
-      {free.length > 0 && (
+      {slots.length > 0 && (
         <div className="mt-2 flex gap-1.5">
-          {free.map((slot) => (
+          {slots.map((slot) => (
             <button
               key={slot}
               type="button"

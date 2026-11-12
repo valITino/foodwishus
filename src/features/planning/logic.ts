@@ -158,6 +158,24 @@ export function nextDays(from: Day, count: number): Day[] {
   return Array.from({ length: count }, (_, i) => addDays(from, i))
 }
 
+/** How many days there are to tap. Any later day is typed into the date field next to them. */
+export const STRIP_DAYS = 14
+
+/** Days that lie after the last day of the strip, earliest first, without doubles. */
+export function daysBeyond(days: Day[], strip: Day[]): Day[] {
+  const last = strip[strip.length - 1] ?? ''
+  return [...new Set(days)].filter((day) => day > last).sort()
+}
+
+/**
+ * A day was tapped. Where one day is wanted it becomes the choice; where several are
+ * welcome it joins the others, or leaves them when it was chosen already.
+ */
+export function tapDay(chosen: Day[], day: Day, many: boolean): Day[] {
+  if (!many) return [day]
+  return chosen.includes(day) ? chosen.filter((other) => other !== day) : [...chosen, day].sort()
+}
+
 /** Suggested days that are still ahead (today counts), earliest first, without doubles. */
 export function upcomingDays(days: Day[], todayDay: Day): Day[] {
   return [...new Set(days)].filter((day) => day >= todayDay).sort()
@@ -226,14 +244,16 @@ export function slotForNow(hour: number): Slot {
 export interface MealChoices<D, M> {
   /** Meals that are already on their way: wishes first (those hoped for on this day on top), then meals planned for another moment. */
   open: Serving[]
-  /** The rest of the recipe book, for a meal nobody wished for first. */
+  /** The recipe book, for a meal nobody wished for first, or for a second helping of one that is planned already. */
   dishes: D[]
   menus: M[]
 }
 
 /**
- * What can go into a slot of the calendar. Something that is already on its way is
- * offered once, as that meal, and not a second time from the recipe book.
+ * What can go into a slot of the calendar. A wish is offered once, as that wish, and
+ * not a second time from the recipe book. A meal that is planned for another moment can
+ * be moved here, and its recipe stays in the book: the same breakfast on two mornings
+ * is two meals. What sits in this very slot already is not offered again.
  */
 export function mealChoices<D extends { id: ID; name: string; archived: boolean }, M extends { id: ID; name: string; archived: boolean; courses: unknown[] }>(
   servings: Serving[],
@@ -244,7 +264,8 @@ export function mealChoices<D extends { id: ID; name: string; archived: boolean 
   const elsewhere = servings.filter((s) => s.status === 'planned' && !(s.plannedDate === target.day && s.plannedSlot === target.slot)).sort(byWhen)
   const open = [...wishesForDay(servings, target.day), ...elsewhere]
   const here = servings.filter((s) => s.status === 'planned' && s.plannedDate === target.day && s.plannedSlot === target.slot)
-  const taken = new Set([...open, ...here].flatMap((s) => [s.dishId, s.menuId]))
+  const wishes = servings.filter((s) => s.status === 'wishlist')
+  const taken = new Set([...wishes, ...here].flatMap((s) => [s.dishId, s.menuId]))
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
   return {
     open,
@@ -303,11 +324,6 @@ export function groupByDayAndSlot(servings: Serving[], days: Day[]): Record<Day,
 /** A day's meals in the order they are eaten. */
 export function mealsOf(plan: DayPlan): Serving[] {
   return SLOTS.flatMap((slot) => plan[slot])
-}
-
-/** The slots of a day that nothing is planned for yet. */
-export function freeSlots(plan: DayPlan): Slot[] {
-  return SLOTS.filter((slot) => plan[slot].length === 0)
 }
 
 export interface DayMarks {
