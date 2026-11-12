@@ -109,7 +109,9 @@ any meal that has been eaten.
 The **bell** on Today (under your picture) collects what the other one did: a new wish, a
 plan, "served", a verdict, an answer, hearts, a note. A number on it says how much is new,
 and from the other tabs the same number sits on Today. Tap a line to open the meal. The bell
-works without notifications being switched on; it fills whenever the phones sync.
+works without notifications being switched on; it fills whenever the phones sync. To tidy
+the list, tap **Select**, tick lines (or **Select all**) and tap **Delete**. That only
+clears the list on your phone; the meals themselves are not touched.
 
 ### A recipe from a link
 

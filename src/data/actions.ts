@@ -522,6 +522,11 @@ export async function markNewsSeen(): Promise<void> {
   await db.news.filter((item) => item.seenAt === null).modify({ seenAt: at })
 }
 
+/** Take lines off the list behind the bell. They only ever lived on this phone, so nothing is sent anywhere. */
+export async function removeNews(ids: number[]): Promise<void> {
+  if (ids.length > 0) await db.news.bulkDelete(ids)
+}
+
 // ------------------------------------------------------------------ backup --
 //
 // One file with everything in the kitchen (backupFile.ts packs and reads it, backup.ts

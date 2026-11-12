@@ -1,18 +1,19 @@
 // The list behind the bell: what the other one did, newest first. Opening it is
-// looking at it, so nothing in it counts as new afterwards.
+// looking at it, so nothing in it counts as new afterwards. "Select" turns the lines into
+// things to tick, one by one or all at once, and deletes the ticked ones from this phone.
 
 import { useEffect, useState } from 'react'
 import { navigate } from '../../app/router'
-import { markNewsSeen } from '../../data/actions'
+import { markNewsSeen, removeNews } from '../../data/actions'
 import { newsLink, type NewsItem } from '../../data/news'
 import { useNews } from '../../data/queries'
-import { useCopy, useLang } from '../../i18n'
+import { useCopy, useLang, useT } from '../../i18n'
 import { formatTime, toDay } from '../../lib/dates'
-import { Avatar, Card, cx, EmptyState, PageHeader, Screen } from '../../ui/components'
+import { Avatar, Button, Card, cx, EmptyState, PageHeader, Screen, toast } from '../../ui/components'
 import { Icon, type IconName } from '../../ui/deco/Icon'
 import { planningCopy } from '../planning/copy'
 import { cookOf } from '../planning/logic'
-import { useKitchen, useWhen, type Kitchen } from '../planning/shared'
+import { StickyFooter, TextAction, useKitchen, useWhen, type Kitchen } from '../planning/shared'
 import { newsCopy } from './copy'
 import { newsLine, readerEats, type NewsContext } from './logic'
 
@@ -35,6 +36,7 @@ function contextOf(kitchen: Kitchen, when: ReturnType<typeof useWhen>, goneName:
 }
 
 export function NewsScreen() {
+  const t = useT()
   const lang = useLang()
   const c = useCopy(newsCopy)
   const goneName = useCopy(planningCopy).shared.goneDish
@@ -44,6 +46,8 @@ export function NewsScreen() {
   // What was new when the list opened, or arrives while it is open, keeps its mark for
   // as long as the person stays. Looking at the list is seeing it.
   const [fresh, setFresh] = useState<ReadonlySet<number>>(new Set())
+  /** Tidying: null while the list is for reading, else the lines that are ticked. */
+  const [picked, setPicked] = useState<ReadonlySet<number> | null>(null)
 
   useEffect(() => {
     const unseen = (news ?? []).filter((item) => item.seenAt === null).flatMap((item) => (item.id === undefined ? [] : [item.id]))
@@ -61,11 +65,50 @@ export function NewsScreen() {
   }
 
   const ctx = contextOf(kitchen, when, goneName)
+  const ids = news.flatMap((item) => (item.id === undefined ? [] : [item.id]))
+  // A line that left the list while it was ticked (the phone tidies old news by itself) is not counted.
+  const ticked = picked ? ids.filter((id) => picked.has(id)) : []
+  const picking = picked !== null && news.length > 0
+
+  const tick = (id: number) =>
+    setPicked((before) => {
+      const next = new Set(before ?? [])
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
+
+  async function remove() {
+    try {
+      await removeNews(ticked)
+      setPicked(null)
+      toast(c.removed)
+    } catch {
+      toast(t.common.somethingWrong, 'oops')
+    }
+  }
 
   return (
     <Screen>
-      <PageHeader title={c.title} backTo="/" />
-      <main className="app-column px-4 pt-4">
+      <PageHeader
+        title={c.title}
+        backTo="/"
+        action={
+          news.length === 0 ? undefined : (
+            <Button variant="quiet" onClick={() => setPicked(picking ? null : new Set())}>
+              {picking ? t.actions.done : c.select}
+            </Button>
+          )
+        }
+      />
+      <main className={cx('app-column px-4 pt-4', picking && 'pb-28')}>
+        {picking && (
+          <div className="mb-2 flex min-h-11 items-center justify-between gap-3 px-1">
+            <p role="status" className="text-sm font-bold" data-testid="news-picked">
+              {c.picked(ticked.length)}
+            </p>
+            <TextAction onClick={() => setPicked(new Set(ticked.length === ids.length ? [] : ids))}>{ticked.length === ids.length ? c.selectNone : c.selectAll}</TextAction>
+          </div>
+        )}
         {news.length === 0 ? (
           <EmptyState title={c.emptyTitle} body={c.emptyBody} />
         ) : (
@@ -93,9 +136,17 @@ export function NewsScreen() {
                     </span>
                   </>
                 )
+                const on = item.id !== undefined && ticked.includes(item.id)
                 return (
                   <li key={item.id} className="border-b border-line last:border-b-0" data-testid="news-line" data-kind={item.kind}>
-                    {link ? (
+                    {picking && item.id !== undefined ? (
+                      <button type="button" role="checkbox" aria-checked={on} onClick={() => tick(item.id as number)} className={cx('flex min-h-16 w-full items-center gap-3 p-3 text-left transition-colors duration-150', on && 'bg-blush')}>
+                        <span aria-hidden className={cx('grid size-6 shrink-0 place-items-center rounded-full border-[1.5px]', on ? 'border-ink bg-ink text-ground' : 'border-line-strong bg-surface')}>
+                          {on && <Icon name="check" size={14} />}
+                        </span>
+                        {body}
+                      </button>
+                    ) : link ? (
                       <button type="button" onClick={() => navigate(link)} className="flex min-h-16 w-full items-center gap-3 p-3 text-left">
                         {body}
                       </button>
@@ -109,6 +160,14 @@ export function NewsScreen() {
           </Card>
         )}
       </main>
+
+      {picking && (
+        <StickyFooter>
+          <Button size="lg" block disabled={ticked.length === 0} onClick={() => void remove()}>
+            {c.remove(ticked.length)}
+          </Button>
+        </StickyFooter>
+      )}
     </Screen>
   )
 }
