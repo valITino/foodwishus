@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanLink, decodeEntities, hostFamily, isPrivateAddress, PageError, pageMeta, pageText, pinTarget, readPage, readPicture, recipeData, type FetchLike } from '../../supabase/functions/ai/page'
+import { cleanLink, decodeEntities, hostFamily, isPrivateAddress, PageError, pageMeta, pageText, pinTarget, readPage, readPicture, recipeData, type FetchLike, withoutTracking } from '../../supabase/functions/ai/page'
 import { BLOG, PIN, PIN_WITHOUT_LINK, SHOP, SLOPPY_DATA, SWISS_SITE } from '../../src/data/fake/pretendWeb'
 
 /** A web made of a few pages. Anything else does not answer. */
@@ -131,5 +131,16 @@ describe('taking a page apart', () => {
     // A link back to the pin itself, or into a private network, is not a target.
     expect(pinTarget('{"link":"https://de.pinterest.com/pin/5/"}', 'https://www.pinterest.ch/pin/5/')).toBeNull()
     expect(pinTarget('{"link":"http://192.168.0.1/"}', 'https://www.pinterest.ch/pin/5/')).toBeNull()
+  })
+})
+
+describe('the address kept as a source', () => {
+  it('loses what only tells the site where a visitor came from', () => {
+    expect(withoutTracking('https://www.lecker-kochen.ch/rezepte/rueeblisuppe?utm_source=pin&utm_medium=social&fbclid=abc#kommentare')).toBe('https://www.lecker-kochen.ch/rezepte/rueeblisuppe')
+  })
+
+  it('keeps what the page needs to be found', () => {
+    expect(withoutTracking('https://kochen.example/rezept?id=42&utm_campaign=x')).toBe('https://kochen.example/rezept?id=42')
+    expect(withoutTracking('not a link')).toBe('not a link')
   })
 })

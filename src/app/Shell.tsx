@@ -13,7 +13,7 @@ import { isReviewPath, ReviewRoutes } from '../features/review'
 import { SettingsRoutes } from '../features/settings'
 import { useT } from '../i18n'
 import { Screen, Sheet, SteamLoader, TabBar, Toaster, type TabId } from '../ui/components'
-import { Cherry, Cloche, Flower } from '../ui/deco/Deco'
+import { Cherry, Cloche, Flower, Mascot } from '../ui/deco/Deco'
 import { currentPath, navigate, useRoute } from './router'
 import { startSettingsSync } from './settingsSync'
 
@@ -67,6 +67,14 @@ function AddSheet({ open, onClose, onToday }: { open: boolean; onClose: () => vo
           <span>
             <span className="block text-base font-extrabold">{t.addSheet.dish}</span>
             <span className="block text-xs text-ink-soft">{t.addSheet.dishHint}</span>
+          </span>
+        </button>
+        {/* Fork reads the page and fills in the dish form. */}
+        <button type="button" className={choice} onClick={() => go('/recipes/import')}>
+          <Mascot size={40} mood="happy" label="" className="mx-0.5 shrink-0" />
+          <span>
+            <span className="block text-base font-extrabold">{t.addSheet.link}</span>
+            <span className="block text-xs text-ink-soft">{t.addSheet.linkHint}</span>
           </span>
         </button>
         <button type="button" className={choice} onClick={() => go('/menus/new')}>

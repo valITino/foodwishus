@@ -5,7 +5,7 @@
 
 import { ask, DEFAULT_MODEL, HelperError, type AskFetch } from './claude.ts'
 import type { HelperAnswer, HelperFailure, HelperRequest, RecipeFromLink } from './contract.ts'
-import { cleanLink, hostFamily, PageError, pageMeta, pageText, pinTarget, readPage, readPicture, recipeData, type FetchLike } from './page.ts'
+import { cleanLink, hostFamily, PageError, pageMeta, pageText, pinTarget, readPage, readPicture, recipeData, withoutTracking, type FetchLike } from './page.ts'
 import { cardFromData, type Check, type RecipeCard } from './recipe.ts'
 import { recipeCardSkill } from './skills/recipe-card.ts'
 
@@ -75,7 +75,7 @@ async function recipeFromLink(request: RecipeFromLink, deps: HelperDeps, left: n
   const meta = pageMeta(page.html)
   const data = recipeData(page.html)
   const fromPage = data ? cardFromData(data) : null
-  const source = { url: page.url, site: meta.site ?? (hostFamily(page.url) || null) }
+  const source = { url: withoutTracking(page.url), site: meta.site ?? (hostFamily(page.url) || null) }
 
   let card: RecipeCard | null = null
   let by: 'helper' | 'page' = 'page'

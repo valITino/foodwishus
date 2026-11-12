@@ -74,6 +74,8 @@ export const de: Messages = {
     menuHint: 'Mehrere Gerichte in Reihenfolge',
     today: 'Ein Essen für heute',
     todayHint: 'Von der Wunschliste oder aus dem Rezeptbuch',
+    link: 'Ein Rezept aus einem Link',
+    linkHint: 'Pinterest oder irgendeine Rezeptseite',
   },
   demo: { banner: 'Demo-Küche. Hier ist nichts echt.', leave: 'Demo verlassen', enter: 'In eine Demo-Küche schauen' },
 }

@@ -211,3 +211,4 @@ export const photoPath = (householdId: ID, photoId: ID, variant: 'full' | 'thumb
   `${householdId}/${photoId}${variant === 'thumb' ? '_t' : ''}.jpg`
 
 export type { Check, CheckTopic, HelperFailure, RecipeCard, RecipeFromLink, RecipeFromLinkResult } from '../../supabase/functions/ai/contract.ts'
+export { DAILY_TICKETS } from '../../supabase/functions/ai/contract.ts'

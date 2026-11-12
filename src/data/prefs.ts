@@ -1,5 +1,5 @@
 // Choices kept on this device. showCalories also travels with the person's profile
-// (src/app/settingsSync.ts); the demo switches stay local.
+// (src/app/settingsSync.ts); the demo switches and the link reader's switches stay local.
 
 import { useSyncExternalStore } from 'react'
 
@@ -10,10 +10,16 @@ export interface Prefs {
   demoData: boolean
   /** With demoData: open the demo kitchen without sample content. Used by tests. */
   demoEmpty: boolean
+  /** Reading a recipe from a link: write it in the app's language. */
+  linkTranslate: boolean
+  /** Reading a recipe from a link: convert cups, ounces and Fahrenheit. */
+  linkMetric: boolean
+  /** Reading a recipe from a link: bring the page's picture along. */
+  linkPhoto: boolean
 }
 
 const KEY = 'foodwishus.prefs'
-const defaults: Prefs = { showCalories: true, demoData: false, demoEmpty: false }
+const defaults: Prefs = { showCalories: true, demoData: false, demoEmpty: false, linkTranslate: true, linkMetric: true, linkPhoto: true }
 const listeners = new Set<() => void>()
 let cache: Prefs | null = null
 

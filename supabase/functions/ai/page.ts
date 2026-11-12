@@ -309,6 +309,18 @@ export function pinTarget(html: string, pageUrl: string): string | null {
   return null
 }
 
+/** The address to keep as a recipe's source: without what only tells the site where a visitor came from. */
+export function withoutTracking(link: string): string {
+  try {
+    const url = new URL(link)
+    for (const name of [...url.searchParams.keys()]) if (/^(utm_.+|fbclid|gclid|igshid|mc_cid|mc_eid)$/i.test(name)) url.searchParams.delete(name)
+    url.hash = ''
+    return url.href
+  } catch {
+    return link
+  }
+}
+
 /** "www.pinterest.ch" and "pin.it" are one family; so are "www.betty.ch" and "betty.ch". */
 export function hostFamily(link: string): string {
   try {

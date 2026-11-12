@@ -73,6 +73,8 @@ export const en = {
     menuHint: 'Several dishes in order',
     today: 'A meal for today',
     todayHint: 'From the wishlist or the recipe book',
+    link: 'A recipe from a link',
+    linkHint: 'Pinterest or any recipe site',
   },
   demo: { banner: 'Demo kitchen. Nothing here is real.', leave: 'Leave the demo', enter: 'Peek into a demo kitchen' },
 }

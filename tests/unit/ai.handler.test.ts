@@ -129,7 +129,8 @@ describe('from a link to a recipe card', () => {
   it('a pin: the recipe is read from the page behind it', async () => {
     const r = rig({ answer: { ...CORNBREAD, name: 'Rüeblisuppe mit Ingwer' } })
     const { answer } = await call(r, link('https://pin.it/AbC', { photo: false }))
-    expect(answer).toMatchObject({ ok: true, source: { url: 'https://www.lecker-kochen.ch/rezepte/rueeblisuppe?utm_source=pin', site: 'Lecker Kochen' }, photo: null })
+    // The source is kept without the pin's tracking tail.
+    expect(answer).toMatchObject({ ok: true, source: { url: 'https://www.lecker-kochen.ch/rezepte/rueeblisuppe', site: 'Lecker Kochen' }, photo: null })
     expect(r.fetched).toEqual(['https://pin.it/AbC', 'https://www.pinterest.ch/pin/1234/', 'https://www.lecker-kochen.ch/rezepte/rueeblisuppe?utm_source=pin'])
   })
 

@@ -1,0 +1,176 @@
+// "Recipe from a link": paste a link (or share one to the app), set three switches, and
+// Fork fills in the dish form. Nothing is saved here: the form is where she checks it.
+
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { navigate, type Route } from '../../app/router'
+import { isDemo } from '../../data/app'
+import { DAILY_TICKETS } from '../../data/backend'
+import { mostUsedTags, readProblem, readRecipe, type ReadProblem } from '../../data/helper'
+import { setPref, usePref } from '../../data/prefs'
+import { useDishes } from '../../data/queries'
+import { useLang } from '../../i18n'
+import { Button, Card, Field, PageHeader, Screen, SteamLoader, toast, Toggle } from '../../ui/components'
+import { Mascot } from '../../ui/deco/Deco'
+import { useRecipesCopy } from './copy'
+import { draftFromCard, handOver, linkIn, pictureFile, siteName } from './importLogic'
+import { emptyDraft } from './logic'
+import { BottomBar, LineIcon } from './parts'
+
+/** Problems that adding the dish by hand does not get around. */
+const NO_WAY_AROUND: readonly ReadProblem[] = ['not_signed_in', 'not_member', 'bad_request', 'bad_link']
+
+/** `/recipes/import`, optionally with `?link=` (that is how a link shared from another app arrives). */
+export function ImportPage({ route }: { route: Route }) {
+  const c = useRecipesCopy().link
+  const lang = useLang()
+  const translate = usePref('linkTranslate')
+  const metric = usePref('linkMetric')
+  const photo = usePref('linkPhoto')
+  const dishes = useDishes({ includeArchived: true })
+  const [link, setLink] = useState(() => route.query.get('link') ?? '')
+  const [reading, setReading] = useState(false)
+  // The demo kitchen says so before anyone has typed a link in vain.
+  const [problem, setProblem] = useState<ReadProblem | null>(isDemo ? 'demo' : null)
+  const canPaste = typeof navigator !== 'undefined' && typeof navigator.clipboard?.readText === 'function'
+
+  // Whoever leaves while Fork is still reading does not get pulled into a form later.
+  const here = useRef(true)
+  useEffect(() => {
+    here.current = true
+    return () => {
+      here.current = false
+    }
+  }, [])
+
+  const paste = async () => {
+    let text: string
+    try {
+      text = await navigator.clipboard.readText()
+    } catch {
+      toast(c.pasteFailed, 'oops')
+      return
+    }
+    const found = linkIn(text)
+    if (!found) {
+      toast(c.pasteEmpty, 'oops')
+      return
+    }
+    setLink(found)
+    if (!isDemo) setProblem(null)
+  }
+
+  const read = async (event?: FormEvent) => {
+    event?.preventDefault()
+    if (reading) return
+    const found = linkIn(link)
+    if (!found) {
+      setProblem('bad_link')
+      document.getElementById('recipe-link')?.focus()
+      return
+    }
+    setProblem(null)
+    setReading(true)
+    try {
+      const result = await readRecipe(found, { lang, translate, metric, photo })
+      if (!here.current) return
+      const ticket = handOver({
+        draft: draftFromCard(result.card, result.source.url, mostUsedTags(dishes ?? [], 200)),
+        cover: pictureFile(result.photo),
+        read: { site: siteName(result.source), by: result.by, checks: result.card.checks },
+      })
+      // The form takes this page's place: back from it leads to where she came from.
+      navigate(`/recipes/new?from=${ticket}`, { replace: true })
+    } catch (error) {
+      if (!here.current) return
+      setReading(false)
+      setProblem(readProblem(error))
+    }
+  }
+
+  /** The way out when a page cannot be read: the empty form, with the link already noted as its source. */
+  const byHand = () => {
+    const ticket = handOver({ draft: { ...emptyDraft(), sourceUrl: linkIn(link) ?? '' }, cover: null, read: null })
+    navigate(`/recipes/new?from=${ticket}`, { replace: true })
+  }
+
+  if (reading) {
+    return (
+      <Screen>
+        <PageHeader title={c.title} backTo="/recipes" />
+        <main className="app-column px-6 pt-12 text-center">
+          <SteamLoader label={c.reading} />
+          <p className="text-sm text-ink-soft">{c.readingHint}</p>
+        </main>
+      </Screen>
+    )
+  }
+
+  return (
+    <Screen>
+      <PageHeader title={c.title} backTo="/recipes" />
+      <main className="app-column flex flex-col gap-5 px-4 pb-28 pt-5">
+        <div className="flex items-center gap-4 px-1">
+          <Mascot size={72} mood="happy" label="" className="shrink-0" />
+          <p className="min-w-0 text-sm font-semibold leading-snug">{c.intro}</p>
+        </div>
+
+        <form id="link-form" onSubmit={(event) => void read(event)} noValidate>
+          <Card className="flex flex-col gap-3">
+            <Field
+              id="recipe-link"
+              label={c.field}
+              placeholder="https://"
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="go"
+              value={link}
+              aria-invalid={problem === 'bad_link' || undefined}
+              onChange={(event) => {
+                setLink(event.target.value)
+                if (problem && problem !== 'demo') setProblem(null)
+              }}
+            />
+            {canPaste && !link.trim() && (
+              <Button variant="secondary" block icon={<LineIcon name="link" size={20} />} onClick={() => void paste()}>
+                {c.paste}
+              </Button>
+            )}
+          </Card>
+        </form>
+
+        {problem && (
+          <Card tone="blush" role="alert" data-testid="link-problem">
+            <p className="text-sm font-extrabold">{c.problemTitle}</p>
+            <p className="mt-1 text-sm leading-snug">{problem === 'limit' ? c.problems.limit(DAILY_TICKETS) : c.problems[problem]}</p>
+            {!NO_WAY_AROUND.includes(problem) && linkIn(link) && (
+              <Button variant="secondary" className="mt-3" onClick={byHand}>
+                {c.byHand}
+              </Button>
+            )}
+          </Card>
+        )}
+
+        <section aria-labelledby="link-options">
+          <h2 id="link-options" className="mb-2.5 px-1 text-lg">
+            {c.options}
+          </h2>
+          <Card pad={false} className="divide-y divide-line px-4 py-1">
+            <Toggle label={c.translate} checked={translate} onChange={(on) => setPref('linkTranslate', on)} />
+            <Toggle label={c.metric} checked={metric} onChange={(on) => setPref('linkMetric', on)} />
+            <Toggle label={c.photo} checked={photo} onChange={(on) => setPref('linkPhoto', on)} />
+          </Card>
+        </section>
+
+        <p className="px-1 text-xs leading-relaxed text-ink-soft">{c.honest}</p>
+      </main>
+
+      <BottomBar>
+        <Button block type="submit" form="link-form">
+          {c.read}
+        </Button>
+      </BottomBar>
+    </Screen>
+  )
+}

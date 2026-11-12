@@ -1,7 +1,8 @@
 // The Recipe Book: dishes with full recipes and calories, cook mode, and menus.
 //
 //   /recipes              the tab (RecipeBookScreen)
-//   /recipes/new          new dish
+//   /recipes/new          new dish (optional ?from=<hand-over from the link reader>)
+//   /recipes/import       recipe from a link (optional ?link=…)
 //   /recipes/:id          dish page
 //   /recipes/:id/edit     edit dish
 //   /recipes/:id/cook     cook mode (optional ?servings=4)
@@ -15,6 +16,7 @@ import { CookMode } from './CookMode'
 import { useRecipesCopy } from './copy'
 import { DishEditor } from './DishEditor'
 import { DishPage } from './DishPage'
+import { ImportPage } from './ImportPage'
 import { MenuEditor } from './MenuEditor'
 import { MenuPage } from './MenuPage'
 
@@ -41,7 +43,8 @@ function Lost() {
 /** Everything under `/recipes/…` and `/menus/…`. */
 export function RecipesRoutes({ route }: { route: Route }) {
   const { path } = route
-  if (path === '/recipes/new') return <DishEditor key="new-dish" />
+  if (path === '/recipes/new') return <DishEditor key={`new-dish-${route.query.get('from') ?? ''}`} from={route.query.get('from')} />
+  if (path === '/recipes/import') return <ImportPage key="import" route={route} />
   if (path === '/menus/new') return <MenuEditor key="new-menu" />
 
   const edit = matchPath('/recipes/:id/edit', path)

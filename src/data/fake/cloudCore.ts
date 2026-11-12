@@ -109,6 +109,8 @@ export class FakeCloud {
   private pushKey: string | null = TEST_PUSH_KEY
   /** private.helper_tickets: how many readings each kitchen has used on which day. */
   private helperTickets = new Map<string, number>()
+  /** Test hook: where every kitchen's count for today starts. */
+  private helperUsed = 0
   /** The function's secret ANTHROPIC_API_KEY: null while the owner has not set one. */
   private helperKey: string | null = 'pretend-key'
   /** True while the pretend Claude API is having an outage. */
@@ -132,6 +134,7 @@ export class FakeCloud {
     this.sent = []
     this.pushKey = TEST_PUSH_KEY
     this.helperTickets.clear()
+    this.helperUsed = 0
     this.helperKey = 'pretend-key'
     this.helperDown = false
   }
@@ -448,7 +451,7 @@ export class FakeCloud {
     const me = this.memberOf(userId) ?? reject('not_in_kitchen')
     const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich' }).format(new Date())
     const key = `${me.householdId}:${day}`
-    const used = this.helperTickets.get(key) ?? 0
+    const used = this.helperTickets.get(key) ?? this.helperUsed
     if (used >= DAILY_TICKETS) reject('ai_limit')
     this.helperTickets.set(key, used + 1)
     return DAILY_TICKETS - used - 1
@@ -458,7 +461,10 @@ export class FakeCloud {
   setHelper(state: { key?: string | null; down?: boolean; used?: number }): void {
     if (state.key !== undefined) this.helperKey = state.key
     if (state.down !== undefined) this.helperDown = state.down
-    if (state.used !== undefined) for (const key of [...this.helperTickets.keys()]) this.helperTickets.set(key, state.used)
+    if (state.used !== undefined) {
+      this.helperUsed = state.used
+      this.helperTickets.clear()
+    }
   }
 
   /**

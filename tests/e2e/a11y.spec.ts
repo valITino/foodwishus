@@ -79,6 +79,7 @@ for (const lang of ['en', 'de'] as const) {
       ['dish', `/recipes/${ids.dish}`],
       ['dish editor', `/recipes/${ids.dish}/edit`],
       ['new dish', '/recipes/new'],
+      ['recipe from a link', '/recipes/import'],
       ['cook mode', `/recipes/${ids.dish}/cook`],
       ['menu', `/menus/${ids.menu}`],
       ['menu editor', `/menus/${ids.menu}/edit`],

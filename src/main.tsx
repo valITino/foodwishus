@@ -6,11 +6,14 @@ import { getLang } from './i18n'
 import { watchInstall } from './pwa/install'
 import { startNotifications } from './pwa/notifications'
 import { startServiceWorker } from './pwa/register'
+import { takeShare } from './pwa/share'
 import { announceUpdate } from './pwa/update'
 import { UpdateNote } from './pwa/UpdateNote'
 import { initTheme } from './ui/theme'
 import './ui/styles.css'
 
+// A link shared to the app from another one: before anything reads the address.
+takeShare()
 initTheme()
 // Chrome's offer to install the app comes once, early. Settings shows it later.
 watchInstall()
