@@ -11,6 +11,7 @@ import { zurichHour } from '../../lib/dates'
 import { AwningHeader, Avatar, Button, Card, EmptyState, HeartMeter, Screen, Stat, StatusBubble, SyncPill, Tag, toast } from '../../ui/components'
 import { Mascot } from '../../ui/deco/Deco'
 import { Icon } from '../../ui/deco/Icon'
+import { Bell } from '../news'
 import { EarlyProof, EatenToday, PhotoWallCard } from '../review'
 import { planningCopy } from './copy'
 import { cookOf, currentStreak, dayPart, eatenDay, eatenInWeek, isOpen, onTheTable, plannedFor, roleIn, upNext } from './logic'
@@ -185,7 +186,11 @@ export function TodayScreen() {
         }
       >
         <div className="mt-3 flex flex-col items-start gap-3">
-          <SyncPill status={status} />
+          {/* The bell sits under the avatar: top right, without squeezing the greeting. */}
+          <div className="flex w-full items-center justify-between gap-3">
+            <SyncPill status={status} />
+            <Bell />
+          </div>
           {partner?.status && <StatusBubble name={partner.name} status={partner.status} avatar={partner.avatar} color={partner.color} />}
         </div>
       </AwningHeader>

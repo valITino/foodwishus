@@ -2,7 +2,7 @@
 // (supabase/migrations), all sync logic lives in sync.ts.
 
 import { createClient, isAuthRetryableFetchError, type SupabaseClient } from '@supabase/supabase-js'
-import { BackendError, type Backend, type Invite, type InvitePeek, type Membership, type PersonCard, type ProfileInput, type PullResult, type PushOp, type PushSubscriptionInput, type PushType, type Session } from './backend'
+import { BackendError, type Backend, type Invite, type InvitePeek, type Membership, type PersonCard, type ProfileInput, type PullResult, type PushOp, type PushSubscriptionInput, type PushType, type RecipeFromLink, type RecipeFromLinkResult, type Session } from './backend'
 import { camelKeys, reviveRow, snakeKeys } from './case'
 import { SYNC_TABLES, type ID, type ISO, type Role } from './types'
 
@@ -63,6 +63,33 @@ function fromStorage(error: { message: string; status?: number; name?: string })
     return new BackendError('network', 'offline', error.message)
   }
   return new BackendError('rejected', 'storage_refused', error.message)
+}
+
+/**
+ * What the helper function's answer means, whichever way it arrives: as a body, or as an
+ * error that carries the response (supabase-js does that for anything but a 2xx).
+ */
+export async function helperResult(data: unknown, error: unknown): Promise<RecipeFromLinkResult> {
+  if (!error) {
+    const answer = data as RecipeFromLinkResult | { ok: false; code?: string } | null
+    if (answer && answer.ok === true) return answer
+    throw new BackendError('rejected', (answer && answer.code) || 'helper_down')
+  }
+  const context = (error as { context?: unknown }).context
+  if (!(context instanceof Response)) return Promise.reject(new BackendError('network', 'offline', (error as { message?: string }).message))
+  // No function of that name: the owner has not deployed the helper yet.
+  if (context.status === 404) throw new BackendError('rejected', 'helper_off')
+  // Refused at the door, by Supabase or by the helper: this device's login is no good any more.
+  if (context.status === 401) throw new BackendError('rejected', 'not_signed_in')
+  let code: unknown
+  try {
+    code = ((await context.clone().json()) as { code?: unknown } | null)?.code
+  } catch {
+    /* a gateway's error page, not the helper's answer */
+  }
+  if (typeof code === 'string' && code !== '') throw new BackendError('rejected', code)
+  if (looksOffline(undefined, context.status)) throw new BackendError('network', 'offline')
+  throw new BackendError('rejected', 'helper_down')
 }
 
 export class SupabaseBackend implements Backend {
@@ -230,6 +257,12 @@ export class SupabaseBackend implements Backend {
     return () => {
       void this.client.removeChannel(channel)
     }
+  }
+
+  async readRecipe(request: Omit<RecipeFromLink, 'job'>): Promise<RecipeFromLinkResult> {
+    await this.ensureSession()
+    const { data, error } = await this.client.functions.invoke('ai', { body: { job: 'recipe-from-link', ...request } })
+    return helperResult(data, error)
   }
 
   async uploadBlob(path: string, blob: Blob): Promise<void> {

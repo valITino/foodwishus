@@ -35,14 +35,15 @@ export function TabBar({ active, onSelect, onAdd, badges = {}, inline = false }:
         key={id}
         type="button"
         aria-current={on ? 'page' : undefined}
+        aria-label={count > 0 ? t.tabs.withNews(t.tabs[id], count) : undefined}
         onClick={() => onSelect(id)}
         className={cx('relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl', on ? 'text-rose-ink' : 'text-ink-soft')}
       >
         <span className="relative">
           <Icon name={icon} size={24} />
           {count > 0 && (
-            <span className="absolute -right-2.5 -top-1.5 grid min-w-4.5 place-items-center rounded-full bg-cherry px-1 text-2xs font-extrabold leading-4.5 text-on-cherry">
-              {count}
+            <span aria-hidden className="absolute -right-2.5 -top-1.5 grid min-w-4.5 place-items-center rounded-full bg-cherry px-1 text-2xs font-extrabold leading-4.5 text-on-cherry">
+              {count > 9 ? '9+' : count}
             </span>
           )}
         </span>

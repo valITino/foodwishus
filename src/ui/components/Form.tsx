@@ -67,8 +67,10 @@ export function Toggle({ label, checked, onChange, bare = false }: ToggleProps) 
       className={bare ? 'flex min-h-12 shrink-0 items-center' : 'flex min-h-12 w-full items-center justify-between gap-4 text-left'}
     >
       {!bare && <span className="text-sm font-bold">{label}</span>}
-      <span className={cx('flex h-8 w-14 shrink-0 items-center rounded-full p-1 transition-colors duration-200', checked ? 'justify-end bg-rose' : 'justify-start bg-line-strong')}>
-        <motion.span layout transition={{ type: 'spring', stiffness: 600, damping: 30 }} className="grid size-6 place-items-center rounded-full bg-[#fffdf9] shadow-paper">
+      <span className={cx('flex h-8 w-14 shrink-0 items-center rounded-full p-1 transition-colors duration-200', checked ? 'bg-rose' : 'bg-line-strong')}>
+        {/* The knob slides by its own distance. (A layout animation would also chase the switch
+            whenever something above it on the page appears or goes away.) */}
+        <motion.span initial={false} animate={{ x: checked ? 24 : 0 }} transition={{ type: 'spring', stiffness: 600, damping: 30 }} className="grid size-6 place-items-center rounded-full bg-[#fffdf9] shadow-paper">
           {checked && (
             <svg width="12" height="12" viewBox="0 0 48 48" aria-hidden>
               <path d="M24 40C10 30 6 22 7 16c1-6 6-9 11-8 3 .5 5 2.5 6 5 1-2.5 3-4.5 6-5 5-1 10 2 11 8 1 6-3 14-17 24Z" fill="#c8414b" />

@@ -83,7 +83,7 @@ function Ingredients({ dish }: { dish: Dish }) {
     <Section id="ingredients" title={c.dish.ingredients}>
       <Card pad={false}>
         <div className="px-4 py-1">
-          <Stepper label={c.dish.servings} value={servings} min={1} max={24} onChange={(next) => setChosenServings(dish.id, next === base ? null : next)} />
+          <Stepper label={c.dish.servings} value={servings} min={1} max={Math.max(24, base)} onChange={(next) => setChosenServings(dish.id, next === base ? null : next)} />
         </div>
         {servings !== base && (
           <div className="flex items-center justify-between gap-3 border-t border-line pl-4 pr-1 text-xs font-bold text-ink-soft">

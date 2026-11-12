@@ -7,6 +7,9 @@ import { langOf, plan, reviewEvent, servingEvent, type AnswerChange, type Delive
 import { BackendError, PUSH_TYPES, type BackendErrorDetails, type Invite, type InvitePeek, type Membership, type PersonCard, type ProfileInput, type PullResult, type PushOp, type PushSubscriptionInput, type PushType } from '../backend.ts'
 import { lockMinutes, nameKey, PIN_TRIES, pinProblem } from '../pin.ts'
 import { SYNC_TABLES, WRITABLE_TABLES, type ID, type ISO, type Role, type SyncTable } from '../types.ts'
+import { DAILY_TICKETS, type HelperAnswer } from '../../../supabase/functions/ai/contract.ts'
+import { helperHandler } from '../../../supabase/functions/ai/handler.ts'
+import { pretendFetch, pretendHelper } from './pretendWeb.ts'
 
 type Row = Record<string, unknown> & { id: ID }
 
@@ -104,6 +107,14 @@ export class FakeCloud {
   private sent: SentPush[] = []
   /** private.push_config.vapid_public: null while notifications are not set up. */
   private pushKey: string | null = TEST_PUSH_KEY
+  /** private.helper_tickets: how many readings each kitchen has used on which day. */
+  private helperTickets = new Map<string, number>()
+  /** Test hook: where every kitchen's count for today starts. */
+  private helperUsed = 0
+  /** The function's secret ANTHROPIC_API_KEY: null while the owner has not set one. */
+  private helperKey: string | null = 'pretend-key'
+  /** True while the pretend Claude API is having an outage. */
+  private helperDown = false
   private listeners = new Set<(householdId: ID) => void>()
   private clock = 0
 
@@ -122,6 +133,10 @@ export class FakeCloud {
     this.pushRows.clear()
     this.sent = []
     this.pushKey = TEST_PUSH_KEY
+    this.helperTickets.clear()
+    this.helperUsed = 0
+    this.helperKey = 'pretend-key'
+    this.helperDown = false
   }
 
   /** A strictly increasing server clock, like clock_timestamp() in Postgres. */
@@ -427,6 +442,51 @@ export class FakeCloud {
    */
   setPushPublicKey(key: string | null): void {
     this.pushKey = key
+  }
+
+  // ---------------------------------------------------------------- the helper --
+
+  /** public.ai_ticket(): one of today's readings for the caller's kitchen. Returns how many are left. */
+  aiTicket(userId: string): number {
+    const me = this.memberOf(userId) ?? reject('not_in_kitchen')
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich' }).format(new Date())
+    const key = `${me.householdId}:${day}`
+    const used = this.helperTickets.get(key) ?? this.helperUsed
+    if (used >= DAILY_TICKETS) reject('ai_limit')
+    this.helperTickets.set(key, used + 1)
+    return DAILY_TICKETS - used - 1
+  }
+
+  /** Test hook: what the owner does in the dashboard (set or remove the key), and an outage of the AI. */
+  setHelper(state: { key?: string | null; down?: boolean; used?: number }): void {
+    if (state.key !== undefined) this.helperKey = state.key
+    if (state.down !== undefined) this.helperDown = state.down
+    if (state.used !== undefined) {
+      this.helperUsed = state.used
+      this.helperTickets.clear()
+    }
+  }
+
+  /**
+   * The Edge Function "ai", run in place: the same handler as on Supabase, with a
+   * pretend web and a stand-in for the AI (pretendWeb.ts).
+   */
+  async helper(userId: string | null, body: unknown): Promise<{ status: number; answer: HelperAnswer }> {
+    const handle = helperHandler({
+      fetch: pretendFetch(),
+      askFetch: pretendHelper({ down: this.helperDown }),
+      apiKey: this.helperKey,
+      ticket: async (authorization, _apikey) => {
+        try {
+          return { ok: true, left: this.aiTicket(authorization.replace(/^Bearer\s+/i, '')) }
+        } catch (error) {
+          if (error instanceof BackendError && error.code === 'ai_limit') return { ok: false, code: 'limit' }
+          return { ok: false, code: 'not_member' }
+        }
+      },
+    })
+    const response = await handle(new Request('https://pretend.cloud/functions/v1/ai', { method: 'POST', headers: { 'content-type': 'application/json', ...(userId ? { authorization: `Bearer ${userId}` } : {}) }, body: JSON.stringify(body) }))
+    return { status: response.status, answer: (await response.json()) as HelperAnswer }
   }
 
   savePushSubscription(userId: string, subscription: PushSubscriptionInput): void {

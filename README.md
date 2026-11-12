@@ -94,10 +94,35 @@ own page of numbers and photos.
 **Recipes.** The recipe book with all your dishes and menus. A dish has ingredients, steps,
 times and, if you like, calories. **Cook mode** shows one step at a time in big letters,
 with timers. When the last step is done, **Served** is right there. The round **+**
-button in the middle of the bar adds a new dish, a menu, or a meal for today.
+button in the middle of the bar adds a new dish, a recipe from a link, a menu, or a meal
+for today.
 
 All proof photos hang together on the **photo wall**, which you reach from Today or from
 any meal that has been eaten.
+
+The **bell** on Today (under your picture) collects what the other one did: a new wish, a
+plan, "served", a verdict, an answer, hearts, a note. A number on it says how much is new,
+and from the other tabs the same number sits on Today. Tap a line to open the meal. The bell
+works without notifications being switched on; it fills whenever the phones sync.
+
+### A recipe from a link
+
+Found something on Pinterest or a recipe site? Tap **+**, then **A recipe from a link**,
+paste the link and tap **Read recipe**. Fork reads the page and fills in the dish form:
+name, ingredients, steps, times, the picture and where it is from. Look it over, change
+what is off and tap **Save dish**. Nothing is saved before that.
+
+- **Three switches** decide how Fork writes it: in your language, with cups, ounces and
+  Fahrenheit converted, and with the page's picture. The app remembers them.
+- **Please check.** Where Fork was not sure (no number of servings, a rough conversion),
+  a note on top of the form says so, with a jump to that part.
+- **Even shorter on Android:** in Pinterest or the browser tap **Share** and pick
+  **FoodwishUs**. The link arrives in the reader. This needs the installed app.
+- **When a page cannot be read**, the app says why, and **Add it by hand** opens the empty
+  form with the link kept as the source.
+
+Fork gets help from an AI (Claude), which can misread things. That is why you always get
+the form to check. Reading needs a connection, and a kitchen can have 40 pages read a day.
 
 ### When plans change
 
@@ -228,6 +253,14 @@ Notifications need a small helper in the Supabase project. Nobody has to copy an
 statements). Until that is done, everything else works and the Notifications page says it
 is not set up yet.
 
+### Switching the recipe reader on (once)
+
+Reading recipes from links needs a second small helper in the Supabase project, and, for
+most pages, a key for the Claude API. The key is the only thing in the whole app that
+costs money: well under a cent per recipe. `supabase/functions/ai/README.md` has the
+steps (one database update, one function, one secret that only you ever see). Until that
+is done, everything else works and the reader says it is not set up yet.
+
 ## For developers
 
 ```bash
@@ -237,6 +270,7 @@ npm run typecheck
 npm test           # unit tests: sync, log-in and admin rules, backup, criteria, every Cockpit number
 npm run e2e        # Playwright at Android size, against the dev server and its pretend cloud
 npm run build      # production build (talks to Supabase)
+npm run build:ai   # the recipe helper as one file for deploying (build:push does the same for notifications)
 npm run icons      # regenerate app icons from the mascot
 ```
 

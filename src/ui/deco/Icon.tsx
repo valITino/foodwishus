@@ -33,6 +33,7 @@ const paths = {
     </>
   ),
   plus: <path d="M12 5v14M5 12h14" />,
+  bell: <path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15l1.5-2ZM10 20.5a2 2 0 0 0 4 0" />,
   check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
   close: <path d="M6 6l12 12M18 6 6 18" />,
   back: <path d="M14.5 5.5 8 12l6.5 6.5" />,

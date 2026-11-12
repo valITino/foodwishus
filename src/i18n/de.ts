@@ -2,7 +2,7 @@ import type { Messages } from './en'
 
 export const de: Messages = {
   brand: { name: 'FoodwishUs', slogan: 'U cook. I eat.' },
-  tabs: { today: 'Heute', wishlist: 'Wünsche', week: 'Woche', cockpit: 'Cockpit', recipes: 'Rezepte', add: 'Etwas hinzufügen', nav: 'Hauptnavigation' },
+  tabs: { today: 'Heute', wishlist: 'Wünsche', week: 'Woche', cockpit: 'Cockpit', recipes: 'Rezepte', add: 'Etwas hinzufügen', nav: 'Hauptnavigation', withNews: (tab, count) => `${tab}, ${count} neu` },
   actions: { save: 'Speichern', cancel: 'Abbrechen', done: 'Fertig', served: 'Serviert', takeProof: 'Beweisfoto machen', again: 'Nochmal bitte!', plan: 'Einplanen', propose: 'Vorschlagen' },
   craving: {
     title: 'Wie sehr willst du es?',
@@ -74,6 +74,8 @@ export const de: Messages = {
     menuHint: 'Mehrere Gerichte in Reihenfolge',
     today: 'Ein Essen für heute',
     todayHint: 'Von der Wunschliste oder aus dem Rezeptbuch',
+    link: 'Ein Rezept aus einem Link',
+    linkHint: 'Pinterest oder irgendeine Rezeptseite',
   },
   demo: { banner: 'Demo-Küche. Hier ist nichts echt.', leave: 'Demo verlassen', enter: 'In eine Demo-Küche schauen' },
 }

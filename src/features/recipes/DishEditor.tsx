@@ -12,9 +12,11 @@ import { useDish, useDishes } from '../../data/queries'
 import type { Course, Dish, Effort, ID, PhotoSource } from '../../data/types'
 import { useLang, useT } from '../../i18n'
 import { Button, Card, Chip, cx, DishThumb, EmptyState, Field, PageHeader, Screen, Sheet, SteamLoader, Stepper, TextArea, toast, Toggle } from '../../ui/components'
+import { Mascot } from '../../ui/deco/Deco'
 import { DecoIcon, DISH_ICONS } from '../../ui/deco/registry'
 import { Icon } from '../../ui/deco/Icon'
 import { useRecipesCopy } from './copy'
+import { dropHandover, handoverFor, sectionFor, shownChecks, type Handover } from './importLogic'
 import {
   addTag,
   changedFields,
@@ -560,9 +562,64 @@ function GramsRow({ label, name, value, onChange }: { label: string; name: strin
   )
 }
 
+// ---------------------------------------------------------- read from a page --
+
+/** Above a dish that Fork filled in: where it is from, and what he was not sure about. */
+function ReadNote({ read, showCalories }: { read: NonNullable<Handover['read']>; showCalories: boolean }) {
+  const c = useRecipesCopy()
+  const checks = shownChecks(read.checks, showCalories)
+  return (
+    <Card tone="blush" data-testid="read-note">
+      <div className="flex items-center gap-3">
+        <Mascot size={44} mood="happy" label="" className="shrink-0" />
+        <div className="min-w-0">
+          <p className="break-words text-sm font-extrabold">{c.link.readFrom(read.site)}</p>
+          <p className="text-sm leading-snug">{c.link.lookOver}</p>
+        </div>
+      </div>
+      {read.already && (
+        <div className="mt-3 border-t border-line pt-3 text-sm leading-snug" data-testid="read-known">
+          <p className="break-words">{c.link.knownBody(read.already.name)}</p>
+          <button
+            type="button"
+            className="-ml-1 inline-flex min-h-11 items-center px-1 text-sm font-extrabold underline decoration-2 underline-offset-4"
+            onClick={() => navigate(`/recipes/${read.already?.id}`, { replace: true })}
+          >
+            {c.link.openKnown}
+          </button>
+        </div>
+      )}
+      {checks.length > 0 && (
+        <div className="mt-3 border-t border-line pt-3">
+          <h2 className="text-sm font-extrabold">{c.link.checks}</h2>
+          <ul className="mt-1 flex flex-col">
+            {checks.map((check, index) => {
+              const section = sectionFor(check.about, showCalories)
+              return (
+                <li key={index} className="py-1.5 text-sm leading-snug">
+                  <p>{check.note}</p>
+                  {section && (
+                    <button
+                      type="button"
+                      className="-ml-1 inline-flex min-h-11 items-center px-1 text-sm font-extrabold underline decoration-2 underline-offset-4"
+                      onClick={() => document.getElementById(`ed-${section}`)?.scrollIntoView({ behavior: prefersCalm() ? 'auto' : 'smooth', block: 'start' })}
+                    >
+                      {c.link.goTo(c.editor.sections[section])}
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 // ------------------------------------------------------------------- form --
 
-function DishForm({ dish }: { dish: Dish | null }) {
+function DishForm({ dish, handover }: { dish: Dish | null; handover: Handover | null }) {
   const t = useT()
   const c = useRecipesCopy()
   const e = c.editor
@@ -571,8 +628,11 @@ function DishForm({ dish }: { dish: Dish | null }) {
   const others = useDishes({ includeArchived: true })
   useScrollTop()
 
-  const [initial] = useState<DishDraft>(() => (dish ? draftFromDish(dish) : emptyDraft()))
-  const [draft, setDraft] = useState<DishDraft>(initial)
+  // What "nothing changed" means: the saved dish, or the empty form. A dish read from a
+  // page counts as changed from the start, so leaving it unsaved asks first; a form that
+  // was only started with a source does not.
+  const [initial] = useState<DishDraft>(() => (dish ? draftFromDish(dish) : handover && !handover.read ? handover.draft : emptyDraft()))
+  const [draft, setDraft] = useState<DishDraft>(() => handover?.draft ?? initial)
   const [tagText, setTagText] = useState('')
   const [quick, setQuick] = useState('')
   const [cover, setCover] = useState<PendingPhoto | null>(null)
@@ -593,6 +653,15 @@ function DishForm({ dish }: { dish: Dish | null }) {
     urls.current.push(url)
     return { file, url, source }
   }
+
+  // The page's picture arrives like one picked from the gallery: shown now, stored on save.
+  const handedCover = handover?.cover ?? null
+  useEffect(() => {
+    if (!handedCover) return
+    const url = URL.createObjectURL(handedCover)
+    urls.current.push(url)
+    setCover({ file: handedCover, url, source: 'gallery' })
+  }, [handedCover])
 
   const dirty = cover !== null || Object.keys(stepPhotos).length > 0 || tagText.trim() !== '' || quick.trim() !== '' || !sameValue(draft, initial)
   const guard = useLeaveGuard(dirty, () => back(dish ? `/recipes/${dish.id}` : '/recipes'))
@@ -669,6 +738,8 @@ function DishForm({ dish }: { dish: Dish | null }) {
       </FormHeader>
 
       <main className="app-column flex flex-col gap-7 px-4 pb-28 pt-5">
+        {handover?.read && <ReadNote read={handover.read} showCalories={showCalories} />}
+
         <Section id="ed-basics" title={e.sections.basics}>
           <Card className="flex flex-col gap-5">
             <div>
@@ -741,7 +812,7 @@ function DishForm({ dish }: { dish: Dish | null }) {
 
         <Section id="ed-recipe" title={e.sections.recipe}>
           <Card pad={false} className="px-4 pb-4 pt-1">
-            <Stepper label={e.servings} value={draft.servings} min={1} max={24} onChange={(servings) => set('servings', servings)} />
+            <Stepper label={e.servings} value={draft.servings} min={1} max={Math.max(24, initial.servings, handover?.draft.servings ?? 0)} onChange={(servings) => set('servings', servings)} />
             <div className="mt-2 grid grid-cols-2 items-end gap-3">
               <Field label={e.prep} inputMode="numeric" value={draft.prepMinutes} onChange={(event) => set('prepMinutes', event.target.value)} />
               <Field label={e.cook} inputMode="numeric" value={draft.cookMinutes} onChange={(event) => set('cookMinutes', event.target.value)} />
@@ -813,10 +884,13 @@ function DishForm({ dish }: { dish: Dish | null }) {
   )
 }
 
-/** `/recipes/new` (no id) and `/recipes/:id/edit`. */
-export function DishEditor({ id }: { id?: ID }) {
+/** `/recipes/new` (no id, optionally `?from=` a hand-over from the link reader) and `/recipes/:id/edit`. */
+export function DishEditor({ id, from }: { id?: ID; from?: string | null }) {
   const c = useRecipesCopy()
   const dish = useDish(id)
+  // Picked up once and kept for as long as the form is open; let go of when it closes.
+  const [handover] = useState(() => (id ? null : handoverFor(from)))
+  useEffect(() => () => dropHandover(from), [from])
   if (id && dish === undefined) {
     return (
       <Screen>
@@ -841,5 +915,5 @@ export function DishEditor({ id }: { id?: ID }) {
       </Screen>
     )
   }
-  return <DishForm key={id ?? 'new'} dish={id ? (dish as Dish) : null} />
+  return <DishForm key={id ?? 'new'} dish={id ? (dish as Dish) : null} handover={handover} />
 }

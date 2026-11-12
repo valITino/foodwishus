@@ -4,6 +4,8 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { boot, isDemo, leaveDemo, useSyncStatus } from '../data/app'
 import { useMe } from '../data/hooks'
+import { useUnseenNews } from '../data/queries'
+import { NewsScreen } from '../features/news'
 import { Onboarding, PausedScreen, usePaused } from '../features/onboarding'
 import { PlanningRoutes, TodayPicker, TodayScreen, WeekScreen, WishlistScreen } from '../features/planning'
 import { RecipeBookScreen, RecipesRoutes } from '../features/recipes'
@@ -11,7 +13,7 @@ import { isReviewPath, ReviewRoutes } from '../features/review'
 import { SettingsRoutes } from '../features/settings'
 import { useT } from '../i18n'
 import { Screen, Sheet, SteamLoader, TabBar, Toaster, type TabId } from '../ui/components'
-import { Cherry, Cloche, Flower } from '../ui/deco/Deco'
+import { Cherry, Cloche, Flower, Mascot } from '../ui/deco/Deco'
 import { currentPath, navigate, useRoute } from './router'
 import { startSettingsSync } from './settingsSync'
 
@@ -67,6 +69,14 @@ function AddSheet({ open, onClose, onToday }: { open: boolean; onClose: () => vo
             <span className="block text-xs text-ink-soft">{t.addSheet.dishHint}</span>
           </span>
         </button>
+        {/* Fork reads the page and fills in the dish form. */}
+        <button type="button" className={choice} onClick={() => go('/recipes/import')}>
+          <Mascot size={40} mood="happy" label="" className="mx-0.5 shrink-0" />
+          <span>
+            <span className="block text-base font-extrabold">{t.addSheet.link}</span>
+            <span className="block text-xs text-ink-soft">{t.addSheet.linkHint}</span>
+          </span>
+        </button>
         <button type="button" className={choice} onClick={() => go('/menus/new')}>
           <Flower size={44} />
           <span>
@@ -100,6 +110,8 @@ export function Shell() {
   const status = useSyncStatus()
   const paused = usePaused()
   const [adding, setAdding] = useState(false)
+  // From any tab: a number on Today says the other one did something.
+  const unseenNews = useUnseenNews() ?? 0
   const [pickingToday, setPickingToday] = useState(false)
   const { path } = route
 
@@ -179,6 +191,7 @@ export function Shell() {
   else if (path.startsWith('/serving/') || path.startsWith('/propose/')) page = <PlanningRoutes route={route} />
   else if (isReviewPath(path)) page = <ReviewRoutes route={route} />
   else if (path.startsWith('/settings')) page = <SettingsRoutes route={route} />
+  else if (path === '/news') page = <NewsScreen />
   else page = null
 
   // An address that leads nowhere (an old link, a start-screen path after logging in) goes home.
@@ -195,7 +208,7 @@ export function Shell() {
     <>
       {isDemo && <DemoBanner />}
       {page}
-      {tab && <TabBar active={tab} onSelect={(id) => navigate(TAB_PATHS[id], { replace: true })} onAdd={() => setAdding(true)} />}
+      {tab && <TabBar active={tab} onSelect={(id) => navigate(TAB_PATHS[id], { replace: true })} onAdd={() => setAdding(true)} badges={tab === 'today' ? {} : { today: unseenNews }} />}
       <AddSheet open={adding} onClose={() => setAdding(false)} onToday={() => setPickingToday(true)} />
       <TodayPicker open={pickingToday} onClose={() => setPickingToday(false)} />
       <Toaster />

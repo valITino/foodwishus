@@ -2,7 +2,7 @@
 
 export const en = {
   brand: { name: 'FoodwishUs', slogan: 'U cook. I eat.' },
-  tabs: { today: 'Today', wishlist: 'Wishlist', week: 'Week', cockpit: 'Cockpit', recipes: 'Recipes', add: 'Add something', nav: 'Main' },
+  tabs: { today: 'Today', wishlist: 'Wishlist', week: 'Week', cockpit: 'Cockpit', recipes: 'Recipes', add: 'Add something', nav: 'Main', withNews: (tab: string, count: number) => `${tab}, ${count} new` },
   actions: { save: 'Save', cancel: 'Cancel', done: 'Done', served: 'Served', takeProof: 'Take the proof photo', again: 'Again please!', plan: 'Plan it', propose: 'Propose' },
   craving: {
     title: 'How much do you want it?',
@@ -73,6 +73,8 @@ export const en = {
     menuHint: 'Several dishes in order',
     today: 'A meal for today',
     todayHint: 'From the wishlist or the recipe book',
+    link: 'A recipe from a link',
+    linkHint: 'Pinterest or any recipe site',
   },
   demo: { banner: 'Demo kitchen. Nothing here is real.', leave: 'Leave the demo', enter: 'Peek into a demo kitchen' },
 }
