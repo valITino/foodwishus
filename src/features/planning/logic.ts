@@ -5,6 +5,7 @@
 import { currentStreak, eatenDay } from '../../lib/stats'
 import type { Course, Day, ID, Member, Serving, Slot } from '../../data/types'
 import { addDays, toDay, weekOf, zurichHour } from '../../lib/dates'
+import { normalize } from '../recipes/logic'
 
 export const SLOTS: readonly Slot[] = ['breakfast', 'lunch', 'dinner', 'dessert']
 
@@ -179,9 +180,85 @@ export function slotForHour(hour: number): Slot {
   return 'dessert'
 }
 
+/** The planned day has come, or slipped by: now "Served" is the thing to do. */
+export function isDue(serving: Serving, todayDay: Day): boolean {
+  return serving.status === 'planned' && serving.plannedDate !== null && serving.plannedDate <= todayDay
+}
+
 /** The cook may tap "Served" on the planned day, or later if the day slipped by. */
 export function canServe(serving: Serving, memberId: ID, todayDay: Day): boolean {
-  return serving.status === 'planned' && serving.plannedDate !== null && serving.plannedDate <= todayDay && roleIn(serving, memberId) === 'cook'
+  return isDue(serving, todayDay) && roleIn(serving, memberId) === 'cook'
+}
+
+/**
+ * Plans change: the cook may also serve a meal that is planned for another day, or one
+ * that is only a wish. It then counts for the day it really came to the table.
+ */
+export function canServeEarly(serving: Serving, memberId: ID, todayDay: Day): boolean {
+  return isOpen(serving) && !isDue(serving, todayDay) && roleIn(serving, memberId) === 'cook'
+}
+
+/**
+ * What "Served" at the end of cook mode stands for. The meal of this dish that is already
+ * on its way with this cook: one that is due first, then the next planned one, then a
+ * wish. 'new' when the dish is on nobody's list. Null when it is only on the list as
+ * something the partner cooks: then serving is theirs to tap.
+ */
+export function mealToServe(servings: Serving[], dishId: ID, memberId: ID, todayDay: Day): Serving | 'new' | null {
+  const open = servings.filter((s) => isOpen(s) && s.dishId === dishId)
+  if (open.length === 0) return 'new'
+  const mine = open.filter((s) => roleIn(s, memberId) === 'cook')
+  const due = mine.filter((s) => isDue(s, todayDay)).sort((a, b) => byWhen(b, a))
+  const later = mine.filter((s) => s.status === 'planned' && !isDue(s, todayDay)).sort(byWhen)
+  const wishes = mine.filter((s) => s.status === 'wishlist')
+  return due[0] ?? later[0] ?? wishes[0] ?? null
+}
+
+/** The slot for a meal that is decided right now: the next main meal of the day. */
+export function slotForNow(hour: number): Slot {
+  if (hour < 10) return 'breakfast'
+  if (hour < 14) return 'lunch'
+  return 'dinner'
+}
+
+// ------------------------------------------------------------ meal choices --
+
+export interface MealChoices<D, M> {
+  /** Meals that are already on their way: wishes first (those hoped for on this day on top), then meals planned for another moment. */
+  open: Serving[]
+  /** The rest of the recipe book, for a meal nobody wished for first. */
+  dishes: D[]
+  menus: M[]
+}
+
+/**
+ * What can go into a slot of the calendar. Something that is already on its way is
+ * offered once, as that meal, and not a second time from the recipe book.
+ */
+export function mealChoices<D extends { id: ID; name: string; archived: boolean }, M extends { id: ID; name: string; archived: boolean; courses: unknown[] }>(
+  servings: Serving[],
+  dishes: D[],
+  menus: M[],
+  target: { day: Day; slot: Slot },
+): MealChoices<D, M> {
+  const elsewhere = servings.filter((s) => s.status === 'planned' && !(s.plannedDate === target.day && s.plannedSlot === target.slot)).sort(byWhen)
+  const open = [...wishesForDay(servings, target.day), ...elsewhere]
+  const here = servings.filter((s) => s.status === 'planned' && s.plannedDate === target.day && s.plannedSlot === target.slot)
+  const taken = new Set([...open, ...here].flatMap((s) => [s.dishId, s.menuId]))
+  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+  return {
+    open,
+    dishes: dishes.filter((dish) => !dish.archived && !taken.has(dish.id)).sort(byName),
+    menus: menus.filter((menu) => !menu.archived && menu.courses.length > 0 && !taken.has(menu.id)).sort(byName),
+  }
+}
+
+/** True when every word of the search appears in the name. An empty search finds everything. */
+export function nameMatches(name: string, query: string): boolean {
+  const hay = normalize(name)
+  return normalize(query)
+    .split(/\s+/)
+    .every((word) => hay.includes(word))
 }
 
 // ---------------------------------------------------------------- calendar --

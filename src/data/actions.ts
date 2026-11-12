@@ -102,9 +102,11 @@ export interface ProposeInput {
   suggestedDays?: Day[]
   /** Who will cook. Defaults to the person proposing. */
   cookedBy?: ID
+  /** Straight onto the calendar: for a meal that is decided on the spot, without a wish first. */
+  plan?: { date: Day; slot: Slot }
 }
 
-/** Put a dish or menu on the wishlist, at the bottom. */
+/** Put a dish or menu on the wishlist, at the bottom. With a plan it goes onto the calendar in the same step. */
 export async function proposeServing(input: ProposeInput): Promise<Serving> {
   if (!input.dishId && !input.menuId) throw new Error('Propose a dish or a menu.')
   const { householdId, memberId } = await me()
@@ -120,9 +122,9 @@ export async function proposeServing(input: ProposeInput): Promise<Serving> {
     suggestedDays: input.suggestedDays ?? [],
     craving: null,
     priority: keyBetween(last?.priority ?? null, null),
-    status: 'wishlist',
-    plannedDate: null,
-    plannedSlot: null,
+    status: input.plan ? 'planned' : 'wishlist',
+    plannedDate: input.plan?.date ?? null,
+    plannedSlot: input.plan?.slot ?? null,
     servedAt: null,
     eatenAt: null,
     skippedReason: null,
@@ -161,9 +163,20 @@ export async function skipServing(id: ID, reason?: string): Promise<void> {
   await store.patch('servings', id, { status: 'skipped', skippedReason: reason?.trim() || null })
 }
 
-/** Bring a skipped serving back to the wishlist. */
+/** Bring a skipped serving back to the wishlist. If it had been on the table before it was skipped, that is forgotten. */
 export async function reviveServing(id: ID): Promise<void> {
-  await store.patch('servings', id, { status: 'wishlist', skippedReason: null, plannedDate: null, plannedSlot: null })
+  await store.patch('servings', id, { status: 'wishlist', skippedReason: null, plannedDate: null, plannedSlot: null, servedAt: null })
+}
+
+/**
+ * Somebody else cooks after all. The hearts start over, because they belong to whoever
+ * eats. Once a verdict has been started the roles stay: throws ActionError('cook_fixed').
+ */
+export async function setCook(id: ID, cookId: ID): Promise<void> {
+  const serving = await servingOrThrow(id)
+  if ((serving.cookedBy ?? serving.proposedBy) === cookId) return
+  if ((await reviewsOf(id)).length > 0) throw new ActionError('cook_fixed')
+  await store.patch('servings', id, { cookedBy: cookId, craving: null })
 }
 
 /** The Chef says: it is on the table. */
@@ -184,7 +197,19 @@ export async function updateServingNote(id: ID, note: string): Promise<void> {
   await store.patch('servings', id, { note: note.trim() || null })
 }
 
+/**
+ * Take a meal away for good, with its photos and what was said about it. An eaten meal
+ * can only go while its verdict can still be changed: after the seal it is history and
+ * this throws ActionError('review_sealed').
+ */
 export async function removeServing(id: ID): Promise<void> {
+  const serving = await db.servings.get(id)
+  if (!serving || serving.deletedAt) return
+  const reviews = await reviewsOf(id)
+  if (serving.status === 'eaten' && reviews.some((review) => isSealed(review))) throw new ActionError('review_sealed')
+  // A sealed verdict of a meal that never happened stays where it is (the cloud would not let it go) and counts nowhere.
+  for (const review of reviews) if (!isSealed(review)) await store.remove('reviews', review.id)
+  for (const photo of serving.proofPhotos) if (await db.photos.get(photo.photoId)) await store.remove('photos', photo.photoId)
   await store.remove('servings', id)
 }
 
@@ -198,6 +223,7 @@ export class ActionError extends Error {
     | 'reaction_missing'
     | 'review_sealed'
     | 'review_missing'
+    | 'cook_fixed'
     | 'criterion_missing'
     | 'criterion_unnamed'
     | 'criterion_twice'
@@ -241,6 +267,11 @@ async function servingOrThrow(id: ID): Promise<Serving> {
   const serving = await db.servings.get(id)
   if (!serving || serving.deletedAt) throw new ActionError('serving_missing')
   return serving
+}
+
+/** Everything that was said about one meal, by anyone. */
+async function reviewsOf(servingId: ID): Promise<Review[]> {
+  return (await db.reviews.where('servingId').equals(servingId).toArray()).filter((review) => !review.deletedAt)
 }
 
 export interface ProofInput {

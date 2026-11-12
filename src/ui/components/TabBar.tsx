@@ -53,7 +53,7 @@ export function TabBar({ active, onSelect, onAdd, badges = {}, inline = false }:
   }
 
   return (
-    <nav aria-label="Main" className={cx('z-40 w-full', inline ? 'relative' : 'fixed inset-x-0 bottom-0')}>
+    <nav aria-label={t.tabs.nav} className={cx('z-40 w-full', inline ? 'relative' : 'fixed inset-x-0 bottom-0')}>
       <div className="app-column relative">
         <div className="scallop-top bg-blush px-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] [--scallop:9px]">
           <div className="flex items-stretch">

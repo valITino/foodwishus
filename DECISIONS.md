@@ -208,6 +208,36 @@ that never reached the cloud leaves the device too, after asking the cloud wheth
 really does not have it (so discarding something new needs a connection). Nothing leaves
 that list by itself.
 
+## 12. Plans change: the short ways
+
+The written flow is wish, hearts, plan, served, proof. Real evenings skip steps, so every
+step has a shortcut, and none of them needs a new rule in the cloud (any member of the
+kitchen may change a meal; only verdicts are guarded).
+
+- **A meal for today.** One sheet ("What shall it be?") fills a slot of the calendar with a
+  wish, a meal that was planned for another moment (it moves), anything from the recipe
+  book, or a new dish made from the name typed into the search field. It opens from the
+  plus button, from an empty Today and from an empty slot in Our Week. A meal picked from
+  the book is stored as planned in one write, so the partner hears "planned", not "proposed".
+- **Serving early.** The cook may serve any meal that is still ahead. It counts for the day
+  it came to the table; the planned day is kept only so that "Undo served" can put it back.
+- **Who cooks** can be swapped while no verdict exists. The hearts are cleared, because the
+  Cockpit pairs them with the eater's rating.
+- **Skipping from the table.** A served meal used to have no way out except "Undo served"
+  on the cook's phone. Either of them can now skip it. Bringing it back forgets that it
+  was served.
+- **Removing an eaten meal** takes its photos and verdict with it and is allowed while the
+  verdict is not sealed. The seal means "this is history now", for the meal as for the verdict.
+- **Cook mode ends with "Served"** for the meal of that dish that is on its way with this
+  cook, or a new one. If the dish is only on the list as something the partner cooks, the
+  button is not offered.
+
+Kept as they are, on purpose: the proof photo is the Taster's (the cook cannot add it), and
+a meal needs a photo to count as eaten. Both are the game's rules, not oversights.
+
+Known and accepted: the 24 hours start when the first face is tapped, not when the meal is
+handed in. A face tapped one day and handed in the next leaves less time to change it.
+
 ## Limits to know
 
 | Limit | Value | What happens at the limit |

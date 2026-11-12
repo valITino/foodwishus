@@ -4,11 +4,14 @@
 
 import { AnimatePresence, motion, useIsPresent, useReducedMotion } from 'motion/react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { back, type Route } from '../../app/router'
-import { useDish } from '../../data/queries'
+import { back, navigate, type Route } from '../../app/router'
+import { markServed, proposeServing } from '../../data/actions'
+import { useMe } from '../../data/hooks'
+import { useDish, usePartner, useServings } from '../../data/queries'
 import type { Dish, ID, Step } from '../../data/types'
-import { useLang, useT } from '../../i18n'
-import { Button, buzz, cx, IconButton, PhotoImg, Sheet, SteamLoader } from '../../ui/components'
+import { useCopy, useLang, useT } from '../../i18n'
+import { today } from '../../lib/dates'
+import { Button, buzz, cx, IconButton, PhotoImg, Sheet, SteamLoader, toast } from '../../ui/components'
 import { Heart, Mascot, Sparkle } from '../../ui/deco/Deco'
 import { Icon } from '../../ui/deco/Icon'
 import {
@@ -31,6 +34,8 @@ import {
   useWakeLock,
   useWatching,
 } from './cookSession'
+import { planningCopy } from '../planning/copy'
+import { mealToServe } from '../planning/logic'
 import { useRecipesCopy } from './copy'
 import { DEFAULT_SERVINGS, formatCountdown, formatIngredient, formatTimer, ingredientsForStep, scaleFactor } from './logic'
 import { LineIcon, RoundButton } from './parts'
@@ -143,9 +148,31 @@ const CONFETTI = [
   { x: 45, y: -130, r: -20, s: 14, d: 0.16, heart: false },
 ]
 
-function Celebration({ onDone }: { onDone: () => void }) {
+function Celebration({ dish, onDone }: { dish: Dish; onDone: () => void }) {
+  const t = useT()
   const c = useRecipesCopy().cook
+  const served = useCopy(planningCopy).serving
   const calm = useReducedMotion()
+  const me = useMe()
+  const partner = usePartner()
+  const servings = useServings()
+  const [busy, setBusy] = useState(false)
+  // Done cooking usually means: it goes on the table. One tap, and the Taster is asked for proof.
+  const meal = me && servings ? mealToServe(servings, dish.id, me.memberId, today()) : null
+
+  async function serve() {
+    if (!me || !meal) return
+    setBusy(true)
+    try {
+      const id = meal === 'new' ? (await proposeServing({ dishId: dish.id, cookedBy: me.memberId })).id : meal.id
+      await markServed(id)
+      toast(t.actions.served)
+      navigate(`/serving/${id}`, { replace: true })
+    } catch {
+      toast(t.common.somethingWrong, 'oops')
+      setBusy(false)
+    }
+  }
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden px-6 pb-10 text-center" data-testid="celebration">
       <div className="relative">
@@ -168,9 +195,21 @@ function Celebration({ onDone }: { onDone: () => void }) {
       </div>
       <h2 className="mt-5 text-2xl">{c.doneTitle}</h2>
       <p className="mt-2 font-script text-3xl leading-tight text-rose-ink">{c.doneBody}</p>
-      <Button size="lg" className="mt-8" onClick={onDone}>
-        {c.doneAction}
-      </Button>
+      {meal ? (
+        <div className="mt-8 flex w-full max-w-[20rem] flex-col items-center gap-1.5">
+          <Button size="lg" block disabled={busy} onClick={() => void serve()}>
+            {t.actions.served}
+          </Button>
+          <p className="text-xs text-ink-soft">{served.servedHint(partner?.name ?? '')}</p>
+          <Button variant="quiet" onClick={onDone}>
+            {c.doneAction}
+          </Button>
+        </div>
+      ) : (
+        <Button size="lg" className="mt-8" onClick={onDone}>
+          {c.doneAction}
+        </Button>
+      )}
     </div>
   )
 }
@@ -371,7 +410,7 @@ function Cooking({ dish, servings }: { dish: Dish; servings: number }) {
         </header>
 
         {finished ? (
-          <Celebration onDone={leave} />
+          <Celebration dish={dish} onDone={leave} />
         ) : (
           <>
             <OtherTimers dishId={dish.id} current={index} onGo={go} />

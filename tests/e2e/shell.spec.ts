@@ -15,7 +15,7 @@ test("Android's back button closes a sheet instead of leaving the page", async (
   await page.getByRole('navigation').getByRole('button', { name: 'Wishlist' }).click()
   await expect(page).toHaveURL(/#\/wishlist$/)
 
-  await page.getByRole('button', { name: 'Add a dish or menu' }).click()
+  await page.getByRole('button', { name: 'Add something' }).click()
   const sheet = page.getByRole('dialog')
   await expect(sheet).toBeVisible()
 
@@ -44,14 +44,14 @@ test('a sheet never leaves a dead step in the history', async ({ page }) => {
   const sheet = page.getByRole('dialog')
 
   // Closed with a tap on its close button: the next back press leaves the page in one step.
-  await page.getByRole('button', { name: 'Add a dish or menu' }).click()
+  await page.getByRole('button', { name: 'Add something' }).click()
   await expect(sheet).toBeVisible()
   await sheet.getByRole('button', { name: 'Close' }).click()
   await expect(sheet).toBeHidden()
   expect(await page.evaluate(() => (window.history.state as { layer?: number } | null)?.layer)).toBeUndefined()
 
   // Moving on from inside the sheet: one press of back returns to where the sheet was opened.
-  await page.getByRole('button', { name: 'Add a dish or menu' }).click()
+  await page.getByRole('button', { name: 'Add something' }).click()
   await sheet.getByRole('button', { name: /A new dish/ }).click()
   await expect(page).toHaveURL(/#\/recipes\/new$/)
   await expect(sheet).toBeHidden()
@@ -62,7 +62,7 @@ test('a sheet never leaves a dead step in the history', async ({ page }) => {
 
   // Open, back, open, back: the sheet answers every time.
   for (let round = 0; round < 2; round++) {
-    await page.getByRole('button', { name: 'Add a dish or menu' }).click()
+    await page.getByRole('button', { name: 'Add something' }).click()
     await expect(sheet).toBeVisible()
     await page.goBack()
     await expect(sheet).toBeHidden()

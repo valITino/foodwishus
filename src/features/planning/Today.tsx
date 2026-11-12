@@ -14,6 +14,7 @@ import { Icon } from '../../ui/deco/Icon'
 import { EarlyProof, EatenToday, PhotoWallCard } from '../review'
 import { planningCopy } from './copy'
 import { cookOf, currentStreak, dayPart, eatenDay, eatenInWeek, isOpen, onTheTable, plannedFor, roleIn, upNext } from './logic'
+import { TodayPicker } from './MealPicker'
 import { MealThumb, nameOf, NoteBox, TextAction, useKitchen, useMealInfo, useWhen, type Kitchen } from './shared'
 
 const openServing = (serving: Serving) => navigate(`/serving/${serving.id}`)
@@ -153,6 +154,7 @@ export function TodayScreen() {
   const c = useCopy(planningCopy)
   const kitchen = useKitchen()
   const status = useSyncStatus()
+  const [picking, setPicking] = useState(false)
 
   if (!kitchen) return <Screen tabs>{null}</Screen>
 
@@ -205,7 +207,7 @@ export function TodayScreen() {
               mood="happy"
               title={c.today.emptyTitle}
               body={wishes > 0 ? c.today.emptyWithWishes : c.today.emptyWithoutWishes}
-              action={<Button onClick={() => navigate('/wishlist')}>{c.today.emptyAction}</Button>}
+              action={<Button onClick={() => setPicking(true)}>{c.today.emptyAction}</Button>}
             />
           </Card>
         )}
@@ -240,6 +242,8 @@ export function TodayScreen() {
 
         <PhotoWallCard kitchen={kitchen} />
       </main>
+
+      <TodayPicker open={picking} onClose={() => setPicking(false)} />
     </Screen>
   )
 }

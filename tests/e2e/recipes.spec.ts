@@ -520,7 +520,7 @@ test('cook mode: steps, scaled ingredients, a timer that keeps running, and the 
 test('build a menu from two dishes and check its totals', async ({ page }) => {
   await openBook(page)
   await addDishes(page, [SOUP, LASAGNE, STRUDEL])
-  await page.getByRole('button', { name: 'Add a dish or menu' }).click()
+  await page.getByRole('button', { name: 'Add something' }).click()
   await page.getByRole('button', { name: 'A new menu' }).click()
   await expect(page.getByRole('heading', { name: 'New menu' })).toBeVisible()
 

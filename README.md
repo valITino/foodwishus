@@ -83,7 +83,8 @@ they want it and drags the cards into order: the top one is the biggest wish. Ta
 pick a day for it, to skip it or to take it off the list.
 
 **Week.** Our week as a calendar: what is planned for which day and meal, and what was
-eaten. Tap a day to plan something from the wishlist, tap a meal to open it.
+eaten. Tap a free meal of a day to fill it: from the wishlist, or with anything from the
+recipe book. Tap a meal to open it.
 
 **Cockpit.** The numbers: your favourites, ratings over time, how well cravings predicted
 the verdict, a calendar of hearts, the Hall of Fame and a few fun facts. The filter at the
@@ -92,10 +93,30 @@ own page of numbers and photos.
 
 **Recipes.** The recipe book with all your dishes and menus. A dish has ingredients, steps,
 times and, if you like, calories. **Cook mode** shows one step at a time in big letters,
-with timers. The round **+** button in the middle of the bar adds a new dish or a menu.
+with timers. When the last step is done, **Served** is right there. The round **+**
+button in the middle of the bar adds a new dish, a menu, or a meal for today.
 
 All proof photos hang together on the **photo wall**, which you reach from Today or from
 any meal that has been eaten.
+
+### When plans change
+
+Nobody plans every meal a week ahead. These are the short ways:
+
+- **Decided on the spot.** Tap **+**, then **A meal for today**. Pick a wish, anything from
+  the recipe book, or type a name nobody has written down yet: it becomes a dish and today's
+  meal in one tap. The Chef then finds **Served** on the meal, the Taster the proof photo.
+- **Eating it sooner.** A meal that is planned for another day, or is only a wish, has
+  **Serve it now** for the Chef and "Already on the table? Take the proof photo" for the
+  Taster. It counts for the day it was really eaten.
+- **The other one cooks after all.** Open the meal and tap **Change who cooks**. The hearts
+  start over, because they belong to whoever eats. This works until a verdict has been started.
+- **It never made it.** A meal that is already marked as served can still be skipped by
+  either of you, with a reason if you like ("The oven went on strike").
+- **Logged by mistake.** An eaten meal can be removed, with its photos and its verdict, for
+  as long as the verdict can still be changed (24 hours). After the seal it is history.
+- **Forgot to log it.** Take the proof photo from the gallery: the app reads when the photo
+  was taken. Or correct the time under the photo.
 
 ## What gets rated
 

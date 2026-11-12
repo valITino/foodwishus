@@ -185,10 +185,13 @@ export function navigate(to: string, options: { replace?: boolean } = {}): void 
     return
   }
   const here = depth()
+  const lowest = layers[0]?.id ?? 0
   const open = abandonLayers()
   if (open > 1) {
-    // Sheets on sheets: step back to the lowest one first, then move on from there.
-    layers.push({ id: 0, onBack: () => {}, done: false })
+    // Sheets on sheets (or a closed sheet whose step still lies under an open one): step
+    // back to the lowest one first, then move on from there. The stand-in carries that
+    // layer's id, because landing is recognised by the id on top of the history.
+    layers.push({ id: lowest, onBack: () => {}, done: false })
     collapsing = true
     afterCollapse.push(() => navigate(to, options))
     window.history.go(-(open - 1))
