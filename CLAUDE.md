@@ -65,6 +65,9 @@ config and the screenshot tool read the same variable).
   through `src/data/helper.ts`; the pretend cloud runs the same handler with a pretend web
   (`src/data/fake/pretendWeb.ts`). A card only ever fills the dish form
   (`src/features/recipes/importLogic.ts`): the AI never writes to the kitchen by itself.
+  Calories a page does not give are estimated from the ingredients and always marked
+  (`nutritionEstimated` on the card, "This is an estimate" in the form); the same sum is
+  the job `nutrition-estimate` behind "Let Fork estimate" in the dish form.
 - **Basket and pantry:** two synced tables that came later (`LATER_TABLES` in `types.ts`,
   migration 0009). A cloud without them makes their changes wait (`SyncStatus.later`), never
   refuses them. The rules (same thing, adding, clearing into the pantry) are pure functions in

@@ -112,8 +112,14 @@ paste the link and tap **Read recipe**. Fork reads the page and fills in the dis
 name, ingredients, steps, times, the picture and where it is from. Look it over, change
 what is off and tap **Save dish**. Nothing is saved before that.
 
-- **Three switches** decide how Fork writes it: in your language, with cups, ounces and
-  Fahrenheit converted, and with the page's picture. The app remembers them.
+- **Four switches** decide how Fork writes it: in your language, with cups, ounces and
+  Fahrenheit converted, with the page's picture, and with calories estimated when the
+  page has none. The app remembers them. The fourth one is only there when calories are
+  switched on in your settings.
+- **Calories.** What the page states is taken as it is. When it states nothing, Fork works
+  out calories, protein, carbs and fat per serving from the ingredients and marks them as
+  an estimate. For a dish that is already in your book: **Edit**, **Calories**, **Let Fork
+  estimate**.
 - **Please check.** Where Fork was not sure (no number of servings, a rough conversion),
   a note on top of the form says so, with a jump to that part.
 - **Even shorter on Android:** in Pinterest or the browser tap **Share** and pick

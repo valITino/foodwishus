@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardE
 import { back, navigate } from '../../app/router'
 import { createDish, updateDish } from '../../data/actions'
 import { store } from '../../data/app'
+import { estimateNutrition, ReadError } from '../../data/helper'
 import { usePhotoUrl } from '../../data/hooks'
 import { addPhotoFromFile } from '../../data/photos'
 import { usePref } from '../../data/prefs'
@@ -15,7 +16,7 @@ import { Button, Card, Chip, cx, DishThumb, EmptyState, Field, PageHeader, Scree
 import { Mascot } from '../../ui/deco/Deco'
 import { DecoIcon, DISH_ICONS } from '../../ui/deco/registry'
 import { Icon } from '../../ui/deco/Icon'
-import { useRecipesCopy } from './copy'
+import { estimateProblem, useRecipesCopy } from './copy'
 import { dropHandover, handoverFor, sectionFor, shownChecks, type Handover } from './importLogic'
 import {
   addTag,
@@ -28,6 +29,7 @@ import {
   emptyDraft,
   formatAmount,
   formatDuration,
+  formatIngredient,
   formatTimer,
   moveItem,
   parseAmount,
@@ -680,6 +682,32 @@ function DishForm({ dish, handover }: { dish: Dish | null; handover: Handover | 
     ...(showCalories ? [{ id: 'ed-calories', label: e.sections.calories }] : []),
   ]
 
+  // Fork works the numbers out from the ingredients as they stand in the form right now.
+  const [estimating, setEstimating] = useState(false)
+  const [estimateNote, setEstimateNote] = useState<string | null>(null)
+  const estimate = async () => {
+    if (estimating) return
+    const lines = [...draft.ingredients, ...parseIngredientList(quick)].filter((ingredient) => ingredient.name.trim()).map((ingredient) => {
+      const { amount, name } = formatIngredient(ingredient, 1, lang)
+      return amount ? `${amount} ${name}` : name
+    })
+    if (lines.length === 0) {
+      setEstimateNote(e.estimateProblems.not_enough)
+      return
+    }
+    setEstimating(true)
+    setEstimateNote(null)
+    try {
+      const found = await estimateNutrition({ lang, name: draft.name.trim(), servings: draft.servings, ingredients: lines })
+      setDraft((d) => ({ ...d, kcal: String(found.kcal), protein: found.protein ? String(found.protein) : '', carbs: found.carbs ? String(found.carbs) : '', fat: found.fat ? String(found.fat) : '', isEstimate: true }))
+      setEstimateNote(found.note ? `${e.estimated} ${found.note}` : e.estimated)
+    } catch (error) {
+      setEstimateNote(estimateProblem(e, error instanceof ReadError ? error.code : 'helper_down'))
+    } finally {
+      setEstimating(false)
+    }
+  }
+
   const save = async () => {
     if (saving) return
     if (!draft.name.trim()) {
@@ -865,6 +893,18 @@ function DishForm({ dish, handover }: { dish: Dish | null; handover: Handover | 
               </div>
               <div className="border-t border-line">
                 <Toggle label={e.isEstimate} checked={draft.isEstimate} onChange={(isEstimate) => set('isEstimate', isEstimate)} />
+              </div>
+              <div className="border-t border-line py-3">
+                {estimating ? (
+                  <SteamLoader label={e.estimating} />
+                ) : (
+                  <Button variant="secondary" block onClick={() => void estimate()}>
+                    {e.estimate}
+                  </Button>
+                )}
+                <p className="mt-2 text-xs leading-snug text-ink-soft" role="status" data-testid="estimate-note">
+                  {estimateNote ?? e.estimateHint}
+                </p>
               </div>
             </Card>
           </Section>

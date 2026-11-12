@@ -1,15 +1,17 @@
 # The kitchen's helper
 
-One function, three jobs, each with its own instruction file (see "Skills" below):
+One function, four jobs, each with its own instruction file (see "Skills" below):
 
 | Job | In the app | What it gets | What it answers |
 | --- | --- | --- | --- |
-| `recipe-from-link` | **+**, A recipe from a link | a link and three switches | a recipe card for the dish form |
+| `recipe-from-link` | **+**, A recipe from a link | a link and four switches | a recipe card for the dish form |
 | `shopping-check` | Basket, Check the plan (and by itself when the plan changes) | the planned meals with their ingredients, what was cooked lately, the pantry, the basket | what to buy, each with an amount and a reason |
 | `pantry-notes` | Pantry, Tell Fork what is there | one sentence about what is at home | pantry lines to look over |
+| `nutrition-estimate` | Dish form, Calories, Let Fork estimate | a dish's name, servings and ingredient lines | calories, protein, carbs and fat per serving, as an estimate |
 
 None of them writes to the kitchen. A card fills a form, suggestions wait on the basket
-for a person to accept, pantry lines are shown before they are saved.
+for a person to accept, pantry lines are shown before they are saved, and an estimate
+fills the form's four number fields with "This is an estimate" switched on.
 
 ## Recipes from a link
 
@@ -23,8 +25,9 @@ pages, an AI (Claude).
 
 How it travels:
 
-1. The app sends the link and three switches (write it in my language, convert cups and
-   Fahrenheit, bring the picture) to this function, with the device's own login.
+1. The app sends the link and four switches (write it in my language, convert cups and
+   Fahrenheit, bring the picture, estimate calories when the page has none) to this
+   function, with the device's own login.
 2. The function asks the database for a ticket (`public.ai_ticket()`, migration
    `0008_helper.sql`): only somebody with a seat in the kitchen gets one, and a kitchen
    gets 40 a day.
@@ -36,6 +39,28 @@ How it travels:
    roughly converted to grams.").
 5. The app fills the dish form with the card. The notes sit on top, each with a jump to
    the part it is about.
+
+### Calories the page does not give
+
+Calories, protein, carbs and fat that a page states are taken as they are. When a page
+states none and the fourth switch is on, the AI works them out from the ingredient
+amounts and the number of servings, in the same answer as the card: no second question,
+no second ticket. The card then says `nutritionEstimated`, the form switches "This is an
+estimate" on, and a note on top says "The page gives no calories. The numbers are an
+estimate from the ingredients." With the switch off the function removes any estimate,
+whatever the AI answered.
+
+The fourth switch only shows for people who have calories switched on in their settings.
+For the others the app never asks for an estimate.
+
+The same sum is there for every dish, old or typed by hand: **Let Fork estimate** in the
+Calories part of the dish form (job `nutrition-estimate`, one ticket). Without ingredients
+the function answers `not_enough` before it asks anybody. It needs the key: there is no
+way to estimate without the AI.
+
+How good is it? It is what a careful cook with a nutrition table would arrive at: fine
+for "roughly 600 a plate", not for anything a diet depends on. That is why it is always
+marked as an estimate.
 
 ## What leaves the kitchen, and what does not
 
@@ -49,6 +74,8 @@ How it travels:
   on the basket.
 - **To the AI, for pantry notes:** the sentence that was typed, and the names the pantry
   already uses.
+- **To the AI, for an estimate:** the dish's name, its number of servings and its
+  ingredient lines.
 - **Never:** who you are, names of people, ratings, notes to each other, photos.
 - **Stored by the function:** nothing. The database keeps one number per kitchen and
   day: how many questions were asked.
@@ -57,14 +84,14 @@ How it travels:
 
 GitHub and Supabase stay free. The AI is paid per use, from the Claude API account whose
 key is set in step 3: with the default model (`claude-haiku-5-5`) one question (a recipe
-read, a plan checked, a sentence sorted) is well under one cent, and the limit of 40
+read, a plan checked, a sentence sorted, a dish estimated) is well under one cent, and the limit of 40
 questions a day keeps even a very bad day at a few cents. Prices change: check the pricing page of the Claude Console before relying on this.
 
 ## Without a key it still does something
 
 A page that carries its own recipe data is read without any AI: word for word, in the
 page's language and units. The dish form says so ("Read from the page as it is"). Pages
-without such data, and translating or converting, need the key. So the function can be
+without such data, and translating, converting or estimating calories, need the key. So the function can be
 deployed first and the key added later, or never.
 
 ## Steps
@@ -122,7 +149,7 @@ Functions, `ai`, Logs) says more:
 | --- | --- | --- |
 | "This page needs the AI helper, and it is not set up for this kitchen yet." | No key is set (step 3), or the function is not deployed (step 2). | Do the missing step. |
 | "The AI helper is not answering right now." | The AI did not answer, or refused the key. The log says `helper did not answer:` with `helper_key` for a refused key (wrong, deleted, or out of credit) and `helper_down` for an outage. | For `helper_key`: check the key and the account in the Claude Console. Otherwise try again later. |
-| "Fork has read 40 pages today, and that is the limit." (on the basket: "Fork has been asked often enough for today") | The day's tickets are used up. All three jobs share them. | Wait until tomorrow (Swiss time). To change the limit, change `per_day` in a new migration and `DAILY_TICKETS` in `contract.ts`. |
+| "Fork has read 40 pages today, and that is the limit." (on the basket: "Fork has been asked often enough for today") | The day's tickets are used up. All four jobs share them. | Wait until tomorrow (Swiss time). To change the limit, change `per_day` in a new migration and `DAILY_TICKETS` in `contract.ts`. |
 | "This phone is not logged in to the kitchen any more." | The device's login is gone or its profile is paused. | Log in again on that phone. |
 | "The page did not answer." | The site was slow, down, or refuses visitors that are not browsers. Some sites do. | Try again, or add the dish by hand: the link is kept as its source. |
 | "Fork found no recipe on that page." | No recipe on it, or a pin without a link behind it. | Open the recipe's own page and use that link. |
@@ -174,6 +201,10 @@ the same way and a change is made in one place:
   since a note), what never to list, how to word a reason.
 - `skills/pantry-notes.ts`: a sentence about what is at home, as pantry lines, without
   converting or guessing.
+- `skills/nutrition.ts`: calories, protein, carbs and fat per serving from ingredient
+  lines. What counts (what is eaten: about half of the frying fat, no cooking water),
+  usual sizes for "1 onion", how to round, and when not to estimate at all. Its rules are also part of the recipe
+  card's instructions when the fourth switch is on, so both ways estimate alike.
 
 A new job gets its own file next to these, with the same four parts: `system` (house
 rules plus its own), `user` (the material), `schema` (the form of the answer) and `read`

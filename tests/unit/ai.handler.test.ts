@@ -314,3 +314,85 @@ describe('checking the plan against the pantry', () => {
     expect(pantryNotesSkill.read({})).toBeNull()
   })
 })
+
+// --------------------------------------------------------------- nutrition --
+
+import type { NutritionEstimateResult } from '../../supabase/functions/ai/contract'
+import { nutritionSkill } from '../../supabase/functions/ai/skills/nutrition'
+
+describe('calories and the rest, when a recipe does not give them', () => {
+  const asked: { system: string; messages: { content: string }[] }[] = []
+  const web: FetchLike = async (url) => {
+    const page = PAGES[url]
+    if (!page) throw new Error('no such page')
+    return page()
+  }
+  const deps = (over: Partial<Parameters<typeof helperHandler>[0]> = {}) => ({ fetch: web, askFetch: pretendHelper({ asked }), apiKey: 'sk-test', ticket: async () => ({ ok: true as const, left: 37 }), ...over })
+  const post = async <T>(body: unknown, d = deps()) => {
+    const response = await helperHandler(d)(new Request('https://x.supabase.co/functions/v1/ai', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer mia' }, body: JSON.stringify(body) }))
+    return { status: response.status, answer: (await response.json()) as T | HelperRefusal }
+  }
+  const link = (address: string, nutrition: boolean | undefined) => ({ job: 'recipe-from-link', link: address, lang: 'en', translate: true, metric: true, photo: false, knownTags: [], ...(nutrition === undefined ? {} : { nutrition }) })
+
+  it('a page without calories gets an estimate, marked as one and said once on top of the form', async () => {
+    const { answer } = await post<RecipeFromLinkResult>(link('https://sunnykitchen.com/cornbread', true))
+    expect(answer).toMatchObject({ ok: true, by: 'helper', card: { kcalPerServing: 310, proteinPerServing: 7, carbsPerServing: 38, fatPerServing: 14, nutritionEstimated: true } })
+    const checks = (answer as RecipeFromLinkResult).card.checks
+    expect(checks.filter((check) => check.about === 'calories')).toEqual([{ about: 'calories', note: 'The page gives no calories. The numbers are an estimate from the ingredients.' }])
+    // What the helper noted itself is still there.
+    expect(checks.some((check) => check.about === 'ingredients')).toBe(true)
+  })
+
+  it("a page with its own calories keeps them, and nothing is called an estimate", async () => {
+    const { answer } = await post<RecipeFromLinkResult>(link('https://www.lecker-kochen.ch/rezepte/rueeblisuppe', true))
+    expect(answer).toMatchObject({ ok: true, card: { kcalPerServing: 210, nutritionEstimated: false } })
+    expect((answer as RecipeFromLinkResult).card.checks.some((check) => check.about === 'calories')).toBe(false)
+  })
+
+  it('nothing is estimated when the switch is off, or for an app that does not know the switch', async () => {
+    for (const nutrition of [false, undefined]) {
+      const { answer } = await post<RecipeFromLinkResult>(link('https://sunnykitchen.com/cornbread', nutrition))
+      expect(answer, String(nutrition)).toMatchObject({ ok: true, card: { kcalPerServing: null, proteinPerServing: null, nutritionEstimated: false } })
+      expect((answer as RecipeFromLinkResult).card.checks.some((check) => check.about === 'calories')).toBe(false)
+    }
+    // Even a helper that estimates without being asked is not passed on.
+    const eager: AskFetch = async () => new Response(JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ ...CORNBREAD, kcalPerServing: 999, proteinPerServing: 9, carbsPerServing: 9, fatPerServing: 9, nutritionEstimated: true }) }] }))
+    const { answer } = await post<RecipeFromLinkResult>(link('https://sunnykitchen.com/cornbread', false), deps({ askFetch: eager }))
+    expect(answer).toMatchObject({ ok: true, card: { kcalPerServing: null, fatPerServing: null, nutritionEstimated: false } })
+  })
+
+  it("without a key the page's own numbers still come along, and nothing is estimated", async () => {
+    const { answer } = await post<RecipeFromLinkResult>(link('https://www.lecker-kochen.ch/rezepte/rueeblisuppe', true), deps({ apiKey: null }))
+    expect(answer).toMatchObject({ ok: true, by: 'page', card: { kcalPerServing: 210, nutritionEstimated: false } })
+  })
+
+  const dish = { job: 'nutrition-estimate', lang: 'de', name: 'Rüeblisuppe', servings: 4, ingredients: ['500 g Rüebli', '1 Zwiebel', '1 dl Rahm', 'Salz'] }
+
+  it('any dish can be estimated from its ingredient lines', async () => {
+    asked.length = 0
+    const { status, answer } = await post<NutritionEstimateResult>(dish)
+    expect(status).toBe(200)
+    expect(answer).toEqual({ ok: true, kcal: 340, protein: 17, carbs: 43, fat: 14, note: '', left: 37 })
+    expect(asked[0].system).toContain('House rules, for every job:')
+    expect(asked[0].system).toContain('Job: estimate the nutrition per serving of one dish from its ingredients.')
+    expect(asked[0].system).toContain('This job is the exception to "never invent facts"')
+    expect(asked[0].messages[0].content).toBe('Dish: Rüeblisuppe\nServings: 4\n\n<material>\n- 500 g Rüebli\n- 1 Zwiebel\n- 1 dl Rahm\n- Salz\n</material>')
+  })
+
+  it('says so when there is too little to go on, and asks nobody about an empty list', async () => {
+    asked.length = 0
+    expect((await post<NutritionEstimateResult>({ ...dish, ingredients: [] })).answer).toEqual({ ok: false, code: 'not_enough' })
+    expect(asked).toHaveLength(0)
+    expect((await post<NutritionEstimateResult>({ ...dish, ingredients: ['Rüebli', 'Zwiebel', 'Rahm'] })).answer).toEqual({ ok: false, code: 'not_enough' })
+    expect((await post<NutritionEstimateResult>({ ...dish, servings: 0 })).status).toBe(400)
+    expect((await post<NutritionEstimateResult>(dish, deps({ apiKey: null }))).answer).toEqual({ ok: false, code: 'helper_off' })
+    expect((await post<NutritionEstimateResult>(dish, deps({ askFetch: pretendHelper({ down: true }) }))).answer).toEqual({ ok: false, code: 'helper_down' })
+  })
+
+  it('cuts the numbers to what a plate can hold', () => {
+    expect(nutritionSkill.read({ canEstimate: true, kcalPerServing: 99999, proteinPerServing: -3, carbsPerServing: 41.6, fatPerServing: 'lots', note: '  Two ingredients\nhave no amount. ' })).toEqual({ kcal: 5000, protein: null, carbs: 42, fat: null, note: 'Two ingredients have no amount.' })
+    expect(nutritionSkill.read({ canEstimate: false, kcalPerServing: 400, note: 'Too little.' })).toEqual({ kcal: null, note: 'Too little.' })
+    expect(nutritionSkill.read({ canEstimate: true, kcalPerServing: 0, note: '' })).toEqual({ kcal: null, note: '' })
+    expect(nutritionSkill.read('nonsense')).toBeNull()
+  })
+})

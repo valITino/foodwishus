@@ -456,7 +456,8 @@ test('the update note: says a new version is ready, and "Later" puts it away', a
   await expect(note).toContainText('Eine neue Version ist da.')
   const reload = note.getByRole('button', { name: 'Neu laden' })
   const later = note.getByRole('button', { name: 'Später' })
-  for (const control of [reload, later]) expect((await control.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44)
+  // The note settles into place with a little spring: measure once it has stopped growing.
+  for (const control of [reload, later]) await expect.poll(async () => (await control.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44)
   // It floats above the tab bar without covering it.
   const [noteBox, tabsBox] = await Promise.all([note.boundingBox(), page.getByRole('navigation', { name: 'Hauptnavigation' }).boundingBox()])
   expect((noteBox?.y ?? 0) + (noteBox?.height ?? 0)).toBeLessThan(tabsBox?.y ?? 0)
