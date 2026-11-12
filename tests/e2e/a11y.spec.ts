@@ -93,6 +93,7 @@ for (const lang of ['en', 'de'] as const) {
       ['proof and verdict', `/review/${ids.served}`],
       ['verdict, sealed', `/review/${ids.eaten}`],
       ['photo wall', '/photos'],
+      ['kitchen news', '/news'],
       ['dish in numbers', `/cockpit/dish/${ids.dish}`],
       ['Settings', '/settings'],
       ['my profile', '/settings/profile'],

@@ -14,6 +14,7 @@ import { newId, type Criterion, type Day, type Household, type Member } from '..
 import { hm, zurichIso } from './clock'
 import { say } from './content'
 import { buildDemoRows, KITCHEN_AGE_DAYS, type DemoKitchen } from './history'
+import { demoNews } from './news'
 import { PHOTO_JOBS, seedDemoPhotos } from './photos'
 import { CRITERIA, KITCHEN } from './story'
 
@@ -71,5 +72,6 @@ export async function seedContent(db: AppDB, kitchen: DemoKitchen, options: Seed
   await db.menus.bulkPut(rows.menus)
   await db.servings.bulkPut(rows.servings)
   await db.reviews.bulkPut(rows.reviews)
+  await db.news.bulkAdd(demoNews(rows, kitchen))
   await db.setMeta(PHOTO_JOBS, rows.photoJobs)
 }

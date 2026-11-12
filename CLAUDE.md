@@ -53,6 +53,9 @@ config and the screenshot tool read the same variable).
 - **Backup:** the rules (what is in the file, what an import may do) are pure functions in
   `src/data/backup.ts`; `backupFile.ts` packs and reads the zip (`zip.ts`, no library).
   An import only adds, writes through the store and never touches people.
+- **The bell:** `src/data/news.ts` decides what an arriving change is worth telling; the sync
+  writes the lines into the local `news` table while it applies a pull (never on the first
+  one). `src/features/news` words and shows them. Nothing about it lives in the cloud.
 - **Refused changes** (`deadLetters`) leave the list only through `sync.retryRefused` and
   `sync.discardRefused`; `src/data/refused.ts` puts them into words for the Sync page.
 - The real backend is Supabase (`supabaseBackend.ts`); rules live in `supabase/migrations`.

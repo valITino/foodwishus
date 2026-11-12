@@ -238,6 +238,29 @@ a meal needs a photo to count as eaten. Both are the game's rules, not oversight
 Known and accepted: the 24 hours start when the first face is tapped, not when the meal is
 handed in. A face tapped one day and handed in the next leaves less time to change it.
 
+## 13. The bell: news is made on the phone that receives a change
+
+Today has a bell with a list of what the other one did. There is no table of events in
+the cloud. When a sync brings rows in, the phone compares each with the row it had and
+writes a line for what is worth telling (`src/data/news.ts`): a new wish, a plan, a move,
+served, eaten, the cook's answer, a skip, hearts, a note, a new cook, a new dish or menu,
+the partner's arrival.
+
+- **Why not a table in the cloud.** It would need a migration, a trigger per event and
+  rules of its own, to store what the rows already say. Made on arrival, the news needs
+  no server, works for changes made offline days ago, and cannot disagree with the data.
+- **What I did myself is never news.** A change made on this phone comes back from the
+  cloud looking like the row that is already here. A change made on my own tablet is
+  dropped where the change names me (a wish I proposed, a meal I served).
+- **Who did it** is said only when the change itself says so: the cook serves, the other
+  one eats and gives hearts, the proposer writes the note. Planning, moving and skipping
+  could be either, so those lines name nobody.
+- **The first sync of a phone is not news**: it fills an empty phone with the kitchen as it is.
+- **Cost:** the list is per phone. A new phone starts with an empty bell, and "seen" on
+  the phone does not mean seen on the tablet. Eighty lines or 45 days are kept.
+- The push notifications stay as they are (five events, sent by the cloud). The bell is
+  the history inside the app, also for people who never allowed notifications.
+
 ## Limits to know
 
 | Limit | Value | What happens at the limit |

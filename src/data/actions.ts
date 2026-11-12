@@ -513,6 +513,14 @@ export async function removeCriterion(id: ID): Promise<void> {
   await store.remove('criteria', id)
 }
 
+// -------------------------------------------------------------------- news --
+
+/** The list behind the bell has been opened: nothing in it is new any more. Stays on this phone. */
+export async function markNewsSeen(): Promise<void> {
+  const at = nowIso()
+  await db.news.filter((item) => item.seenAt === null).modify({ seenAt: at })
+}
+
 // ------------------------------------------------------------------ backup --
 //
 // One file with everything in the kitchen (backupFile.ts packs and reads it, backup.ts

@@ -4,6 +4,8 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { boot, isDemo, leaveDemo, useSyncStatus } from '../data/app'
 import { useMe } from '../data/hooks'
+import { useUnseenNews } from '../data/queries'
+import { NewsScreen } from '../features/news'
 import { Onboarding, PausedScreen, usePaused } from '../features/onboarding'
 import { PlanningRoutes, TodayPicker, TodayScreen, WeekScreen, WishlistScreen } from '../features/planning'
 import { RecipeBookScreen, RecipesRoutes } from '../features/recipes'
@@ -100,6 +102,8 @@ export function Shell() {
   const status = useSyncStatus()
   const paused = usePaused()
   const [adding, setAdding] = useState(false)
+  // From any tab: a number on Today says the other one did something.
+  const unseenNews = useUnseenNews() ?? 0
   const [pickingToday, setPickingToday] = useState(false)
   const { path } = route
 
@@ -179,6 +183,7 @@ export function Shell() {
   else if (path.startsWith('/serving/') || path.startsWith('/propose/')) page = <PlanningRoutes route={route} />
   else if (isReviewPath(path)) page = <ReviewRoutes route={route} />
   else if (path.startsWith('/settings')) page = <SettingsRoutes route={route} />
+  else if (path === '/news') page = <NewsScreen />
   else page = null
 
   // An address that leads nowhere (an old link, a start-screen path after logging in) goes home.
@@ -195,7 +200,7 @@ export function Shell() {
     <>
       {isDemo && <DemoBanner />}
       {page}
-      {tab && <TabBar active={tab} onSelect={(id) => navigate(TAB_PATHS[id], { replace: true })} onAdd={() => setAdding(true)} />}
+      {tab && <TabBar active={tab} onSelect={(id) => navigate(TAB_PATHS[id], { replace: true })} onAdd={() => setAdding(true)} badges={tab === 'today' ? {} : { today: unseenNews }} />}
       <AddSheet open={adding} onClose={() => setAdding(false)} onToday={() => setPickingToday(true)} />
       <TodayPicker open={pickingToday} onClose={() => setPickingToday(false)} />
       <Toaster />
