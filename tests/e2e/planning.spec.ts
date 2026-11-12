@@ -111,6 +111,11 @@ test.describe('proposing', () => {
     await expect(page.getByRole('heading', { name: 'Propose a dish' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Lasagne al forno' })).toBeVisible()
 
+    // It goes on the wishlist unless told otherwise, and two weeks of days are there to tap.
+    await expect(page.getByRole('radio', { name: 'On the wishlist' })).toBeChecked()
+    await expect(page.getByTestId('where-hint')).toHaveText('It waits on the wishlist until one of you picks a day.')
+    await expect(page.getByRole('group', { name: 'Good days for it' }).getByRole('button')).toHaveCount(14)
+
     await page.getByLabel('A note for Mia').fill('Extra cheese, just for you')
     await page.locator(`[data-day="${tomorrow}"]`).click()
     await expect(page.locator(`[data-day="${tomorrow}"]`)).toHaveAttribute('aria-pressed', 'true')
@@ -133,6 +138,98 @@ test.describe('proposing', () => {
     await expect(page.getByText('You suggested')).toBeVisible()
     await expect(page.getByTestId('planner').locator(`[data-day="${tomorrow}"]`)).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByTestId('planner').locator(`[data-day="${tomorrow}"]`)).toHaveAccessibleName(/suggested/)
+  })
+
+  test('good days can be any day: a later one goes through the date field', async ({ page }) => {
+    const people = await openKitchen(page)
+    const dishId = await addDish(page, 'Fondue chinoise')
+    const tomorrow = addDays(today(), 1)
+    const christmas = addDays(today(), 43)
+    const newYear = addDays(today(), 50)
+
+    await page.goto(`/#/propose/dish/${dishId}`)
+    const later = page.getByLabel('Add a later day')
+    await page.locator(`[data-day="${tomorrow}"]`).click()
+    await later.fill(christmas)
+    const chips = page.getByTestId('later-days').getByRole('button')
+    await expect(chips).toHaveCount(1)
+    await expect(chips.first()).toHaveAttribute('aria-pressed', 'true')
+    // The field is ready for the next day right away.
+    await expect(later).toHaveValue('')
+    await later.fill(newYear)
+    await expect(chips).toHaveCount(2)
+    // A day that is one of the fourteen is ticked there, not listed a second time.
+    await later.fill(addDays(today(), 3))
+    await expect(page.locator(`[data-day="${addDays(today(), 3)}"]`)).toHaveAttribute('aria-pressed', 'true')
+    await expect(chips).toHaveCount(2)
+    // A day that is over cannot be a good day.
+    await later.fill(addDays(today(), -1))
+    await expect(chips).toHaveCount(2)
+    // Changed her mind about New Year: one tap takes it away.
+    await chips.nth(1).click()
+    await expect(chips).toHaveCount(1)
+
+    await page.getByRole('button', { name: 'Propose' }).click()
+    await expect(page).toHaveURL(/#\/wishlist$/)
+    const stored = await page.evaluate(async () => (await window.__foodwishus.db.servings.toArray())[0])
+    expect(stored).toMatchObject({ status: 'wishlist', suggestedDays: [tomorrow, addDays(today(), 3), christmas], cookedBy: people.mia })
+
+    // On the meal's page the far day is in sight, with its heart, and one tap picks it.
+    await card(page, 'Fondue chinoise').getByRole('button', { name: 'Open Fondue chinoise' }).click()
+    const planner = page.getByTestId('planner')
+    const far = planner.getByTestId('later-days').getByRole('button')
+    await expect(far).toHaveCount(1)
+    await expect(far).toHaveAccessibleName(/, suggested$/)
+    await expect(far).toHaveAttribute('aria-pressed', 'false')
+    await far.click()
+    await expect(far).toHaveAttribute('aria-pressed', 'true')
+    await expect(planner.getByLabel('Or a later day')).toHaveValue(christmas)
+    await planner.getByRole('button', { name: 'Plan it' }).click()
+    // "Proposed" may still be on screen next to it.
+    await expect(toast(page, /Planned for .+, dinner$/)).toBeVisible()
+    expect(await serving(page, stored.id)).toMatchObject({ status: 'planned', plannedDate: christmas, plannedSlot: 'dinner' })
+  })
+
+  test('from the recipe straight onto the calendar, on any day', async ({ page }) => {
+    const people = await openKitchen(page)
+    const dishId = await addDish(page, 'Birchermüesli', { course: 'breakfast' })
+    const far = addDays(today(), 75)
+
+    await page.goto(`/#/recipes/${dishId}`)
+    await page.getByRole('button', { name: 'Propose' }).click()
+    await expect(page.getByRole('heading', { name: 'Propose a dish' })).toBeVisible()
+    await page.getByRole('radio', { name: 'On a day' }).click()
+    await expect(page.getByTestId('where-hint')).toHaveText('It goes straight onto the calendar.')
+
+    // No day, no plan: the button waits and says why.
+    const plan = page.getByRole('button', { name: 'Plan it' })
+    await expect(plan).toBeDisabled()
+    await expect(page.getByText('Pick a day first.')).toBeVisible()
+    // A breakfast dish is guessed to be breakfast.
+    await expect(page.getByRole('group', { name: 'Meal' }).getByRole('button', { name: 'Breakfast' })).toHaveAttribute('aria-pressed', 'true')
+
+    // One day only: the far one replaces the tapped one.
+    await page.locator(`[data-day="${addDays(today(), 2)}"]`).click()
+    await expect(plan).toBeEnabled()
+    await page.getByLabel('Or a later day').fill(far)
+    await expect(page.locator(`[data-day="${addDays(today(), 2)}"]`)).toHaveAttribute('aria-pressed', 'false')
+    await page.getByLabel('A note for Mia').fill('For the long weekend')
+    await page.getByRole('group', { name: 'Meal' }).getByRole('button', { name: 'Lunch' }).click()
+    await plan.click()
+
+    await expect(toast(page, /^Planned for .+, lunch$/)).toBeVisible()
+    await expect(page).toHaveURL(/#\/serving\//)
+    await expect(page.getByRole('heading', { level: 1, name: 'Planned' })).toBeVisible()
+    await expect(page.getByTestId('serving-status')).toContainText('Planned for')
+    const stored = await page.evaluate(async () => (await window.__foodwishus.db.servings.toArray())[0])
+    expect(stored).toMatchObject({ status: 'planned', plannedDate: far, plannedSlot: 'lunch', suggestedDays: [], note: 'For the long weekend', cookedBy: people.mia, proposedBy: people.leo })
+
+    // It is on the calendar, however far away.
+    await page.goto('/#/week')
+    await page.getByRole('radio', { name: 'Month' }).click()
+    for (let month = 0; month < 4 && (await page.getByTestId('month').locator(`[data-day="${far}"]`).count()) === 0; month++) await page.getByRole('button', { name: 'Next month' }).click()
+    await page.getByTestId('month').locator(`[data-day="${far}"]`).click()
+    await expect(page.getByTestId('month-day').getByTestId('week-meal')).toContainText('Birchermüesli')
   })
 
   test('propose a menu, cooked by me', async ({ page }) => {
@@ -399,9 +496,9 @@ test.describe('planning and Our Week', () => {
     await expect(day.getByRole('heading')).toHaveText(weekdayName(tomorrow))
     await expect(day.getByTestId('week-meal')).toContainText('Lasagne al forno')
     await expect(day.getByTestId('week-meal')).toContainText('Dinner')
-    // Dinner is taken, the other slots are still free.
-    await expect(day.locator('[data-slot="dinner"]')).toHaveCount(0)
-    await expect(day.locator('[data-slot="lunch"]')).toBeVisible()
+    // Dinner is taken, and every meal of the day can still take something: also a second dish for dinner.
+    await expect(day.locator('[data-slot]')).toHaveCount(4)
+    await expect(day.getByRole('button', { name: /^Plan dinner for / })).toBeVisible()
 
     // Changing your mind: back to the wishlist.
     await day.getByTestId('week-meal').click()

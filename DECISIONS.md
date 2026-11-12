@@ -232,8 +232,25 @@ kitchen may change a meal; only verdicts are guarded).
   cook, or a new one. If the dish is only on the list as something the partner cooks, the
   button is not offered.
 
+- **Any day, from anywhere.** Proposing a dish used to offer the next seven days as "good
+  days" and nothing else, and a dish could only reach the calendar through the wishlist or
+  from the calendar's side. Now every place that asks for a day is the same control
+  (`DayChoice`): two weeks to tap, a date field for any later day, and later days that are
+  chosen or suggested shown as chips, so a suggestion for Christmas is in sight in November.
+  **Propose** asks where the dish goes: on the wishlist with good days, or on a day, which
+  stores it as planned in one write.
+- **A meal of the day is not a single seat.** The calendar used to offer only the meals of
+  a day that were still empty, and the sheet hid a recipe that was planned anywhere. So
+  bread with the soup, or the same breakfast on two mornings, needed a detour. Every meal
+  of a day that is not over now takes another dish, and a recipe that is planned for
+  another moment is offered twice: as that meal (to move it) and from the book (to have it
+  again). Only a wish is still offered once, as the wish, and what already sits in the
+  very slot is not offered again.
+
 Kept as they are, on purpose: the proof photo is the Taster's (the cook cannot add it), and
-a meal needs a photo to count as eaten. Both are the game's rules, not oversights.
+a meal needs a photo to count as eaten. Both are the game's rules, not oversights. A day
+that is over takes no plan: a meal that was forgotten is logged with "A meal for today",
+and its photo (or "Change time" under it) puts it on the day it was eaten.
 
 Known and accepted: the 24 hours start when the first face is tapped, not when the meal is
 handed in. A face tapped one day and handed in the next leaves less time to change it.

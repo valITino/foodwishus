@@ -83,8 +83,14 @@ they want it and drags the cards into order: the top one is the biggest wish. Ta
 pick a day for it, to skip it or to take it off the list.
 
 **Week.** Our week as a calendar: what is planned for which day and meal, and what was
-eaten. Tap a free meal of a day to fill it: from the wishlist, or with anything from the
-recipe book. Tap a meal to open it.
+eaten. Tap a meal of a day (breakfast, lunch, dinner, dessert) to put something there:
+from the wishlist, or anything from the recipe book. A meal that is taken still takes a
+second dish, and the same dish can be planned as often as you like. Tap a planned meal to
+open it.
+
+**Any day is fine.** Wherever a day is picked, the next two weeks are there to tap and a
+date field takes every day after them. On a dish, **Propose** asks where it goes: **On the
+wishlist**, with as many good days as you like, or **On a day**, straight onto the calendar.
 
 **Cockpit.** The numbers: your favourites, ratings over time, how well cravings predicted
 the verdict, a calendar of hearts, the Hall of Fame and a few fun facts. The filter at the
