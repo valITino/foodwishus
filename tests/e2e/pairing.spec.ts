@@ -35,7 +35,7 @@ async function openPhone(browser: Browser, options: { clipboard?: boolean } = {}
   return context.newPage()
 }
 
-const tabs = (page: Page) => page.getByRole('navigation', { name: 'Main' })
+const tabs = (page: Page) => page.getByRole('navigation', { name: /^(Main|Hauptnavigation)$/ })
 /** The newest toast with exactly this text. */
 const toast = (page: Page, text: string | RegExp) => page.getByText(text, { exact: true }).last()
 const next = (page: Page) => page.getByRole('button', { name: 'Next', exact: true }).click()

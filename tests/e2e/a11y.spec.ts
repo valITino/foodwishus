@@ -174,7 +174,7 @@ test('the start screens keep the basics, and so do the pages that need a real ki
   await expect(page.getByRole('heading', { name: 'Your kitchen is open' })).toBeVisible()
   await basics(page, 'the kitchen is open')
   await page.getByRole('button', { name: 'Done' }).click()
-  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: /^(Main|Hauptnavigation)$/ })).toBeVisible()
 
   for (const [name, path, landmark] of [
     ['Today, empty', '/', 'navigation'],

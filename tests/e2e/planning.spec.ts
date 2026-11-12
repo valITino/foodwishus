@@ -574,7 +574,7 @@ test.describe('Today', () => {
     // It is today's meal now, and still on the wishlist board with the others.
     await page.goto('/#/')
     await expect(page.getByTestId('today-meal')).toContainText('Rösti')
-    await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Wishlist' }).click()
+    await page.getByRole('navigation', { name: /^(Main|Hauptnavigation)$/ }).getByRole('button', { name: 'Wishlist' }).click()
     await expect(page).toHaveURL(/#\/wishlist$/)
     await expect.poll(() => board(page)).toEqual(['Rösti', 'Fondue', 'Zopf', 'Capuns'])
   })

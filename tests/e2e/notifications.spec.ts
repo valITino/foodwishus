@@ -143,7 +143,7 @@ test('turning notifications on, hearing from the kitchen, muting a kind and turn
 
   await test.step('nothing asks for permission by itself', async () => {
     await leo.goto('/#/')
-    await expect(leo.getByRole('navigation', { name: 'Main' })).toBeVisible()
+    await expect(leo.getByRole('navigation', { name: /^(Main|Hauptnavigation)$/ })).toBeVisible()
     await leo.goto('/#/settings')
     await expect(leo.getByTestId('notifications-state')).toHaveText('Off on this device.')
     await openNotifications(leo)
@@ -336,7 +336,7 @@ test('a device that has never reached the cloud says it cannot tell yet, instead
   const leo = await openPhone(browser, 'leo-phone')
   await pair(mia, leo)
   await mia.goto('/#/')
-  await expect(mia.getByRole('navigation', { name: 'Main' })).toBeVisible()
+  await expect(mia.getByRole('navigation', { name: /^(Main|Hauptnavigation)$/ })).toBeVisible()
 
   await mia.context().setOffline(true)
   await openNotifications(mia)
@@ -435,7 +435,7 @@ test.describe('installing', () => {
     // In the demo kitchen that leaves the section empty, so it is not shown at all.
     await expect(page.getByRole('heading', { name: 'This device' })).toHaveCount(0)
     await page.goto('/#/')
-    await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
+    await expect(page.getByRole('navigation', { name: /^(Main|Hauptnavigation)$/ })).toBeVisible()
     await expect(page.getByText(/install/i)).toHaveCount(0)
   })
 })
@@ -446,7 +446,7 @@ test('the update note: says a new version is ready, and "Later" puts it away', a
     localStorage.setItem('foodwishus.lang', 'de')
   })
   await page.goto('/#/')
-  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Hauptnavigation' })).toBeVisible()
   const note = page.getByTestId('update-note')
   await expect(note).toHaveCount(0)
 
@@ -458,10 +458,10 @@ test('the update note: says a new version is ready, and "Later" puts it away', a
   const later = note.getByRole('button', { name: 'Später' })
   for (const control of [reload, later]) expect((await control.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44)
   // It floats above the tab bar without covering it.
-  const [noteBox, tabsBox] = await Promise.all([note.boundingBox(), page.getByRole('navigation', { name: 'Main' }).boundingBox()])
+  const [noteBox, tabsBox] = await Promise.all([note.boundingBox(), page.getByRole('navigation', { name: 'Hauptnavigation' }).boundingBox()])
   expect((noteBox?.y ?? 0) + (noteBox?.height ?? 0)).toBeLessThan(tabsBox?.y ?? 0)
   // It stays while the person moves around, and is never in the way of a sheet.
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Rezepte' }).click()
+  await page.getByRole('navigation', { name: 'Hauptnavigation' }).getByRole('button', { name: 'Rezepte' }).click()
   await expect(note).toBeVisible()
 
   await later.click()
