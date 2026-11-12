@@ -112,7 +112,7 @@ test.describe('a meal for today', () => {
     await page.goBack()
     await expect(page.getByTestId('served-card')).toBeVisible()
     await expect(sheet(page)).toHaveCount(0)
-    await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Wishlist' }).click()
+    await page.getByRole('navigation', { name: /^(Main|Hauptnavigation)$/ }).getByRole('button', { name: 'Wishlist' }).click()
     await expect(page).toHaveURL(/#\/wishlist$/)
 
     // His phone: proof, please.

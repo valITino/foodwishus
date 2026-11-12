@@ -45,7 +45,7 @@ export async function demoPhotosReady(page: Page): Promise<void> {
 
 /** The newest toast with exactly this text. */
 export const toast = (page: Page, text: string | RegExp) => page.getByText(text, { exact: true }).last()
-export const tabs = (page: Page) => page.getByRole('navigation', { name: 'Main' })
+export const tabs = (page: Page) => page.getByRole('navigation', { name: /^(Main|Hauptnavigation)$/ })
 
 const LEO = { name: 'Leo', pin: '314159', kitchen: 'Casa Leo' }
 const MIA = { name: 'Mia', pin: '271828' }

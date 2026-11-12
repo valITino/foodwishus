@@ -21,7 +21,7 @@ async function openApp(page: Page): Promise<CDPSession> {
   // The demo kitchen: a full app with tabs and pages, and no cloud to talk to.
   await page.addInitScript(() => localStorage.setItem('foodwishus.prefs', '{"demoData":true,"demoEmpty":true}'))
   await page.goto('./')
-  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: /^(Main|Hauptnavigation)$/ })).toBeVisible()
   await workerInCharge(page)
   const tools = await page.context().newCDPSession(page)
   return tools
@@ -112,5 +112,5 @@ test('tapping the notification takes the open app to the right page and puts the
   // The app got there by itself: its own "back" still leads home.
   await page.goBack()
   await expect(page).toHaveURL(/\/(#\/)?$/)
-  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: /^(Main|Hauptnavigation)$/ })).toBeVisible()
 })
