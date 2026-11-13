@@ -14,9 +14,9 @@ import { Icon } from '../../ui/deco/Icon'
 import { ForkButton } from '../assistant'
 import { BasketButton } from '../basket'
 import { Bell } from '../news'
-import { EarlyProof, EatenToday, PhotoWallCard } from '../review'
+import { EarlyProof, EatenToday, PhotoWallCard, usePlate } from '../review'
 import { planningCopy } from './copy'
-import { cookOf, currentStreak, dayPart, eatenDay, eatenInWeek, isOpen, onTheTable, plannedFor, roleIn, upNext } from './logic'
+import { cookOf, currentStreak, dayPart, eatenDay, eatenInWeek, isOpen, plannedFor, roleIn, upNext, waitingForProof, waitsSince } from './logic'
 import { TodayPicker } from './MealPicker'
 import { MealThumb, nameOf, NoteBox, TextAction, useKitchen, useMealInfo, useWhen, type Kitchen } from './shared'
 
@@ -33,8 +33,21 @@ function ServedCard({ serving, kitchen, main }: { serving: Serving; kitchen: Kit
   const t = useT()
   const c = useCopy(planningCopy)
   const info = useMealInfo()(serving, kitchen)
+  const when = useWhen(kitchen.today)
   const taster = roleIn(serving, kitchen.meId) === 'taster'
   const partnerName = kitchen.partner?.name ?? ''
+  // On the table since a day that is over: logged afterwards, or the proof was never taken. Nothing is being served now.
+  const since = waitsSince(serving, kitchen.today)
+
+  let title: string
+  let body: string
+  if (since) {
+    title = c.today.lateTitle
+    body = taster ? c.today.lateForTaster(info.name) : c.today.lateForCook(info.name, partnerName)
+  } else {
+    title = serving.plannedSlot ? c.today.servedTitle[serving.plannedSlot] : c.today.servedTitlePlain
+    body = taster ? c.today.servedForTaster(info.name) : c.today.servedForCook(info.name, partnerName)
+  }
 
   return (
     <Card
@@ -47,13 +60,13 @@ function ServedCard({ serving, kitchen, main }: { serving: Serving; kitchen: Kit
     >
       <div className="flex gap-3 p-4 pb-3">
         <div className="min-w-0 flex-1">
-          {serving.plannedSlot && (
+          {(since || serving.plannedSlot) && (
             <Tag tone="butter">
-              <Icon name="clock" size={13} /> {t.slots[serving.plannedSlot]}
+              <Icon name="clock" size={13} /> {since ? when.at(since, serving.plannedSlot) : serving.plannedSlot ? t.slots[serving.plannedSlot] : null}
             </Tag>
           )}
-          <h2 className="mt-2 text-xl">{serving.plannedSlot ? c.today.servedTitle[serving.plannedSlot] : c.today.servedTitlePlain}</h2>
-          <p className="mt-1 text-sm text-ink-soft">{taster ? c.today.servedForTaster(info.name) : c.today.servedForCook(info.name, partnerName)}</p>
+          <h2 className="mt-2 text-xl">{title}</h2>
+          <p className="mt-1 text-sm text-ink-soft">{body}</p>
         </div>
         <Mascot size={74} mood={taster ? 'love' : 'happy'} className="-mr-1 shrink-0" />
       </div>
@@ -129,7 +142,7 @@ function HeroCard({ serving, kitchen, main }: { serving: Serving; kitchen: Kitch
           </Button>
         </div>
       ) : (
-        <EarlyProof servingId={serving.id} className="mx-4 mb-2" />
+        <EarlyProof serving={serving} className="px-4 pb-5" />
       )}
     </Card>
   )
@@ -153,16 +166,18 @@ function QueueRow({ serving, kitchen }: { serving: Serving; kitchen: Kitchen }) 
 }
 
 export function TodayScreen() {
+  const t = useT()
   const lang = useLang()
   const c = useCopy(planningCopy)
   const kitchen = useKitchen()
   const status = useSyncStatus()
   const [picking, setPicking] = useState(false)
+  const plate = usePlate('today')
 
   if (!kitchen) return <Screen tabs>{null}</Screen>
 
   const { servings, today, me, partner, meId } = kitchen
-  const served = onTheTable(servings)
+  const served = waitingForProof(servings, today)
   const planned = plannedFor(servings, today)
   const eaten = servings.filter((s) => eatenDay(s) === today)
   const queue = upNext(servings, today)
@@ -218,7 +233,15 @@ export function TodayScreen() {
               mood="happy"
               title={c.today.emptyTitle}
               body={wishes > 0 ? c.today.emptyWithWishes : c.today.emptyWithoutWishes}
-              action={<Button onClick={() => setPicking(true)}>{c.today.emptyAction}</Button>}
+              action={
+                <div className="flex flex-col items-center gap-3">
+                  <Button onClick={() => setPicking(true)}>{c.today.emptyAction}</Button>
+                  {/* Nothing was planned, and still there is a plate: the photo first, the rest after. */}
+                  <Button variant="secondary" icon={<Icon name="camera" size={20} />} onClick={plate.shoot}>
+                    {t.addSheet.plate}
+                  </Button>
+                </div>
+              }
             />
           </Card>
         )}
@@ -255,6 +278,7 @@ export function TodayScreen() {
       </main>
 
       <TodayPicker open={picking} onClose={() => setPicking(false)} />
+      {plate.parts}
     </Screen>
   )
 }

@@ -184,10 +184,8 @@ export function hasAnswer(answer: ChefAnswerView): boolean {
 
 // ------------------------------------------------------------------ photos --
 
-/** The first guess for "when was it eaten": the earliest proof photo. */
-export function firstPhotoTime(photos: ProofPhoto[]): ISO | null {
-  return photos.length ? photos.map((p) => p.takenAt).reduce((a, b) => (a < b ? a : b)) : null
-}
+// "When was it eaten" is defined once, for the flow and for finishMeal alike.
+export { eatenGuess, firstPhotoTime } from '../../lib/meals'
 
 /** The table first, then the courses in serving order. */
 export function sortProof(photos: ProofPhoto[], dishIds: ID[]): ProofPhoto[] {

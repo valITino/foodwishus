@@ -18,7 +18,7 @@ import { planningCopy } from '../planning/copy'
 import { cookOf } from '../planning/logic'
 import { MealThumb, nameOf, StickyFooter, TextAction, useKitchen, useMealInfo } from '../planning/shared'
 import { reviewCopy } from './copy'
-import { canJudge, celebrates, earliestSeal, EXTRA_REACTIONS, firstPhotoTime, hasDetails, hasVerdict, myVerdicts, reactionsDiffer, sharedExtras, sharedReaction, timeLeft, verdictDishIds } from './logic'
+import { canJudge, celebrates, earliestSeal, eatenGuess, EXTRA_REACTIONS, hasDetails, hasVerdict, myVerdicts, reactionsDiffer, sharedExtras, sharedReaction, timeLeft, verdictDishIds } from './logic'
 import { ExtrasTray, FacePicker, HeartConfetti, useNow } from './parts'
 import { ProofSection } from './ProofSection'
 import { ReviewSheet } from './ReviewSheet'
@@ -147,7 +147,7 @@ export function ReviewFlowScreen({ id }: { id: ID }) {
   const judged = dishIds.length > 0 && mine.every((verdict) => hasVerdict(verdict.review))
   const ready = photos.length > 0 && judged
   const trayOpen = trayOpened ?? extras.length > 0
-  const eatenAt = serving.eatenAt ?? corrected ?? firstPhotoTime(photos)
+  const eatenAt = serving.eatenAt ?? corrected ?? eatenGuess(serving)
   const labels = household?.settings.reactionLabels
   const stillRefused = refusal === 'proof' ? photos.length === 0 : refusal === 'verdict' ? !judged : false
   const sheetVerdict = sheet ? mine.find((verdict) => verdict.dishId === sheet.dishId) : undefined

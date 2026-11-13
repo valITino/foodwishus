@@ -47,6 +47,17 @@ Eight milestones. Feedback stops after M2 (design) and at the end.
       offers buttons and never changes anything himself. *Live since 12 Nov 2026. How good
       the real answers are is for the two cooks to say: no test here can.*
 
+- [x] **Photos for Fork, and a bell that can be tidied.** The pantry and a recipe from a
+      photo, a photo with a question; lines of the bell can be selected and deleted.
+      *Live since 13 Nov 2026. A call with a photo has not been seen in the function's
+      log yet: how well Fork sees is for the first photos to show.*
+- [ ] **A meal nobody entered, and the photo first.** "Log a meal" for today or any day
+      before (plus button, days that are over in Our Week, a planned meal whose day
+      slipped by), and "Take a photo and rate" with the camera before anything else.
+      *Built and tested. Open: the push function has one rule more ("Served" is not sent
+      to the meal's own cook) and the assistant's guide two paragraphs more; both reach
+      the cloud only when the two functions are deployed again.*
+
 ## What is verified so far, and how
 
 | Area | Verified by |

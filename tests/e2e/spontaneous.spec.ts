@@ -139,9 +139,10 @@ test.describe('a meal for today', () => {
     const [meal] = await servings(page)
     expect(meal).toMatchObject({ status: 'planned', plannedDate: today(), plannedSlot: 'dinner', cookedBy: people.mia, proposedBy: people.leo })
 
-    // It is in the recipe book now, and not offered a second time.
-    await page.getByRole('button', { name: 'Already on the table? Take the proof photo' }).click()
-    await expect(page.getByText('Not marked as served yet. No problem: your photo says it all.')).toBeVisible()
+    // The Taster need not wait for "Served": the camera is one tap away.
+    await expect(page.getByText('Already on the table?')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Take a photo and rate' })).toBeVisible()
+    // It is in the recipe book now.
     await page.goto('/#/recipes')
     await expect(page.getByTestId('dish-card').filter({ hasText: 'ramen with egg' })).toBeVisible()
   })
@@ -230,10 +231,10 @@ test.describe('plans change on the meal page', () => {
     const pizza = await propose(page, { dishId: await addDish(page, 'Pizza'), cookedBy: people.mia, plan: { date: addDays(today(), 2), slot: 'dinner' } })
     const soup = await propose(page, { dishId: await addDish(page, 'Soup'), cookedBy: people.mia })
 
-    // The Taster has no "Served", only the quiet way to the camera.
+    // The Taster has no "Served", only the way to the camera.
     await page.goto(`/#/serving/${pizza}`)
     await expect(page.getByRole('button', { name: 'Serve it now' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Already on the table? Take the proof photo' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Take a photo and rate' })).toBeVisible()
 
     await become(page, people.mia, 'Mia')
     await page.goto(`/#/serving/${pizza}`)

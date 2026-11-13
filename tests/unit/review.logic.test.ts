@@ -9,6 +9,7 @@ import {
   chefAnswer,
   earliestSeal,
   exifMoment,
+  eatenGuess,
   EXTRA_EMOJI,
   EXTRA_REACTIONS,
   firstPhotoTime,
@@ -265,6 +266,24 @@ describe('proof photos', () => {
   it('takes the earliest photo as the time the meal was eaten', () => {
     expect(firstPhotoTime([])).toBeNull()
     expect(firstPhotoTime([photo('a', '2026-11-10T19:30:00.000Z'), photo('b', '2026-11-10T18:42:00.000Z')])).toBe('2026-11-10T18:42:00.000Z')
+  })
+
+  it('believes the first photo, unless it was taken on a later day than the meal came to the table', () => {
+    const zurich = (day: string, time: string) => new Date(`${day}T${time}:00+01:00`).toISOString()
+    const table = zurich('2026-11-09', '19:00')
+    expect(eatenGuess({ servedAt: table, proofPhotos: [] })).toBeNull()
+    // The usual way: served, and photographed a moment later.
+    expect(eatenGuess({ servedAt: table, proofPhotos: [photo('a', zurich('2026-11-09', '19:12'))] })).toBe(zurich('2026-11-09', '19:12'))
+    // Never marked as served: the photo is all there is.
+    expect(eatenGuess({ servedAt: null, proofPhotos: [photo('a', zurich('2026-11-10', '08:00'))] })).toBe(zurich('2026-11-10', '08:00'))
+    // Logged for yesterday, photographed today: it stays yesterday's dinner.
+    expect(eatenGuess({ servedAt: table, proofPhotos: [photo('a', zurich('2026-11-10', '08:00'))] })).toBe(table)
+    // Served just before midnight, photographed just after: still that evening's meal.
+    expect(eatenGuess({ servedAt: zurich('2026-11-09', '23:55'), proofPhotos: [photo('a', zurich('2026-11-10', '00:05'))] })).toBe(zurich('2026-11-09', '23:55'))
+    // A photo from the gallery that is older than the day it was logged for is evidence, and wins.
+    expect(eatenGuess({ servedAt: table, proofPhotos: [photo('a', zurich('2026-11-08', '19:40'))] })).toBe(zurich('2026-11-08', '19:40'))
+    // Of several photos the earliest decides.
+    expect(eatenGuess({ servedAt: table, proofPhotos: [photo('late', zurich('2026-11-10', '08:00')), photo('early', zurich('2026-11-09', '19:20'))] })).toBe(zurich('2026-11-09', '19:20'))
   })
 
   it('shows the table first, then the courses in serving order', () => {

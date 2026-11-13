@@ -9,7 +9,10 @@ How it travels:
    one of the five events and asks `pg_net` to call this function once the change is saved.
 2. This function looks up who should hear about it (the other person, on every device
    that did not mute this kind), writes the words in their language and sends each
-   device one Web Push message, signed with the kitchen's VAPID key.
+   device one Web Push message, signed with the kitchen's VAPID key. One kind is not for
+   everybody: "Served" never goes to the meal's own cook. When the eater puts a meal on
+   the table himself (logged afterwards, or photographed before anything else), she
+   hears of it with the verdict.
 3. The service worker on the phone (`src/sw/sw.ts`) shows the notification and opens the
    right page on a tap.
 

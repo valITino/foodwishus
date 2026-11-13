@@ -247,10 +247,42 @@ kitchen may change a meal; only verdicts are guarded).
   again). Only a wish is still offered once, as the wish, and what already sits in the
   very slot is not offered again.
 
+- **A meal nobody entered.** Putting right what was forgotten used to take a detour: a
+  meal for today, then a photo from the gallery or "Change the time" to move it to its
+  day, and only the Taster could do that. Now **Log a meal** asks for the day (today or
+  any day before), the meal of the day, who cooked and the dish, and either of the two
+  may do it: behind the plus button, on every day that is over in Our Week, and on a
+  planned meal whose day slipped by.
+  - *It is stored as served, at a moment that is over* (`logMeal`): the usual time of
+    that meal on that day (`tableMoment`: 8:00, 12:30, 16:00, 19:00), never later than
+    now. "Planned for a day that is over" would not do: that state already means "it
+    slipped", and serving a slipped meal rightly counts for today. A served meal knows
+    when it came to the table, so the calendar, Today and Fork's reckoning of what was
+    cooked lately all put it on the right day without a new column.
+  - *The photo does not carry it off.* The time a meal was eaten used to be the first
+    proof photo's, always. A photo taken on a later day than the meal came to the table
+    now leaves the meal on its day (`eatenGuess`, used by the flow and by `finishMeal`).
+    This also puts right the evening when the proof was forgotten and taken at breakfast.
+    A photo from that day or before still decides, and the time can still be corrected.
+  - *A wish or a planned meal is taken along,* not made twice. The cook named in the
+    sheet is recorded, unless a verdict has been started.
+  - *A meal on the table can be removed* (it could only be skipped), for the one that was
+    logged for the wrong day.
+- **The photo first.** For the Taster the way to the camera was a line of small print.
+  It is a button now ("Take a photo and rate"), and it opens the camera itself instead of
+  a page with a camera button. Where no meal exists yet (the plus button, an empty Today)
+  the photo is taken first and a sheet asks what is on the plate. A dish from the recipe
+  book becomes a meal that is on the table from the moment of the photo, cooked by the
+  other one: whoever takes this photo eats. The photo is held in memory until the dish is
+  picked; closing the sheet leaves nothing behind.
+- **"Served" is not pushed to the meal's own cook.** Until now only the cook could put a
+  meal on the table, so "Proof needed!" always reached the eater. A meal the eater logs or
+  photographs first would have asked the cook for proof. She hears of it with the verdict.
+  The rule lives in the push function's `plan()`; the database trigger is unchanged.
+
 Kept as they are, on purpose: the proof photo is the Taster's (the cook cannot add it), and
 a meal needs a photo to count as eaten. Both are the game's rules, not oversights. A day
-that is over takes no plan: a meal that was forgotten is logged with "A meal for today",
-and its photo (or "Change time" under it) puts it on the day it was eaten.
+that is over takes no plan, only a meal that was eaten on it.
 
 Known and accepted: the 24 hours start when the first face is tapped, not when the meal is
 handed in. A face tapped one day and handed in the next leaves less time to change it.

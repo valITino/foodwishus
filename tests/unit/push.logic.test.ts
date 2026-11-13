@@ -311,6 +311,15 @@ describe('from one event to the messages', () => {
     })
   })
 
+  it('"Served" is not for the cook: a meal the eater put on the table himself asks nobody for proof', () => {
+    // Leo logged a meal Mia cooked, or took his photo before anything else.
+    expect(plan(event('served', LEO), kitchen(), NOW)).toEqual([])
+    // The other way round it is the usual call for proof.
+    expect(plan(event('served', LEO), kitchen({ meal: meal({ cookId: LEO }) }), NOW).map((d) => [d.device.memberId, d.message.body])).toEqual([[MIA, 'Leo served Älplermagronen. Proof needed!']])
+    // His verdict still reaches her.
+    expect(plan(event('reviewed', LEO), kitchen({ meal: meal({ status: 'eaten' }) }), NOW).map((d) => d.device.memberId)).toEqual([MIA])
+  })
+
   it('everything else opens the meal page and can wait a moment', () => {
     const planned = plan(event('planned'), kitchen({ meal: meal({ status: 'planned', plannedDate: '2026-11-13' }) }), NOW)
     expect(planned.map((d) => [d.message.url, d.urgency, d.message.body])).toEqual([[`/serving/${MEAL}`, 'normal', 'Mia planned Älplermagronen for dinner on Friday. Bring your appetite.']])
