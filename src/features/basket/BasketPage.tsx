@@ -6,16 +6,19 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { navigate, type Route } from '../../app/router'
 import { clearBought, notePantry, putOnBasket, removeFromBasket, removeFromPantry, tickBasket, updateBasketItem, updatePantryItem, usedUp } from '../../data/actions'
 import { useSyncStatus } from '../../data/app'
-import { ReadError, sortPantryNotes, type ReadProblem } from '../../data/helper'
+import { PHOTO_LIMITS } from '../../data/backend'
+import { lookAtPantry, ReadError, sortPantryNotes, type ReadProblem } from '../../data/helper'
 import { setPref, usePref } from '../../data/prefs'
 import { useBasket, usePantry } from '../../data/queries'
 import type { BasketItem, PantryItem } from '../../data/types'
-import { useLang, useT } from '../../i18n'
+import { useCopy, useLang, useT } from '../../i18n'
 import { formatDay } from '../../lib/dates'
 import { Button, Card, cx, EmptyState, Field, IconButton, PageHeader, Screen, Segmented, Sheet, SteamLoader, TextArea, toast, Toggle } from '../../ui/components'
 import { Mascot } from '../../ui/deco/Deco'
 import { Icon } from '../../ui/deco/Icon'
-import { fallbackLine, tellProblemLine, useBasketCopy, type BasketCopy } from './copy'
+import { assistantCopy } from '../assistant/copy'
+import { PhotoButtons, PhotoStrip, usePickedPhotos } from '../assistant/photos'
+import { fallbackLine, showProblemLine, tellProblemLine, useBasketCopy, type BasketCopy } from './copy'
 import { checkPlan, type CheckOutcome } from './fork'
 import { groupBasket, parseLines, sortPantry, type Line, type Need } from './logic'
 
@@ -488,6 +491,107 @@ function TellSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   )
 }
 
+/** Show Fork photos of what is at home; he lists what he can see, to look over before it is noted. */
+function ShowSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const c = useBasketCopy()
+  const lang = useLang()
+  const words = useCopy(assistantCopy).photos
+  const photos = usePickedPhotos(PHOTO_LIMITS.photos)
+  const [looking, setLooking] = useState(false)
+  const [seen, setSeen] = useState<{ lines: Line[]; note: string } | null>(null)
+  const [problem, setProblem] = useState<ReadProblem | null>(null)
+  const { clear } = photos
+  useEffect(() => {
+    if (open) return
+    clear()
+    setSeen(null)
+    setProblem(null)
+    setLooking(false)
+    // Only the closing matters here: `clear` is a new function on every paint and must not start this again.
+  }, [open])
+
+  const look = async () => {
+    if (looking || photos.picked.length === 0) return
+    setLooking(true)
+    setProblem(null)
+    // What the last look found (or did not find) says nothing about these photos.
+    setSeen(null)
+    try {
+      const result = await lookAtPantry(photos.picked.map((photo) => photo.file), lang)
+      setSeen({ lines: result.lines, note: result.note })
+    } catch (error) {
+      setProblem(error instanceof ReadError ? error.code : 'helper_down')
+    } finally {
+      setLooking(false)
+    }
+  }
+  const save = async () => {
+    if (!seen || seen.lines.length === 0) return
+    const { added, updated } = await notePantry(seen.lines)
+    toast(c.noted(added + updated))
+    onClose()
+  }
+  const again = () => {
+    photos.clear()
+    setSeen(null)
+  }
+
+  const found = seen !== null && seen.lines.length > 0
+  const footer = looking ? undefined : found ? (
+    <div className="flex flex-col gap-3 pb-1">
+      <Button block onClick={() => void save()}>
+        {c.tellSave}
+      </Button>
+      <Button block variant="quiet" onClick={again}>
+        {c.showAgain}
+      </Button>
+    </div>
+  ) : (
+    <Button block onClick={() => void look()} disabled={photos.picked.length === 0}>
+      {c.showLook}
+    </Button>
+  )
+
+  return (
+    <Sheet open={open} onClose={onClose} title={c.show} footer={footer}>
+      {looking ? (
+        <SteamLoader label={c.showLooking} />
+      ) : found ? (
+        <div>
+          <p className="mb-2 text-sm font-extrabold">{c.showResult}</p>
+          <ul className="rounded-card border border-line">
+            {seen.lines.map((line, index) => (
+              <li key={index} className="flex items-center gap-2 border-b border-line py-1 pl-4 pr-1 last:border-b-0" data-testid="seen-line">
+                <span className="min-w-0 flex-1 break-words">
+                  <span className="font-extrabold">{line.name}</span>
+                  {line.amount && <span className="ml-2 text-sm font-semibold text-ink-soft">{line.amount}</span>}
+                </span>
+                <IconButton icon="close" label={c.dismiss(line.name)} onClick={() => setSeen({ ...seen, lines: seen.lines.filter((_, at) => at !== index) })} />
+              </li>
+            ))}
+          </ul>
+          {seen.note && (
+            <p className="mt-2 px-1 text-sm leading-snug text-ink-soft" data-testid="seen-note">
+              {seen.note}
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm leading-snug">{c.showHint}</p>
+          <PhotoStrip picked={photos.picked} words={words} onRemove={photos.remove} />
+          <PhotoButtons words={words} onFiles={photos.add} disabled={photos.full} testId="pantry-photo" />
+          <p className="text-xs leading-relaxed text-ink-soft">{c.showPrivacy}</p>
+          <div role="alert" className="text-sm leading-snug">
+            {problem && <p data-testid="show-problem">{showProblemLine(c, problem)}</p>}
+            {seen && seen.lines.length === 0 && <p data-testid="show-problem">{seen.note || c.showNothing}</p>}
+          </div>
+        </div>
+      )}
+    </Sheet>
+  )
+}
+
 function PantryView() {
   const c = useBasketCopy()
   const lang = useLang()
@@ -495,6 +599,7 @@ function PantryView() {
   const status = useSyncStatus()
   const [editing, setEditing] = useState<string | null>(null)
   const [telling, setTelling] = useState(false)
+  const [showing, setShowing] = useState(false)
   const sorted = useMemo(() => sortPantry(pantry ?? [], lang), [pantry, lang])
   const now = Date.now()
 
@@ -507,9 +612,14 @@ function PantryView() {
   return (
     <>
       <AddLine label={c.pantryAddLabel} placeholder={c.pantryPlaceholder} hint={c.pantryHint} button={c.addButton} onAdd={add} />
-      <Button variant="secondary" block onClick={() => setTelling(true)}>
-        {c.tell}
-      </Button>
+      <div className="flex flex-col gap-2">
+        <Button variant="secondary" block onClick={() => setTelling(true)}>
+          {c.tell}
+        </Button>
+        <Button variant="secondary" block icon={<Icon name="camera" size={20} />} onClick={() => setShowing(true)}>
+          {c.show}
+        </Button>
+      </div>
       {status.later > 0 && (
         <p className="rounded-card bg-blush px-4 py-3 text-sm leading-snug" data-testid="later-note">
           {c.later}
@@ -548,6 +658,7 @@ function PantryView() {
 
       <PantrySheet item={sorted.find((item) => item.id === editing) ?? null} onClose={() => setEditing(null)} />
       <TellSheet open={telling} onClose={() => setTelling(false)} />
+      <ShowSheet open={showing} onClose={() => setShowing(false)} />
     </>
   )
 }

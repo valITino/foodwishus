@@ -1,6 +1,6 @@
 # The kitchen's helper
 
-One function, six jobs, each with its own instruction file (see "Skills" below):
+One function, eight jobs, each with its own instruction file (see "Skills" below):
 
 | Job | In the app | What it gets | What it answers |
 | --- | --- | --- | --- |
@@ -10,6 +10,8 @@ One function, six jobs, each with its own instruction file (see "Skills" below):
 | `nutrition-estimate` | Dish form, Calories, Let Fork estimate | a dish's name, servings and ingredient lines | calories, protein, carbs and fat per serving, as an estimate |
 | `assistant` | Ask Fork (the fork on Today, and in **+**) | a question, the talk before it, and the kitchen in lines | an answer in words, and up to four buttons to tap |
 | `recipe-from-text` | Ask Fork, Put it in the recipe book | a recipe the assistant wrote out in a talk | a recipe card for the dish form |
+| `pantry-photo` | Pantry, Show Fork a photo | one to four photos of what is at home | pantry lines to look over, and a note about what could not be seen |
+| `recipe-from-photo` | **+**, A recipe from a link or a photo, A photo | one to four photos of a recipe | a recipe card for the dish form |
 
 None of them writes to the kitchen. A card fills a form, suggestions wait on the basket
 for a person to accept, pantry lines are shown before they are saved, an estimate
@@ -97,6 +99,39 @@ question with a well-filled kitchen is about 6,000 tokens in and a few hundred o
 under a cent with the default model, around two cents with the larger one. Prices change:
 the pricing page of the Claude Console has today's.
 
+## Photos: what is at home, a recipe, a question
+
+Three places take photos, and all three send them the same way:
+
+- **Pantry, Show Fork a photo** (`pantry-photo`): the open fridge or a shelf in one
+  photo, or up to four photos of single things. The answer is pantry lines with an amount
+  only where it can be seen or read, and a note about what could not be made out. The
+  instruction for this job is the house rule turned around: never list what you do not see.
+- **A recipe from a photo** (`recipe-from-photo`): a cookbook page, a handwritten card, a
+  screenshot. Up to four photos are the pages of one recipe. The same skill that reads web
+  pages writes the card, and adds a check wherever the writing was hard to read.
+- **Ask Fork** (`assistant`, with `photos`): up to three photos with a question. What he
+  sees he says in words, with the usual offers: note it in the pantry, or put the recipe
+  into the dish form.
+
+How a photo travels: the phone shrinks it (1600 px on the long edge, JPEG, under about
+700 KB), sends it as base64 inside the request, the function hands it to the Claude API
+in front of the words, and that is all. Nothing is stored: not by the function, not in
+the database, not in the talk on the phone (which only remembers "with 1 photo"). A photo
+of an earlier question is not sent again.
+
+Limits, checked before a ticket is taken: four photos per request (three with a
+question), about 1 MB each, JPEG, PNG or WebP. Beyond them the answer is `too_big`.
+What a photo costs: an image of this size is about 2,500 tokens, a fraction of a cent
+with the default model.
+
+Not known for certain: how large a request Supabase lets through to a function. Four
+photos at the limit are close to 4 MB. If the gateway refuses that (status 413), the app
+says "that is too much at once", and the limits in `PHOTO_LIMITS` are the place to lower.
+
+Nobody else's photos go anywhere: not the proof photos, not the dish pictures. Only the
+ones somebody picks in one of these three places, for that one question.
+
 ## What leaves the kitchen, and what does not
 
 - **To the recipe site:** one ordinary page request, like a browser's, without cookies
@@ -116,7 +151,11 @@ the pricing page of the Claude Console has today's.
   for somebody who has them switched on), how often eaten and how liked; the plan, the
   wishlist with its hearts, the meals of the last weeks, the pantry, the basket. Whole
   recipes only for dishes that are asked about.
-- **Never:** who you are, names of people, notes and comments to each other, photos.
+- **To the AI, with photos:** the photos somebody picked for that one question (of the
+  pantry, of a recipe, with a question to Fork), shrunk on the phone. Nothing else is
+  sent with them that would not be sent without.
+- **Never:** who you are, names of people, notes and comments to each other, the proof
+  photos, the dish pictures, or any photo that was not picked for a question.
   (The assistant is told "you cook" or "your partner cooks", never a name. Ratings go
   along only as "liked 4.5 of 5", and only for a question to Fork.)
 - **Stored by the function:** nothing. The database keeps one number per kitchen and
@@ -126,7 +165,7 @@ the pricing page of the Claude Console has today's.
 
 GitHub and Supabase stay free. The AI is paid per use, from the Claude API account whose
 key is set in step 3: with the default model (`claude-haiku-5-5`) one question (a recipe
-read, a plan checked, a sentence sorted, a dish estimated, a question to Fork) is well under one cent, and the limit of 40
+read, a plan checked, a sentence sorted, a dish estimated, a question to Fork, a photo looked at) is well under one cent, and the limit of 40
 questions a day keeps even a very bad day at a few cents. Prices change: check the pricing page of the Claude Console before relying on this.
 
 ## Without a key it still does something
@@ -192,7 +231,7 @@ Functions, `ai`, Logs) says more:
 | --- | --- | --- |
 | "This page needs the AI helper, and it is not set up for this kitchen yet." | No key is set (step 3), or the function is not deployed (step 2). | Do the missing step. |
 | "The AI helper is not answering right now." | The AI did not answer, or refused the key. The log says `helper did not answer:` with `helper_key` for a refused key (wrong, deleted, or out of credit) and `helper_down` for an outage. | For `helper_key`: check the key and the account in the Claude Console. Otherwise try again later. |
-| "Fork has read 40 pages today, and that is the limit." (on the basket: "Fork has been asked often enough for today") | The day's tickets are used up. All six jobs share them. | Wait until tomorrow (Swiss time). To change the limit, change `per_day` in a new migration and `DAILY_TICKETS` in `contract.ts`. |
+| "Fork has read 40 pages today, and that is the limit." (on the basket: "Fork has been asked often enough for today") | The day's tickets are used up. All eight jobs share them. | Wait until tomorrow (Swiss time). To change the limit, change `per_day` in a new migration and `DAILY_TICKETS` in `contract.ts`. |
 | "This phone is not logged in to the kitchen any more." | The device's login is gone or its profile is paused. | Log in again on that phone. |
 | "The page did not answer." | The site was slow, down, or refuses visitors that are not browsers. Some sites do. | Try again, or add the dish by hand: the link is kept as its source. |
 | "Fork found no recipe on that page." | No recipe on it, or a pin without a link behind it. | Open the recipe's own page and use that link. |
@@ -247,6 +286,8 @@ the same way and a change is made in one place:
 - `skills/assistant.ts`: Fork in a talk. Who he is, how to answer, what he may offer and
   that he never says something is done, when to ask for a recipe first, and the guide to
   the app.
+- `skills/pantry-photo.ts`: what is at home, from photos. Only what can be seen, amounts
+  only where they can be seen or read, and a note for what could not be made out.
 - `skills/nutrition.ts`: calories, protein, carbs and fat per serving from ingredient
   lines. What counts (what is eaten: about half of the frying fat, no cooking water),
   usual sizes for "1 onion", how to round, and when not to estimate at all. Its rules are also part of the recipe

@@ -3,11 +3,12 @@
 // here is queued: it answers now or says why not.
 
 import { backend, db, isDemo } from './app'
-import { BackendError, type AssistantAsk, type AssistantResult, type RecipeFromTextResult, type HelperFailure, type HelperRequest, type NutritionEstimate, type NutritionEstimateResult, type PantryNotesResult, type RecipeFromLinkResult, type ResultOf, type ShoppingCheck, type ShoppingCheckResult } from './backend'
+import { BackendError, type AssistantAsk, type AssistantResult, type HelperPhoto, type PantryPhotoResult, type RecipeFromTextResult, type HelperFailure, type HelperRequest, type NutritionEstimate, type NutritionEstimateResult, type PantryNotesResult, type RecipeFromLinkResult, type ResultOf, type ShoppingCheck, type ShoppingCheckResult } from './backend'
+import { photoForHelper } from './photos'
 import type { BasketItem, Dish, Menu, PantryItem, Review, Serving } from './types'
 
-/** Why a link could not be read. The helper's own words, plus two only the app knows. */
-export type ReadProblem = HelperFailure | 'offline' | 'demo'
+/** Why the helper could not help. Its own words, plus three only the app knows: no connection, the demo kitchen, a file that is no picture. */
+export type ReadProblem = HelperFailure | 'offline' | 'demo' | 'bad_photo'
 
 export class ReadError extends Error {
   constructor(readonly code: ReadProblem) {
@@ -73,6 +74,35 @@ export function estimateNutrition(request: Omit<NutritionEstimate, 'job'>): Prom
 /** One question to Fork in a talk. The kitchen goes along with it; nothing is kept in the cloud. Rejects with a ReadError. */
 export function askFork(request: Omit<AssistantAsk, 'job'>): Promise<AssistantResult> {
   return ask({ job: 'assistant', ...request })
+}
+
+/**
+ * Photos somebody chose to show Fork, made ready to send. Asked for only where there is
+ * somebody to send them to: not in the demo kitchen, not without a connection.
+ * Rejects with ReadError('bad_photo') when a file is no picture this phone can read.
+ */
+export async function photosToShow(files: readonly Blob[]): Promise<HelperPhoto[]> {
+  if (isDemo) throw new ReadError('demo')
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new ReadError('offline')
+  try {
+    return await Promise.all(files.map((file) => photoForHelper(file)))
+  } catch {
+    throw new ReadError('bad_photo')
+  }
+}
+
+/** Have Fork say what is at home from photos of it: lines to look over. Rejects with a ReadError. */
+export async function lookAtPantry(files: readonly Blob[], lang: 'en' | 'de'): Promise<PantryPhotoResult> {
+  const photos = await photosToShow(files)
+  const known = (await db.pantry.toArray()).filter((item) => !item.deletedAt).map((item) => item.name)
+  return ask({ job: 'pantry-photo', lang, photos, known })
+}
+
+/** Have a recipe read from photos of it (a page, a card, a screenshot). Rejects with a ReadError. */
+export async function readRecipePhotos(files: readonly Blob[], options: Omit<ReadOptions, 'photo'>): Promise<RecipeFromTextResult> {
+  const photos = await photosToShow(files)
+  const knownTags = mostUsedTags(await db.dishes.toArray())
+  return ask({ job: 'recipe-from-photo', photos, ...options, knownTags })
 }
 
 /** Have a recipe that was written out in words turned into a card for the dish form. Rejects with a ReadError. */

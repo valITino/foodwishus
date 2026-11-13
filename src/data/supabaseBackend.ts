@@ -83,6 +83,8 @@ export async function helperResult<T extends HelperResult = HelperResult>(data: 
   if (context.status === 404) throw new BackendError('rejected', 'helper_off')
   // Refused at the door, by Supabase or by the helper: this device's login is no good any more.
   if (context.status === 401) throw new BackendError('rejected', 'not_signed_in')
+  // Refused before the helper saw it, for its size: photos that are more than the gateway lets through.
+  if (context.status === 413) throw new BackendError('rejected', 'too_big')
   let code: unknown
   try {
     code = ((await context.clone().json()) as { code?: unknown } | null)?.code

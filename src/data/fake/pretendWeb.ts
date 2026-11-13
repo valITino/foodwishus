@@ -249,13 +249,52 @@ function thingsIn(text: string): { name: string; amount: string }[] {
     })
 }
 
+/** A picture this small shows nothing: the tests' way to hand over "a photo with nothing on it". */
+const BLANK_PHOTO = 2000
+const seen = (images: number[]): number => images.filter((size) => size >= BLANK_PHOTO).length
+
+const FRIDGE = {
+  en: [{ name: 'Milk', amount: '1 l' }, { name: 'Eggs', amount: '6' }, { name: 'Butter', amount: 'opened' }, { name: 'Carrots', amount: '' }],
+  de: [{ name: 'Milch', amount: '1 l' }, { name: 'Eier', amount: '6' }, { name: 'Butter', amount: 'angebrochen' }, { name: 'Rüebli', amount: '' }],
+}
+const SINGLE_THINGS = {
+  en: [{ name: 'Flour', amount: '1 kg' }, { name: 'Sugar', amount: '500 g' }, { name: 'Olive oil', amount: 'half full' }, { name: 'Rice', amount: '' }],
+  de: [{ name: 'Mehl', amount: '1 kg' }, { name: 'Zucker', amount: '500 g' }, { name: 'Olivenöl', amount: 'halb voll' }, { name: 'Reis', amount: '' }],
+}
+
+/**
+ * The stand-in cannot see. It tells one photo (an open fridge, always the same four
+ * things) from several (one thing per photo) and from a blank one (nothing to see).
+ */
+function pretendFridge(german: boolean, images: number[]): unknown {
+  const lang = german ? 'de' : 'en'
+  const photos = seen(images)
+  if (photos === 0) return { lines: [], note: german ? 'Auf dem Foto ist nichts Essbares zu erkennen.' : 'I cannot make out any food in the photo.' }
+  if (photos === 1) return { lines: FRIDGE[lang], note: german ? 'Was hinten steht, sehe ich nicht.' : 'I cannot see what stands at the back.' }
+  return { lines: SINGLE_THINGS[lang].slice(0, photos), note: '' }
+}
+
+const CAKE = {
+  en: { name: "Grandma's apple cake", lines: ['4 apples', '200 g flour', '150 g sugar', '3 eggs', '100 g butter'], steps: ['Heat the oven to 180 degrees.', 'Beat butter, sugar and eggs, then fold in the flour.', 'Slice the apples, lay them on top and bake for 45 minutes.'], more: 'Let it cool in the tin before cutting.', check: 'The amount of sugar is hard to read: 150 g or 180 g.' },
+  de: { name: 'Omas Apfelkuchen', lines: ['4 Äpfel', '200 g Mehl', '150 g Zucker', '3 Eier', '100 g Butter'], steps: ['Ofen auf 180 Grad vorheizen.', 'Butter, Zucker und Eier schaumig rühren, dann das Mehl unterheben.', 'Äpfel in Schnitze schneiden, darauf verteilen und 45 Minuten backen.'], more: 'In der Form auskühlen lassen, dann schneiden.', check: 'Die Zuckermenge ist schwer zu lesen: 150 g oder 180 g.' },
+}
+
+/** A recipe "read" from photos: always grandma's apple cake, a second page adds a step, a blank photo is no recipe. */
+function pretendPictured(german: boolean, images: number[], estimate: boolean): unknown {
+  const photos = seen(images)
+  if (photos === 0) return NOT_A_RECIPE
+  const cake = CAKE[german ? 'de' : 'en']
+  const guessed = estimate ? pretendNutrition(cake.lines, 8) : null
+  return { isRecipe: true, name: cake.name, description: '', course: 'dessert', effort: 'easy', tags: [], servings: 8, prepMinutes: 20, cookMinutes: 45, ingredientLines: cake.lines, steps: photos > 1 ? [...cake.steps, cake.more] : cake.steps, notes: '', ...(guessed ? { ...guessed, nutritionEstimated: true } : NO_NUTRITION), checks: [{ about: 'ingredients', note: cake.check }] }
+}
+
 /**
  * The stand-in for Fork in a talk. It is no cook and no brain: it knows a handful of
  * questions by their words and answers them from the kitchen lines it was sent, with the
  * same offers and the same "let me look at the recipe first" the real one is asked for.
  * Enough to build and test the whole talk around it.
  */
-function pretendFork(german: boolean, user: string, talk: number): unknown {
+function pretendFork(german: boolean, user: string, talk: number, images: number[] = []): unknown {
   const lang = german ? 'de' : 'en'
   const question = /<question>\n([\s\S]*)\n<\/question>/.exec(user)?.[1] ?? ''
   const asked = fold(question)
@@ -266,6 +305,17 @@ function pretendFork(german: boolean, user: string, talk: number): unknown {
   // "The first dish in the book" names a dish without its name: the real one can follow that, and the app cannot send the recipe ahead.
   const named = /first dish|erste gericht/.test(asked) ? book[0] : book.filter((dish) => dish.name !== '' && asked.includes(fold(dish.name))).sort((a, b) => b.name.length - a.name.length)[0]
   const say = (text: string, offers: Record<string, unknown>[] = []) => ({ text, offers: offers.map((offer) => ({ ...NO_OFFER, ...offer })), look: [] })
+
+  // A photo came with the question: a recipe when the question says so, else what is at home.
+  if (images.length > 0) {
+    if (seen(images) === 0) return say(german ? 'Auf dem Foto erkenne ich nichts. Machst du noch eines, mit mehr Licht?' : 'I cannot make anything out in the photo. Can you take another one, with more light?')
+    if (/recipe|rezept/.test(asked)) {
+      const cake = CAKE[lang]
+      return say(`${cake.name}, ${german ? 'für 8 Portionen' : 'for 8 servings'}\n${cake.lines.map((line) => `- ${line}`).join('\n')}\n${cake.steps.join('\n')}\n${cake.check}`, [{ kind: 'recipe' }])
+    }
+    const things = (seen(images) === 1 ? FRIDGE : SINGLE_THINGS)[lang].slice(0, seen(images) === 1 ? 4 : seen(images))
+    return say(german ? `Ich sehe ${things.map((thing) => thing.name).join(', ')}. Was hinten steht, sehe ich nicht.` : `I can see ${things.map((thing) => thing.name).join(', ')}. I cannot see what stands at the back.`, [{ kind: 'pantry', lines: things }])
+  }
 
   // What is in a dish, or its calories: that needs the whole recipe.
   if (named && /what is in|was ist in|was kommt in|zutaten|ingredients|calories|kalorien|kcal/.test(asked)) {
@@ -351,9 +401,10 @@ function pretendWritten(text: string, estimate: boolean): unknown {
  * What the stand-in answers to one request, judged by the instructions and the material
  * it was given. `talk` is how many things were said before the question.
  */
-export function pretendAnswer(system: string, user: string, talk = 0): unknown {
+export function pretendAnswer(system: string, user: string, talk = 0, images: number[] = []): unknown {
   const german = system.includes('Write in German')
-  if (system.includes('Job: you are Fork, the kitchen assistant')) return pretendFork(german, user, talk)
+  if (system.includes('Job: you are Fork, the kitchen assistant')) return pretendFork(german, user, talk, images)
+  if (system.includes('Job: look at the photos and list the food and drink')) return pretendFridge(german, images)
   if (system.includes('Job: work out what has to be bought')) return pretendCheck(german, user)
   if (system.includes('Job: turn what the cook wrote or dictated')) return pretendNotes(user)
   const metric = system.includes('Convert cups')
@@ -363,6 +414,7 @@ export function pretendAnswer(system: string, user: string, talk = 0): unknown {
     const numbers = pretendNutrition(lines, Number(/Servings: (\d+)/.exec(user)?.[1] ?? 0))
     return numbers ? { canEstimate: true, ...numbers, note: '' } : { canEstimate: false, ...NO_NUTRITION, note: german ? 'Bei den meisten Zutaten fehlt die Menge.' : 'Most ingredients have no amount.' }
   }
+  if (user.startsWith('The recipe is in the')) return pretendPictured(german && !system.includes('Keep the language of the material'), images, estimate)
   if (user.includes('cornmeal')) return cornbreadAnswer(german && !system.includes('Keep the language of the material'), metric, estimate)
   const material = /<material>\n([\s\S]*)\n<\/material>/.exec(user)?.[1] ?? ''
   if (user.startsWith('A recipe as it was written out in a talk')) return pretendWritten(material, estimate)
@@ -387,10 +439,14 @@ export function pretendAnswer(system: string, user: string, talk = 0): unknown {
 /** The Claude API, stood in for. `down` makes it fail the way an outage does. */
 export function pretendHelper(options: { down?: boolean; asked?: unknown[] } = {}): AskFetch {
   return async (_url, init) => {
-    const body = JSON.parse(init.body) as { system: string; messages: { content: string }[] }
+    type Block = { type: string; text?: string; source?: { data?: string } }
+    const body = JSON.parse(init.body) as { system: string; messages: { content: string | Block[] }[] }
     options.asked?.push({ ...body, key: init.headers['x-api-key'], version: init.headers['anthropic-version'] })
     if (options.down) return new Response('{"type":"error","error":{"type":"overloaded_error"}}', { status: 529 })
-    // The question is the last thing said: what went before it is the talk.
-    return new Response(JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(pretendAnswer(body.system, body.messages.at(-1)?.content ?? '', body.messages.length - 1)) }] }))
+    // The question is the last thing said: what went before it is the talk. With photos it comes as blocks, the pictures first.
+    const last = body.messages.at(-1)?.content ?? ''
+    const words = typeof last === 'string' ? last : last.filter((block) => block.type === 'text').map((block) => block.text ?? '').join('\n')
+    const images = typeof last === 'string' ? [] : last.filter((block) => block.type === 'image').map((block) => block.source?.data?.length ?? 0)
+    return new Response(JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(pretendAnswer(body.system, words, body.messages.length - 1, images)) }] }))
   }
 }

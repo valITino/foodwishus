@@ -1,16 +1,19 @@
 // "Recipe from a link": paste a link (or share one to the app), set the switches, and
 // Fork fills in the dish form. Nothing is saved here: the form is where she checks it.
+// The same from photos of a recipe (a cookbook page, a handwritten card, a screenshot).
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { navigate, type Route } from '../../app/router'
 import { isDemo } from '../../data/app'
-import { DAILY_TICKETS } from '../../data/backend'
-import { mostUsedTags, readProblem, readRecipe, type ReadProblem } from '../../data/helper'
+import { DAILY_TICKETS, PHOTO_LIMITS } from '../../data/backend'
+import { mostUsedTags, readProblem, readRecipe, readRecipePhotos, type ReadProblem } from '../../data/helper'
 import { setPref, usePref } from '../../data/prefs'
 import { useDishes } from '../../data/queries'
-import { useLang } from '../../i18n'
-import { Button, Card, Field, PageHeader, Screen, SteamLoader, toast, Toggle } from '../../ui/components'
+import { useCopy, useLang } from '../../i18n'
+import { Button, Card, Field, PageHeader, Screen, Segmented, SteamLoader, toast, Toggle } from '../../ui/components'
 import { Mascot } from '../../ui/deco/Deco'
+import { assistantCopy } from '../assistant/copy'
+import { PhotoButtons, PhotoStrip, usePickedPhotos } from '../assistant/photos'
 import { useRecipesCopy } from './copy'
 import { dishFromPage, draftFromCard, handOver, linkIn, pictureFile, siteName } from './importLogic'
 import { emptyDraft } from './logic'
@@ -19,7 +22,7 @@ import { BottomBar, LineIcon } from './parts'
 /** Problems that adding the dish by hand does not get around. */
 const NO_WAY_AROUND: readonly ReadProblem[] = ['not_signed_in', 'not_member', 'bad_request', 'bad_link']
 
-/** `/recipes/import`, optionally with `?link=` (that is how a link shared from another app arrives). */
+/** `/recipes/import`, optionally with `?link=` (that is how a link shared from another app arrives) or `?way=photo`. */
 export function ImportPage({ route }: { route: Route }) {
   const c = useRecipesCopy().link
   const lang = useLang()
@@ -31,6 +34,10 @@ export function ImportPage({ route }: { route: Route }) {
   const calories = usePref('linkCalories')
   const dishes = useDishes({ includeArchived: true })
   const [link, setLink] = useState(() => route.query.get('link') ?? '')
+  /** Where the recipe is: behind a link, or on photos. */
+  const [way, setWay] = useState<'link' | 'photo'>(() => (route.query.get('way') === 'photo' ? 'photo' : 'link'))
+  const photos = usePickedPhotos(PHOTO_LIMITS.photos)
+  const photoWords = useCopy(assistantCopy).photos
   const [reading, setReading] = useState(false)
   // The demo kitchen says so before anyone has typed a link in vain.
   const [problem, setProblem] = useState<ReadProblem | null>(isDemo ? 'demo' : null)
@@ -100,6 +107,28 @@ export function ImportPage({ route }: { route: Route }) {
     }
   }
 
+  /** The same from photos: Fork reads the recipe off them, and the form opens filled in. */
+  const readPhotos = async () => {
+    if (reading || photos.picked.length === 0) return
+    setProblem(null)
+    setReading(true)
+    try {
+      const result = await readRecipePhotos(photos.picked.map((picked) => picked.file), { lang, translate, metric, nutrition: showCalories && calories })
+      if (!here.current) return
+      const ticket = handOver({ draft: draftFromCard(result.card, '', mostUsedTags(dishes ?? [], 200)), cover: null, read: { site: c.fromPhoto, by: 'helper', checks: result.card.checks, already: null } })
+      navigate(`/recipes/new?from=${ticket}`, { replace: true })
+    } catch (error) {
+      if (!here.current) return
+      setReading(false)
+      setProblem(readProblem(error))
+      requestAnimationFrame(() => problemBox.current?.focus())
+    }
+  }
+
+  const byPhoto = way === 'photo'
+  const title = byPhoto ? c.photoTitle : c.title
+  const problemWords = (why: ReadProblem): string => (byPhoto && c.photoProblems[why]) || (why === 'limit' ? c.problems.limit(DAILY_TICKETS) : c.problems[why])
+
   /** The way out when a page cannot be read: the empty form, with the link already noted as its source. */
   const byHand = () => {
     const ticket = handOver({ draft: { ...emptyDraft(), sourceUrl: linkIn(link) ?? '' }, cover: null, read: null })
@@ -109,9 +138,9 @@ export function ImportPage({ route }: { route: Route }) {
   if (reading) {
     return (
       <Screen>
-        <PageHeader title={c.title} backTo="/recipes" />
+        <PageHeader title={title} backTo="/recipes" />
         <main className="app-column px-6 pt-12 text-center">
-          <SteamLoader label={c.reading} />
+          <SteamLoader label={byPhoto ? c.readingPhoto : c.reading} />
           <p className="text-sm text-ink-soft">{c.readingHint}</p>
         </main>
       </Screen>
@@ -120,14 +149,37 @@ export function ImportPage({ route }: { route: Route }) {
 
   return (
     <Screen>
-      <PageHeader title={c.title} backTo="/recipes" />
+      <PageHeader title={title} backTo="/recipes" />
       <main className="app-column flex flex-col gap-5 px-4 pb-28 pt-5">
         <div className="flex items-center gap-4 px-1">
           <Mascot size={72} mood="happy" label="" className="shrink-0" />
-          <p className="min-w-0 text-sm font-semibold leading-snug">{c.intro}</p>
+          <p className="min-w-0 text-sm font-semibold leading-snug">{byPhoto ? c.photoIntro : c.intro}</p>
         </div>
 
-        <form id="link-form" onSubmit={(event) => void read(event)} noValidate>
+        <Segmented
+          label={c.ways}
+          value={way}
+          options={[
+            { value: 'link', label: c.way.link },
+            { value: 'photo', label: c.way.photo },
+          ]}
+          onChange={(next) => {
+            setWay(next)
+            // What went wrong with a link says nothing about a photo, and the other way round.
+            setProblem(isDemo ? 'demo' : null)
+          }}
+        />
+
+        {byPhoto && (
+          <Card className="flex flex-col gap-3" data-testid="recipe-photos">
+            <p className="text-sm leading-snug">{c.photoHint}</p>
+            <PhotoStrip picked={photos.picked} words={photoWords} onRemove={photos.remove} />
+            <PhotoButtons words={photoWords} onFiles={photos.add} disabled={photos.full} testId="recipe-photo" />
+            <p className="text-xs leading-relaxed text-ink-soft">{c.photoPrivacy}</p>
+          </Card>
+        )}
+
+        <form id="link-form" hidden={byPhoto} onSubmit={(event) => void read(event)} noValidate>
           <Card className="flex flex-col gap-3">
             <Field
               id="recipe-link"
@@ -153,7 +205,7 @@ export function ImportPage({ route }: { route: Route }) {
           </Card>
         </form>
 
-        {already && !reading && (
+        {already && !reading && !byPhoto && (
           <Card tone="blush" data-testid="link-known">
             <p className="text-sm font-extrabold">{c.knownTitle}</p>
             <p className="mt-1 break-words text-sm leading-snug">{c.knownBody(already.name)}</p>
@@ -167,9 +219,9 @@ export function ImportPage({ route }: { route: Route }) {
           <div ref={problemBox} tabIndex={-1} role="alert" className="rounded-card focus:outline-none">
             <Card tone="blush" data-testid="link-problem">
               <p className="text-sm font-extrabold">{problem === 'demo' ? c.demoTitle : c.problemTitle}</p>
-              <p className="mt-1 text-sm leading-snug">{problem === 'limit' ? c.problems.limit(DAILY_TICKETS) : c.problems[problem]}</p>
-              {!NO_WAY_AROUND.includes(problem) && linkIn(link) && (
-                <Button variant="secondary" className="mt-3" onClick={byHand}>
+              <p className="mt-1 text-sm leading-snug">{problemWords(problem)}</p>
+              {!NO_WAY_AROUND.includes(problem) && (byPhoto ? problem !== 'bad_photo' && problem !== 'too_big' && problem !== 'demo' : linkIn(link)) && (
+                <Button variant="secondary" className="mt-3" onClick={byPhoto ? () => navigate('/recipes/new', { replace: true }) : byHand}>
                   {c.byHand}
                 </Button>
               )}
@@ -184,7 +236,7 @@ export function ImportPage({ route }: { route: Route }) {
           <Card pad={false} className="divide-y divide-line px-4 py-1">
             <Toggle label={c.translate} checked={translate} onChange={(on) => setPref('linkTranslate', on)} />
             <Toggle label={c.metric} checked={metric} onChange={(on) => setPref('linkMetric', on)} />
-            <Toggle label={c.photo} checked={photo} onChange={(on) => setPref('linkPhoto', on)} />
+            {!byPhoto && <Toggle label={c.photo} checked={photo} onChange={(on) => setPref('linkPhoto', on)} />}
             {showCalories && <Toggle label={c.calories} checked={calories} onChange={(on) => setPref('linkCalories', on)} />}
           </Card>
         </section>
@@ -193,9 +245,15 @@ export function ImportPage({ route }: { route: Route }) {
       </main>
 
       <BottomBar>
-        <Button block type="submit" form="link-form">
-          {c.read}
-        </Button>
+        {byPhoto ? (
+          <Button block disabled={photos.picked.length === 0} onClick={() => void readPhotos()}>
+            {c.read}
+          </Button>
+        ) : (
+          <Button block type="submit" form="link-form">
+            {c.read}
+          </Button>
+        )}
       </BottomBar>
     </Screen>
   )

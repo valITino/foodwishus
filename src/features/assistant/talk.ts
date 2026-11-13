@@ -19,6 +19,8 @@ export interface Turn {
   id: string
   who: 'me' | 'fork'
   text: string
+  /** Mine only: how many photos came with the question. The photos themselves are not kept. */
+  photos?: number
   /** Fork only: the buttons under the answer. */
   offers?: Offer[]
   /** Which of the buttons were tapped, by their place in `offers`, and what came of it. */
@@ -62,7 +64,8 @@ export function saveTalk(memberId: ID, turns: Turn[], demo = false): void {
  * kept in the first place).
  */
 export function toSend(turns: Turn[], question: string): AssistantTurn[] {
-  const before = turns.slice(-SENT_TURNS).map((turn) => ({ who: turn.who, text: turn.text }))
+  // A photo of an earlier question is not sent again. That one was there is said, so "the photo" in a later question makes sense.
+  const before = turns.slice(-SENT_TURNS).map((turn) => ({ who: turn.who, text: turn.photos ? `${turn.text}\n(${turn.photos === 1 ? 'A photo' : `${turn.photos} photos`} came with this. Not shown again.)` : turn.text }))
   while (before.length > 0 && before[0].who !== 'me') before.shift()
   return [...before, { who: 'me', text: question }]
 }

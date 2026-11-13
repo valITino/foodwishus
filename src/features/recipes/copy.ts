@@ -1,6 +1,7 @@
 // Every word the Recipe Book says, in English and German (informal "du", Swiss spelling).
 // Shared words such as courses, effort, minutes and kcal come from useT().
 
+import type { ReadProblem } from '../../data/helper'
 import { useCopy } from '../../i18n'
 
 const en = {
@@ -251,6 +252,23 @@ const en = {
     photo: 'Bring the picture along',
     calories: 'Estimate calories when the page has none',
     read: 'Read recipe',
+    // The same reader, with photos of the recipe instead of a link to it.
+    ways: 'Where the recipe is',
+    way: { link: 'A link', photo: 'A photo' },
+    photoTitle: 'Recipe from a photo',
+    photoIntro: 'Photograph the recipe: a page of a cookbook, a handwritten card or a screenshot. Fork reads it and fills in the dish for you.',
+    photoHint: 'Up to four photos, for a recipe that runs over several pages. Straight from above and with enough light reads best.',
+    photoPrivacy: 'The photos go to the AI (Claude) for this one reading and are kept nowhere.',
+    readingPhoto: 'Fork is reading the photo',
+    fromPhoto: 'your photo',
+    photoProblems: {
+      not_a_recipe: 'Fork found no recipe on that. Photograph the whole recipe, straight from above and with enough light.',
+      too_big: 'That is too much at once. Use fewer photos.',
+      bad_photo: 'One of these is not a picture this phone can read. Take the photo with the camera.',
+      demo: 'The demo kitchen cannot read photos. Leave the demo and try it in your own kitchen.',
+      offline: 'No connection. Reading a photo needs the internet.',
+      helper_off: 'Reading a photo needs the AI helper, and it is not set up for this kitchen yet. Add the dish by hand, or ask whoever runs the kitchen to set it up.',
+    } as Partial<Record<ReadProblem, string>>,
     reading: 'Fork is reading the page',
     readingHint: 'This takes a few seconds.',
     honest: 'Fork gets help from an AI (Claude). It can misread things, so you check the dish before it is saved.',
@@ -276,6 +294,7 @@ const en = {
       helper_down: 'The AI helper is not answering right now. Try again in a moment, or add the dish by hand.',
       offline: 'No connection. Reading a link needs the internet.',
       demo: 'The demo kitchen cannot read links. Leave the demo and try it in your own kitchen.',
+      bad_photo: 'One of these is not a picture this phone can read. Take the photo with the camera.',
     },
     // In the dish form, above a dish that was read from a page.
     readFrom: (site: string) => `Read from ${site}`,
@@ -533,6 +552,22 @@ const de: typeof en = {
     photo: 'Das Bild mitnehmen',
     calories: 'Kalorien schätzen, wenn die Seite keine nennt',
     read: 'Rezept lesen',
+    ways: 'Wo das Rezept steht',
+    way: { link: 'Ein Link', photo: 'Ein Foto' },
+    photoTitle: 'Rezept aus einem Foto',
+    photoIntro: 'Fotografiere das Rezept: eine Kochbuchseite, einen handgeschriebenen Zettel oder einen Screenshot. Fork liest es und füllt das Gericht für dich aus.',
+    photoHint: 'Bis zu vier Fotos, für ein Rezept über mehrere Seiten. Gerade von oben und mit genug Licht liest es sich am besten.',
+    photoPrivacy: 'Die Fotos gehen für dieses eine Lesen an die KI (Claude) und werden nirgends gespeichert.',
+    readingPhoto: 'Fork liest das Foto',
+    fromPhoto: 'deinem Foto',
+    photoProblems: {
+      not_a_recipe: 'Darauf hat Fork kein Rezept gefunden. Fotografiere das ganze Rezept, gerade von oben und mit genug Licht.',
+      too_big: 'Das ist zu viel auf einmal. Nimm weniger Fotos.',
+      bad_photo: 'Eines davon ist kein Bild, das dieses Handy lesen kann. Mach das Foto mit der Kamera.',
+      demo: 'Die Demo-Küche kann keine Fotos lesen. Verlasse die Demo und probier es in deiner eigenen Küche.',
+      offline: 'Keine Verbindung. Zum Lesen eines Fotos braucht es Internet.',
+      helper_off: 'Zum Lesen eines Fotos braucht es den KI-Helfer, und der ist für diese Küche noch nicht eingerichtet. Erfasse das Gericht von Hand oder bitte die Person, die die Küche führt, ihn einzurichten.',
+    },
     reading: 'Fork liest die Seite',
     readingHint: 'Das dauert ein paar Sekunden.',
     honest: 'Fork bekommt Hilfe von einer KI (Claude). Sie kann sich verlesen, darum prüfst du das Gericht, bevor es gespeichert wird.',
@@ -558,6 +593,7 @@ const de: typeof en = {
       helper_down: 'Der KI-Helfer antwortet gerade nicht. Probier es gleich nochmal oder erfasse das Gericht von Hand.',
       offline: 'Keine Verbindung. Zum Lesen eines Links braucht es Internet.',
       demo: 'Die Demo-Küche kann keine Links lesen. Verlasse die Demo und probier es in deiner eigenen Küche.',
+      bad_photo: 'Eines davon ist kein Bild, das dieses Handy lesen kann. Mach das Foto mit der Kamera.',
     },
     readFrom: (site) => `Gelesen von ${site}`,
     lookOver: 'Schau es durch, ändere, was nicht stimmt, und speichere dann.',

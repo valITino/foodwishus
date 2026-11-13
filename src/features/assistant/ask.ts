@@ -3,7 +3,7 @@
 // recipe first, it gets it and is asked again, once.
 
 import type { AssistantOffer } from '../../data/backend'
-import { askFork, kitchenForFork, ReadError } from '../../data/helper'
+import { askFork, kitchenForFork, photosToShow, ReadError } from '../../data/helper'
 import type { ID } from '../../data/types'
 import { today } from '../../lib/dates'
 import { BRIEF_LIMITS, kitchenBrief, namedIn, wholeRecipe } from './brief'
@@ -28,7 +28,9 @@ export function settleOffers(offers: AssistantOffer[], dishOf: Map<string, ID>):
   })
 }
 
-export async function askAbout(turns: Turn[], question: string, who: { meId: ID; lang: 'en' | 'de'; calories: boolean }): Promise<Answer> {
+export async function askAbout(turns: Turn[], question: string, who: { meId: ID; lang: 'en' | 'de'; calories: boolean }, files: readonly Blob[] = []): Promise<Answer> {
+  // Photos that come with the question are made ready first: a file that is no picture stops here, before anything is sent.
+  const photos = files.length > 0 ? await photosToShow(files) : []
   const now = await kitchenForFork()
   const brief = kitchenBrief(now, who.meId, today(), who.calories)
   const recipe = (dishId: ID): string[] => {
@@ -41,7 +43,7 @@ export async function askAbout(turns: Turn[], question: string, who: { meId: ID;
   const talk = toSend(turns, question)
 
   for (let round = 0; round < 2; round++) {
-    const answer = await askFork({ lang: who.lang, turns: talk, kitchen: brief.kitchen, recipes })
+    const answer = await askFork({ lang: who.lang, turns: talk, kitchen: brief.kitchen, recipes, ...(photos.length > 0 ? { photos } : {}) })
     if (answer.text !== '') return { text: answer.text, offers: settleOffers(answer.offers, brief.dishOf), left: answer.left }
     // Fork wants to read a recipe first. Send it and ask again.
     const more = answer.look.flatMap((ref) => recipe(brief.dishOf.get(ref) ?? ''))

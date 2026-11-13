@@ -211,5 +211,5 @@ export interface Backend {
 export const photoPath = (householdId: ID, photoId: ID, variant: 'full' | 'thumb') =>
   `${householdId}/${photoId}${variant === 'thumb' ? '_t' : ''}.jpg`
 
-export type { AssistantAsk, AssistantOffer, AssistantPlace, AssistantResult, AssistantTurn, KitchenBrief, RecipeFromText, RecipeFromTextResult, Check, CheckTopic, HelperFailure, HelperRequest, HelperResult, NutritionEstimate, NutritionEstimateResult, PantryNotes, PantryNotesResult, RecipeCard, RecipeFromLink, RecipeFromLinkResult, ResultOf, ShoppingCheck, ShoppingCheckResult, ShoppingSuggestion } from '../../supabase/functions/ai/contract.ts'
-export { DAILY_TICKETS } from '../../supabase/functions/ai/contract.ts'
+export type { AssistantAsk, AssistantOffer, AssistantPlace, AssistantResult, AssistantTurn, HelperPhoto, KitchenBrief, PantryPhoto, PantryPhotoResult, RecipeFromPhoto, RecipeFromText, RecipeFromTextResult, Check, CheckTopic, HelperFailure, HelperRequest, HelperResult, NutritionEstimate, NutritionEstimateResult, PantryNotes, PantryNotesResult, RecipeCard, RecipeFromLink, RecipeFromLinkResult, ResultOf, ShoppingCheck, ShoppingCheckResult, ShoppingSuggestion } from '../../supabase/functions/ai/contract.ts'
+export { DAILY_TICKETS, PHOTO_LIMITS } from '../../supabase/functions/ai/contract.ts'

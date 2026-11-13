@@ -4,12 +4,13 @@
 // the pretend cloud exactly as it runs on Supabase.
 
 import { ask, DEFAULT_MODEL, HelperError, type AskFetch } from './claude.ts'
-import { SHOPPING_LIMITS, type AssistantAsk, type AssistantTurn, type HelperAnswer, type HelperFailure, type HelperRequest, type NutritionEstimate, type PantryNotes, type RecipeFromLink, type RecipeFromText, type ShoppingCheck } from './contract.ts'
+import { PHOTO_LIMITS, SHOPPING_LIMITS, type AssistantAsk, type AssistantTurn, type HelperAnswer, type HelperFailure, type HelperPhoto, type HelperRequest, type NutritionEstimate, type PantryNotes, type PantryPhoto, type RecipeFromLink, type RecipeFromPhoto, type RecipeFromText, type ShoppingCheck } from './contract.ts'
 import { cleanLink, hostFamily, PageError, pageMeta, pageText, pinTarget, readPage, readPicture, recipeData, withoutTracking, type FetchLike } from './page.ts'
 import { cardFromData, type Check, type RecipeCard } from './recipe.ts'
 import { ASSISTANT_LIMITS, assistantSkill } from './skills/assistant.ts'
 import { nutritionSkill } from './skills/nutrition.ts'
 import { pantryNotesSkill } from './skills/pantry-notes.ts'
+import { pantryPhotoSkill } from './skills/pantry-photo.ts'
 import { recipeCardSkill } from './skills/recipe-card.ts'
 import { shoppingCheckSkill } from './skills/shopping-check.ts'
 
@@ -48,7 +49,34 @@ const WORDS = {
 const lines = (value: unknown, max: number, each: number = SHOPPING_LIMITS.line): string[] =>
   Array.isArray(value) ? value.filter((line): line is string => typeof line === 'string' && line.trim() !== '').map((line) => line.replace(/\s+/g, ' ').trim().slice(0, each)).slice(0, max) : []
 
-function parse(body: unknown): HelperRequest | null {
+const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const
+
+/**
+ * The photos of a request. Null: something that is no photo, or none where one is needed.
+ * 'too_big': more or larger than the phone is meant to send. A photo is only looked at
+ * as far as it takes to know it is base64: the picture itself is the AI's to read.
+ */
+function photos(value: unknown, max: number, needed: boolean): HelperPhoto[] | 'too_big' | null {
+  if (value === undefined || value === null) return needed ? null : []
+  if (!Array.isArray(value) || (needed && value.length === 0)) return null
+  if (value.length > max) return 'too_big'
+  const out: HelperPhoto[] = []
+  let all = 0
+  for (const entry of value) {
+    if (entry === null || typeof entry !== 'object') return null
+    const { type, base64 } = entry as Record<string, unknown>
+    const kind = PHOTO_TYPES.find((name) => name === type)
+    if (!kind || typeof base64 !== 'string' || base64.length < 100) return null
+    if (base64.length > PHOTO_LIMITS.each) return 'too_big'
+    if (base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]+$/.test(base64.slice(0, 200)) || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64.slice(-200))) return null
+    all += base64.length
+    out.push({ type: kind, base64 })
+  }
+  return all > PHOTO_LIMITS.all ? 'too_big' : out
+}
+
+/** What a request asks for, tidied. Null: not a request. 'too_big': photos beyond the limits. */
+function parse(body: unknown): HelperRequest | 'too_big' | null {
   if (body === null || typeof body !== 'object') return null
   const raw = body as Record<string, unknown>
   const lang = raw.lang === 'de' ? 'de' : 'en'
@@ -78,6 +106,8 @@ function parse(body: unknown): HelperRequest | null {
     if (turns.at(-1)?.who !== 'me') return null
     const kitchen = raw.kitchen !== null && typeof raw.kitchen === 'object' ? (raw.kitchen as Record<string, unknown>) : {}
     if (typeof kitchen.today !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(kitchen.today)) return null
+    const shown = photos(raw.photos, PHOTO_LIMITS.withQuestion, false)
+    if (shown === null || shown === 'too_big') return shown
     const L = ASSISTANT_LIMITS
     return {
       job: 'assistant',
@@ -96,7 +126,14 @@ function parse(body: unknown): HelperRequest | null {
       },
       // Recipes keep their line breaks: they are read as ingredients and steps.
       recipes: Array.isArray(raw.recipes) ? raw.recipes.filter((recipe): recipe is string => typeof recipe === 'string' && recipe.trim() !== '').map((recipe) => recipe.trim().slice(0, L.recipe)).slice(0, L.recipes) : [],
+      ...(shown.length > 0 ? { photos: shown } : {}),
     }
+  }
+  if (raw.job === 'pantry-photo' || raw.job === 'recipe-from-photo') {
+    const shown = photos(raw.photos, PHOTO_LIMITS.photos, true)
+    if (shown === null || shown === 'too_big') return shown
+    if (raw.job === 'pantry-photo') return { job: 'pantry-photo', lang, photos: shown, known: lines(raw.known, SHOPPING_LIMITS.known, 80) }
+    return { job: 'recipe-from-photo', lang, photos: shown, translate: raw.translate !== false, metric: raw.metric !== false, nutrition: raw.nutrition === true, knownTags }
   }
   if (raw.job === 'recipe-from-text') {
     if (typeof raw.text !== 'string' || raw.text.trim().length < 20 || raw.text.length > 6000) return null
@@ -186,7 +223,7 @@ async function recipeFromLink(request: RecipeFromLink, deps: HelperDeps, left: n
 }
 
 /** One question to the helper for a job that is nothing without it. Null: it did not answer. */
-async function askSkill(deps: HelperDeps, skill: { system: string; user: string; schema: unknown; maxTokens: number; before?: { role: 'user' | 'assistant'; content: string }[]; model?: string }): Promise<unknown | null> {
+async function askSkill(deps: HelperDeps, skill: { system: string; user: string; schema: unknown; maxTokens: number; before?: { role: 'user' | 'assistant'; content: string }[]; images?: HelperPhoto[]; model?: string }): Promise<unknown | null> {
   try {
     const { model, ...question } = skill
     return await ask({ apiKey: deps.apiKey as string, model: model ?? deps.model ?? DEFAULT_MODEL, ...question }, deps.askFetch)
@@ -231,17 +268,27 @@ async function nutritionEstimate(request: NutritionEstimate, deps: HelperDeps, l
 async function assistant(request: AssistantAsk, deps: HelperDeps, left: number): Promise<HelperAnswer> {
   if (!deps.apiKey) return { ok: false, code: 'helper_off' }
   const skill = assistantSkill
-  const answer = await askSkill(deps, { system: skill.system(request), before: skill.history(request.turns), user: skill.user(request), schema: skill.schema, maxTokens: skill.maxTokens, model: deps.chatModel })
+  const answer = await askSkill(deps, { system: skill.system(request), before: skill.history(request.turns), user: skill.user(request), images: request.photos, schema: skill.schema, maxTokens: skill.maxTokens, model: deps.chatModel })
   const read = answer === null ? null : skill.read(answer, request)
   return read ? { ok: true, ...read, left } : { ok: false, code: 'helper_down' }
 }
 
-/** A recipe the assistant wrote out in words, as a card for the dish form. */
-async function recipeFromText(request: RecipeFromText, deps: HelperDeps, left: number): Promise<HelperAnswer> {
+/** What is at home, from photos of it. Lines to look over: the app saves nothing before a person has. */
+async function pantryPhoto(request: PantryPhoto, deps: HelperDeps, left: number): Promise<HelperAnswer> {
+  if (!deps.apiKey) return { ok: false, code: 'helper_off' }
+  const skill = pantryPhotoSkill
+  const answer = await askSkill(deps, { system: skill.system(request), user: skill.user(request), images: request.photos, schema: skill.schema, maxTokens: skill.maxTokens })
+  const read = answer === null ? null : skill.read(answer)
+  return read ? { ok: true, ...read, left } : { ok: false, code: 'helper_down' }
+}
+
+/** A recipe written out in words (by the assistant) or shown in photos, as a card for the dish form. */
+async function recipeFromText(request: RecipeFromText | RecipeFromPhoto, deps: HelperDeps, left: number): Promise<HelperAnswer> {
   if (!deps.apiKey) return { ok: false, code: 'helper_off' }
   const skill = recipeCardSkill
-  const ask_ = { lang: request.lang, translate: true, metric: true, nutrition: request.nutrition, knownTags: request.knownTags, site: null, data: null, text: request.text, written: true }
-  const answer = await askSkill(deps, { system: skill.system(ask_), user: skill.user(ask_), schema: skill.schema, maxTokens: skill.maxTokens })
+  const common = { lang: request.lang, nutrition: request.nutrition, knownTags: request.knownTags, site: null, data: null }
+  const ask_ = request.job === 'recipe-from-photo' ? { ...common, translate: request.translate, metric: request.metric, text: null, pictured: request.photos.length } : { ...common, translate: true, metric: true, text: request.text, written: true }
+  const answer = await askSkill(deps, { system: skill.system(ask_), user: skill.user(ask_), images: request.job === 'recipe-from-photo' ? request.photos : undefined, schema: skill.schema, maxTokens: skill.maxTokens })
   if (answer === null) return { ok: false, code: 'helper_down' }
   let card = skill.read(answer)
   if (!card) return { ok: false, code: 'not_a_recipe' }
@@ -263,6 +310,8 @@ export function helperHandler(deps: HelperDeps): (request: Request) => Promise<R
     }
     const asked = parse(body)
     if (!asked) return refuse('bad_request', 400)
+    // Too many or too large photos: an answer the app has words for, and no ticket taken.
+    if (asked === 'too_big') return refuse('too_big')
 
     const authorization = request.headers.get('authorization') ?? ''
     if (!/^Bearer\s+\S+/i.test(authorization)) return refuse('not_signed_in', 401)
@@ -274,7 +323,8 @@ export function helperHandler(deps: HelperDeps): (request: Request) => Promise<R
       if (asked.job === 'pantry-notes') return json(await pantryNotes(asked, deps, ticket.left))
       if (asked.job === 'nutrition-estimate') return json(await nutritionEstimate(asked, deps, ticket.left))
       if (asked.job === 'assistant') return json(await assistant(asked, deps, ticket.left))
-      if (asked.job === 'recipe-from-text') return json(await recipeFromText(asked, deps, ticket.left))
+      if (asked.job === 'recipe-from-text' || asked.job === 'recipe-from-photo') return json(await recipeFromText(asked, deps, ticket.left))
+      if (asked.job === 'pantry-photo') return json(await pantryPhoto(asked, deps, ticket.left))
       return json(await recipeFromLink(asked, deps, ticket.left))
     } catch (error) {
       if (error instanceof PageError) return refuse(error.code)
