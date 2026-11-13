@@ -122,12 +122,15 @@ test('the demo kitchen has a few lines to show what the bell is for', async ({ p
   await bell(page).click()
   await expect(lines(page)).toHaveCount(5)
   await expect(lines(page).filter({ hasText: 'New' })).toHaveCount(2)
-  await expect(lines(page).first()).toContainText(/Mia answered your verdict on .+\./)
+  // Which of them is the newest depends on the day the demo is opened: its story is told
+  // backwards from today. So the lines are found by what they say, not by where they stand.
+  const answered = lines(page).filter({ hasText: /Mia answered your verdict on .+\./ })
+  await expect(answered).toHaveCount(1)
   await expect(page.getByTestId('news')).toContainText(/Mia planned .+ for .+\./)
   await expect(page.getByTestId('news')).toContainText(/Mia put .+ on the wishlist\./)
 
   // A line leads to its meal, and back comes back to the list. Nothing is new any more.
-  await lines(page).first().getByRole('button').click()
+  await answered.getByRole('button').click()
   await expect(page.getByTestId('verdict-card')).toBeVisible()
   await page.goBack()
   await expect(lines(page)).toHaveCount(5)
