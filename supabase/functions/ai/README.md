@@ -334,6 +334,7 @@ the tested ones.
 | 12 Nov 2026, 17:35 | `03a28bb` | recipes from links, the plan check, pantry notes |
 | 12 Nov 2026, 20:20 | `907f442` | and calorie estimates, Ask Fork |
 | 13 Nov 2026, 06:00 | `9507a18` | and photos: the pantry, a recipe, with a question |
+| 13 Nov 2026, 10:03 | `85f76da` | the same jobs; Fork's guide knows "Log a meal" and "Take a photo and rate" |
 
 Migration `helper` (`0008_helper.sql`) is applied: the ticket counter and
 `public.ai_ticket()`. Checked in the catalogue: the counter is private, tickets are for
@@ -352,7 +353,8 @@ Seen in the function's log:
   with 200, after 2 to 17 seconds, and without a "helper did not answer" line. A question
   to Fork without a key is answered in well under a second, so these fit answers from the
   Claude API. What was asked and answered is not in the log.
-- Not seen yet: a call with a photo.
+- Not seen yet: a call with a photo. Between the deploy of 13 Nov, 06:00 and the one at
+  10:03 the helper was not called at all.
 
 The workspace this was deployed from cannot reach Supabase's function address, so the
 function is never called from there: what it does shows in Edge Functions, `ai`, Logs.
