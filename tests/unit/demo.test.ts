@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { AppDB, META } from '../../src/data/db'
 import { hm, zurichIso } from '../../src/data/demo/clock'
 import { buildDemoRows, CURRENT_STREAK, HISTORY_DAYS, type DemoRows } from '../../src/data/demo/history'
+import { demoNews } from '../../src/data/demo/news'
 import { PHOTO_JOBS } from '../../src/data/demo/photos'
 import { ensureDemoKitchen, seedDemoPhotos } from '../../src/data/demo/seed'
 import { CRITERIA } from '../../src/data/demo/story'
@@ -528,5 +529,28 @@ describe('Zurich clock', () => {
     expect(zurichIso('2027-03-28', hm(9, 0))).toBe('2027-03-28T07:00:00.000Z')
     expect(toDay(zurichIso('2026-10-25', hm(0, 5)))).toBe('2026-10-25')
     expect(toDay(zurichIso('2027-03-28', hm(23, 55)))).toBe('2027-03-28')
+  })
+})
+
+describe('the demo kitchen: lines for the bell', () => {
+  // 366 kitchens are built here. That takes a few seconds, more on the build server than the usual limit of five allows.
+  it('has the same five lines to show on every day of the year, whichever of them is the newest', { timeout: 60_000 }, () => {
+    const newest = new Set<string>()
+    for (let n = 0; n < 366; n++) {
+      const day = addDays('2026-01-01', n)
+      const rows = build(day)
+      const news = demoNews(rows, { householdId: rows.servings[0].householdId, chefId: 'mia', tasterId: 'leo' })
+      const kinds = news.map((line) => line.kind)
+      expect(news, day).toHaveLength(5)
+      // An answer to a verdict, two plans, two wishes: what the bell is for.
+      expect([...kinds].sort(), day).toEqual(['answered', 'planned', 'planned', 'proposed', 'proposed'])
+      // Oldest first, and the two newest are the ones still unread.
+      expect(news.map((line) => line.at), day).toEqual(news.map((line) => line.at).sort())
+      expect(news.map((line) => line.seenAt === null), day).toEqual([false, false, false, true, true])
+      newest.add(kinds[4])
+    }
+    // The story is told backwards from today, so the newest line is not the same kind every day.
+    // (A test that expected the answer on top passed on the two days it was written, and failed the day after.)
+    expect([...newest].sort()).toEqual(['answered', 'planned', 'proposed'])
   })
 })

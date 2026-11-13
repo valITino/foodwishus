@@ -324,27 +324,35 @@ first meeting is the first link pasted in the real app.
 
 ## What is deployed right now
 
-Switched on for the live project on 12 Nov 2026, each step after the owner's go-ahead:
+The function `ai` runs as a one-line loader that imports this folder from GitHub at one
+fixed commit, with JWT verification on. Each deploy was made after the owner's go-ahead,
+and each time the files GitHub serves at that commit were compared, byte for byte, with
+the tested ones.
 
-- Migration `helper` (`0008_helper.sql`) is applied: the ticket counter and
-  `public.ai_ticket()`. Checked in the catalogue: the counter is private, tickets are for
-  logged-in devices only.
-- The function `ai` is deployed (version 3, JWT verification on) as the one-line loader,
-  at commit `907f442b1b62a416df00dfc8c411d620762eb459`: all six jobs. The twelve files
-  GitHub serves at that commit are byte for byte the tested ones. (The first deploy, the
-  same day, was at `03a28bb` and knew the first three jobs.)
-- The secret `ANTHROPIC_API_KEY` is the owner's step, in the dashboard. Nobody else sees
-  it, so this note cannot say that it is there, only what the log shows.
+| Deployed (Zurich time) | Commit | What that version can do |
+| --- | --- | --- |
+| 12 Nov 2026, 17:35 | `03a28bb` | recipes from links, the plan check, pantry notes |
+| 12 Nov 2026, 20:20 | `907f442` | and calorie estimates, Ask Fork |
+| 13 Nov 2026, 06:00 | `9507a18` | and photos: the pantry, a recipe, with a question |
+
+Migration `helper` (`0008_helper.sql`) is applied: the ticket counter and
+`public.ai_ticket()`. Checked in the catalogue: the counter is private, tickets are for
+logged-in devices only.
+
+The secret `ANTHROPIC_API_KEY` is the owner's step, in the dashboard. Nobody else sees
+it, so this note cannot say that it is there, only what the log shows.
 
 Seen in the function's log:
 
-- Between the app's update and the second deploy, two calls were answered with 400: the
-  new app asked for a job the old function did not know. That is what an app that is
-  newer than its helper looks like, and why the function is deployed right after a merge.
-- The first four calls to the new version were each answered with 200, after 4 to 15
-  seconds, and without a "helper did not answer" line. A question to Fork without a key is
-  answered in well under a second, so these fit answers from the Claude API. What was
-  asked and answered is not in the log.
+- Whenever the app was merged before the function was deployed, calls for the new jobs
+  were answered with 400: the new app asked for a job the old function did not know. That
+  is what an app that is newer than its helper looks like, and why the function is
+  deployed right after a merge.
+- On the evening of 12 Nov, twelve calls to the version with Ask Fork were each answered
+  with 200, after 2 to 17 seconds, and without a "helper did not answer" line. A question
+  to Fork without a key is answered in well under a second, so these fit answers from the
+  Claude API. What was asked and answered is not in the log.
+- Not seen yet: a call with a photo.
 
 The workspace this was deployed from cannot reach Supabase's function address, so the
 function is never called from there: what it does shows in Edge Functions, `ai`, Logs.
@@ -355,5 +363,5 @@ not tied to a workspace is refused without one. In the app that reads "The AI is
 answering right now", and the log has a "helper did not answer: helper_down: status 400"
 line.
 
-To ship a change to the function: merge it, then deploy the loader again with the new
-commit in the address.
+To ship a change to the function: merge it, deploy the loader again with the new commit
+in the address, and add a line to the table.
