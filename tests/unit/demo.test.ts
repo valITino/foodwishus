@@ -533,7 +533,8 @@ describe('Zurich clock', () => {
 })
 
 describe('the demo kitchen: lines for the bell', () => {
-  it('has the same five lines to show on every day of the year, whichever of them is the newest', () => {
+  // 366 kitchens are built here. That takes a few seconds, more on the build server than the usual limit of five allows.
+  it('has the same five lines to show on every day of the year, whichever of them is the newest', { timeout: 60_000 }, () => {
     const newest = new Set<string>()
     for (let n = 0; n < 366; n++) {
       const day = addDays('2026-01-01', n)
