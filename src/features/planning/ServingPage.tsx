@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { back, navigate } from '../../app/router'
-import { ActionError, isSealed, markServed, planServing, proposeServing, removeServing, reviveServing, setCook, setCraving, skipServing, undoServed, unplanServing, updateServingNote } from '../../data/actions'
+import { ActionError, isSealed, logMeal, markServed, planServing, proposeServing, removeServing, reviveServing, setCook, setCraving, skipServing, undoServed, unplanServing, updateServingNote } from '../../data/actions'
 import { useReviews } from '../../data/queries'
 import type { Day, ID, Serving, Slot } from '../../data/types'
 import { useCopy, useLang, useT } from '../../i18n'
@@ -12,7 +12,7 @@ import { Heart } from '../../ui/deco/Deco'
 import { Icon, type IconName } from '../../ui/deco/Icon'
 import { EarlyProof, MealReview, ProofCard } from '../review'
 import { planningCopy } from './copy'
-import { canServe, canServeEarly, cookOf, defaultSlot, eatenDay, isDue, isOpen, linkedDay, roleIn, upcomingDays } from './logic'
+import { canServe, canServeEarly, cookOf, defaultSlot, eatenDay, isDue, isOpen, linkedDay, roleIn, slippedDay, tableMoment, upcomingDays, waitsSince } from './logic'
 import { DayChoice, MealThumb, nameOf, NoteBox, SlotChips, TextAction, useKitchen, useMealInfo, useWhen, type Kitchen, type MealInfo } from './shared'
 
 const STATUS_ICON: Record<Serving['status'], IconName> = { wishlist: 'wishlist', planned: 'calendar', served: 'clock', eaten: 'check', skipped: 'close' }
@@ -50,7 +50,13 @@ function Summary({ serving, kitchen, info, canSwapCook }: PartProps & { canSwapC
   else if (serving.status === 'planned' && serving.plannedDate) {
     const words = when.atInline(serving.plannedDate, serving.plannedSlot, 'long')
     status = serving.plannedDate < kitchen.today ? c.serving.overdue(words) : c.serving.plannedFor(words)
-  } else if (serving.status === 'served') status = iCook ? c.serving.servedCook : c.serving.servedTaster
+  } else if (serving.status === 'served') {
+    // On the table since an earlier day: logged afterwards, or the proof was never taken. Then the day is worth saying.
+    const since = waitsSince(serving, kitchen.today)
+    const words = since ? when.atInline(since, serving.plannedSlot, 'long') : null
+    if (words) status = iCook ? c.serving.servedOnCook(words) : c.serving.servedOnTaster(words)
+    else status = iCook ? c.serving.servedCook : c.serving.servedTaster
+  }
   else if (serving.status === 'eaten') status = c.serving.eatenOn(formatDay(eatenDay(serving) ?? kitchen.today, lang, 'full'))
   else if (serving.status === 'skipped') status = serving.skippedReason ? c.serving.skippedBecause(serving.skippedReason) : c.serving.skipped
   else status = c.shared.notPlanned
@@ -298,6 +304,7 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
   const kitchen = useKitchen()
   const reviews = useReviews()
   const mealInfo = useMealInfo()
+  const when = useWhen(kitchen?.today ?? '')
   const [changing, setChanging] = useState(false)
   const [sheet, setSheet] = useState<'skip' | 'remove' | null>(null)
   const [leaving, setLeaving] = useState(false)
@@ -333,8 +340,11 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
   const said = (reviews ?? []).filter((review) => review.servingId === serving.id)
   // Roles can swap until somebody has started the verdict.
   const canSwapCook = isOpen(serving) && kitchen.partner !== null && reviews !== undefined && said.length === 0
-  // An eaten meal can go for as long as its verdict can still be changed.
-  const removable = isOpen(serving) || serving.status === 'skipped' || (serving.status === 'eaten' && reviews !== undefined && !said.some((review) => isSealed(review)))
+  // Planned for a day that is over: maybe it slipped, maybe it was eaten and nobody said so.
+  const slipped = slippedDay(serving, kitchen.today)
+  const slippedSlot = serving.plannedSlot ?? 'dinner'
+  // A meal on the table can go, too (logged for the wrong day). An eaten one for as long as its verdict can still be changed.
+  const removable = isOpen(serving) || serving.status === 'served' || serving.status === 'skipped' || (serving.status === 'eaten' && reviews !== undefined && !said.some((review) => isSealed(review)))
   const skippable = isOpen(serving) || serving.status === 'served'
   const part = { serving, kitchen, info }
 
@@ -380,9 +390,22 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
         )}
 
         {serving.status === 'planned' && !iCook && serving.plannedDate !== null && serving.plannedDate <= kitchen.today && (
-          <div className="px-1">
+          <div className="flex flex-col gap-3 px-1">
             <p className="text-sm text-ink-soft">{c.serving.waitsForCook(nameOf(kitchen, cookOf(serving)))}</p>
-            <EarlyProof servingId={serving.id} />
+            <EarlyProof serving={serving} />
+          </div>
+        )}
+
+        {slipped && !changing && (
+          <div className="flex flex-col items-center px-1" data-testid="log-slipped">
+            <p className="text-center text-xs text-ink-soft">{c.log.slipped}</p>
+            <TextAction
+              className="justify-center"
+              disabled={busy}
+              onClick={() => void act(() => logMeal({ servingId: serving.id, servedAt: tableMoment(slipped, slippedSlot), slot: slippedSlot }), c.log.logged(when.atInline(slipped, slippedSlot)))}
+            >
+              <span className="text-center">{c.log.logSlipped(when.dayInline(slipped, 'long'))}</span>
+            </TextAction>
           </div>
         )}
 
@@ -453,7 +476,7 @@ export function ServingScreen({ id, day }: { id: ID; day?: string | null }) {
             <p className="text-center text-xs text-ink-soft">{c.serving.serveNowHint}</p>
           </div>
         )}
-        {proofEarly && !changing && <EarlyProof servingId={serving.id} className="self-center" />}
+        {proofEarly && !changing && <EarlyProof serving={serving} />}
 
         {(skippable || removable) && (
           <div className="mt-2 flex flex-wrap justify-center gap-x-2 border-t border-line pt-3">

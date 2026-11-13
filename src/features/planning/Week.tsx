@@ -13,7 +13,7 @@ import { Heart } from '../../ui/deco/Deco'
 import { Icon } from '../../ui/deco/Icon'
 import { planningCopy } from './copy'
 import { dayMarks, groupByDayAndSlot, mealsOf, sameMonth, shiftMonth, SLOTS, suggestedFor, type DayPlan } from './logic'
-import { MealPicker, type PickTarget } from './MealPicker'
+import { LogPicker, MealPicker, type PickTarget } from './MealPicker'
 import { MealThumb, nameOf, noTouchMenu, useDragSensors, useKitchen, useMealInfo, useWhen, type Kitchen } from './shared'
 
 type Mode = 'week' | 'month'
@@ -87,9 +87,11 @@ interface DayCardProps {
   dragging?: boolean
   draggable?: boolean
   onEmptySlot: (target: SlotTarget) => void
+  /** A day that is over takes a meal that was eaten and never entered. */
+  onLog: (day: Day) => void
 }
 
-function DayCard({ day, plan, kitchen, dragging = false, draggable = false, onEmptySlot }: DayCardProps) {
+function DayCard({ day, plan, kitchen, dragging = false, draggable = false, onEmptySlot, onLog }: DayCardProps) {
   const t = useT()
   const lang = useLang()
   const c = useCopy(planningCopy)
@@ -180,13 +182,26 @@ function DayCard({ day, plan, kitchen, dragging = false, draggable = false, onEm
           ))}
         </div>
       )}
+
+      {past && (
+        <button
+          type="button"
+          data-testid="log-day"
+          aria-label={c.log.weekButtonFor(formatDay(day, lang, 'full'))}
+          onClick={() => onLog(day)}
+          className="mt-2 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-line-strong px-2 text-2xs font-extrabold text-ink-soft"
+        >
+          <Icon name="plus" size={10} className="shrink-0" />
+          <span className="truncate">{c.log.weekButton}</span>
+        </button>
+      )}
     </li>
   )
 }
 
 // --------------------------------------------------------------- week view --
 
-function WeekView({ days, kitchen, onEmptySlot }: { days: Day[]; kitchen: Kitchen; onEmptySlot: (target: SlotTarget) => void }) {
+function WeekView({ days, kitchen, onEmptySlot, onLog }: { days: Day[]; kitchen: Kitchen; onEmptySlot: (target: SlotTarget) => void; onLog: (day: Day) => void }) {
   const t = useT()
   const c = useCopy(planningCopy)
   const when = useWhen(kitchen.today)
@@ -216,7 +231,7 @@ function WeekView({ days, kitchen, onEmptySlot }: { days: Day[]; kitchen: Kitche
     <DndContext sensors={sensors} collisionDetection={dayUnderCard} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
       <ol className="flex flex-col gap-2.5" data-testid="week">
         {days.map((day) => (
-          <DayCard key={day} day={day} plan={plan[day]} kitchen={kitchen} dragging={activeId !== null} draggable onEmptySlot={onEmptySlot} />
+          <DayCard key={day} day={day} plan={plan[day]} kitchen={kitchen} dragging={activeId !== null} draggable onEmptySlot={onEmptySlot} onLog={onLog} />
         ))}
       </ol>
       {anyPlanned && <p className="px-2 pt-1 text-center text-xs text-ink-soft">{c.week.dragHint}</p>}
@@ -239,9 +254,10 @@ interface MonthViewProps {
   kitchen: Kitchen
   onSelect: (day: Day) => void
   onEmptySlot: (target: SlotTarget) => void
+  onLog: (day: Day) => void
 }
 
-function MonthView({ anchor, selected, kitchen, onSelect, onEmptySlot }: MonthViewProps) {
+function MonthView({ anchor, selected, kitchen, onSelect, onEmptySlot, onLog }: MonthViewProps) {
   const lang = useLang()
   const c = useCopy(planningCopy)
   const grid = monthGrid(anchor)
@@ -299,7 +315,7 @@ function MonthView({ anchor, selected, kitchen, onSelect, onEmptySlot }: MonthVi
       {/* The day you tapped, opened up. It needs a drag context of its own, though nothing drags here. */}
       <DndContext>
         <ol data-testid="month-day">
-          <DayCard day={selected} plan={plan[selected]} kitchen={kitchen} onEmptySlot={onEmptySlot} />
+          <DayCard day={selected} plan={plan[selected]} kitchen={kitchen} onEmptySlot={onEmptySlot} onLog={onLog} />
         </ol>
       </DndContext>
     </>
@@ -320,6 +336,9 @@ export function WeekScreen() {
   const [selected, setSelected] = useState<Day | null>(remembered.selected)
   const [target, setTarget] = useState<SlotTarget | null>(null)
   const [picking, setPicking] = useState(false)
+  /** The past day a forgotten meal is being logged for. Kept while the sheet slides away. */
+  const [logDay, setLogDay] = useState<Day | null>(null)
+  const [logging, setLogging] = useState(false)
   const list = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -378,6 +397,11 @@ export function WeekScreen() {
     setPicking(true)
   }
 
+  const openLog = (day: Day) => {
+    setLogDay(day)
+    setLogging(true)
+  }
+
   return (
     <Screen tabs>
       <AwningHeader
@@ -416,13 +440,14 @@ export function WeekScreen() {
 
       <main ref={list} className="app-column flex flex-col gap-3 px-4 pt-4">
         {mode === 'week' ? (
-          <WeekView days={days} kitchen={kitchen} onEmptySlot={openSlot} />
+          <WeekView days={days} kitchen={kitchen} onEmptySlot={openSlot} onLog={openLog} />
         ) : (
-          <MonthView anchor={shown} selected={openDay} kitchen={kitchen} onSelect={setSelected} onEmptySlot={openSlot} />
+          <MonthView anchor={shown} selected={openDay} kitchen={kitchen} onSelect={setSelected} onEmptySlot={openSlot} onLog={openLog} />
         )}
       </main>
 
       <MealPicker target={target} open={picking} kitchen={kitchen} onClose={() => setPicking(false)} />
+      <LogPicker day={logDay} open={logging} kitchen={kitchen} onClose={() => setLogging(false)} />
     </Screen>
   )
 }

@@ -9,9 +9,9 @@ import { AssistantScreen } from '../features/assistant'
 import { BasketScreen, useForkWatch } from '../features/basket'
 import { NewsScreen } from '../features/news'
 import { Onboarding, PausedScreen, usePaused } from '../features/onboarding'
-import { PlanningRoutes, TodayPicker, TodayScreen, WeekScreen, WishlistScreen } from '../features/planning'
+import { LogSheet, PlanningRoutes, TodayPicker, TodayScreen, WeekScreen, WishlistScreen } from '../features/planning'
 import { RecipeBookScreen, RecipesRoutes } from '../features/recipes'
-import { isReviewPath, ReviewRoutes } from '../features/review'
+import { isReviewPath, ReviewRoutes, usePlate } from '../features/review'
 import { SettingsRoutes } from '../features/settings'
 import { useT } from '../i18n'
 import { Screen, Sheet, SteamLoader, TabBar, Toaster, type TabId } from '../ui/components'
@@ -40,7 +40,16 @@ const SyncLab = import.meta.env.DEV ? lazy(() => import('../features/lab/SyncLab
 export const TAB_PATHS: Record<TabId, string> = { today: '/', wishlist: '/wishlist', week: '/week', cockpit: '/cockpit', recipes: '/recipes' }
 const TAB_BY_PATH = Object.fromEntries(Object.entries(TAB_PATHS).map(([id, path]) => [path, id])) as Record<string, TabId>
 
-function AddSheet({ open, onClose, onToday }: { open: boolean; onClose: () => void; onToday: () => void }) {
+interface AddSheetProps {
+  open: boolean
+  onClose: () => void
+  onToday: () => void
+  onLog: () => void
+  /** Opens the camera. Called straight from the tap, or the phone will not open it. */
+  onPlate: () => void
+}
+
+function AddSheet({ open, onClose, onToday, onLog, onPlate }: AddSheetProps) {
   const t = useT()
   const go = (to: string) => {
     onClose()
@@ -63,6 +72,40 @@ function AddSheet({ open, onClose, onToday }: { open: boolean; onClose: () => vo
           <span>
             <span className="block text-base font-extrabold">{t.addSheet.today}</span>
             <span className="block text-xs text-ink-soft">{t.addSheet.todayHint}</span>
+          </span>
+        </button>
+        {/* The plate is there and nothing was entered: the camera first, then "What is it?". */}
+        <button
+          type="button"
+          className={choice}
+          onClick={() => {
+            onPlate()
+            onClose()
+          }}
+        >
+          <span className="mx-0.5 grid size-10 shrink-0 place-items-center rounded-full bg-blush">
+            <Icon name="camera" size={24} />
+          </span>
+          <span>
+            <span className="block text-base font-extrabold">{t.addSheet.plate}</span>
+            <span className="block text-xs text-ink-soft">{t.addSheet.plateHint}</span>
+          </span>
+        </button>
+        {/* Eaten, and nobody entered it: today or any day before. */}
+        <button
+          type="button"
+          className={choice}
+          onClick={() => {
+            onClose()
+            onLog()
+          }}
+        >
+          <span className="mx-0.5 grid size-10 shrink-0 place-items-center rounded-full bg-blush">
+            <Icon name="calendar" size={24} />
+          </span>
+          <span>
+            <span className="block text-base font-extrabold">{t.addSheet.log}</span>
+            <span className="block text-xs text-ink-soft">{t.addSheet.logHint}</span>
           </span>
         </button>
         <button type="button" className={choice} onClick={() => go('/recipes/new')}>
@@ -111,6 +154,21 @@ function AddSheet({ open, onClose, onToday }: { open: boolean; onClose: () => vo
   )
 }
 
+/** The add sheet and everything it opens: the two pickers, and the camera for "Take a photo and rate". */
+function Adding({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [pickingToday, setPickingToday] = useState(false)
+  const [logging, setLogging] = useState(false)
+  const plate = usePlate('add')
+  return (
+    <>
+      <AddSheet open={open} onClose={onClose} onToday={() => setPickingToday(true)} onLog={() => setLogging(true)} onPlate={plate.shoot} />
+      <TodayPicker open={pickingToday} onClose={() => setPickingToday(false)} />
+      <LogSheet open={logging} onClose={() => setLogging(false)} />
+      {plate.parts}
+    </>
+  )
+}
+
 /** Shown on every screen of the demo kitchen, so it is never mistaken for the real one. */
 function DemoBanner() {
   const t = useT()
@@ -134,7 +192,6 @@ export function Shell() {
   const [adding, setAdding] = useState(false)
   // From any tab: a number on Today says the other one did something.
   const unseenNews = useUnseenNews() ?? 0
-  const [pickingToday, setPickingToday] = useState(false)
   const { path } = route
   // Fork checks the plan against the pantry by himself, once somebody is logged in.
   useForkWatch(Boolean(me) && !paused && status.state !== 'locked-out')
@@ -235,8 +292,7 @@ export function Shell() {
       {isDemo && <DemoBanner />}
       {page}
       {tab && <TabBar active={tab} onSelect={(id) => navigate(TAB_PATHS[id], { replace: true })} onAdd={() => setAdding(true)} badges={tab === 'today' ? {} : { today: unseenNews }} />}
-      <AddSheet open={adding} onClose={() => setAdding(false)} onToday={() => setPickingToday(true)} />
-      <TodayPicker open={pickingToday} onClose={() => setPickingToday(false)} />
+      <Adding open={adding} onClose={() => setAdding(false)} />
       <Toaster />
     </>
   )

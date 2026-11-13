@@ -8,6 +8,7 @@ import {
   createMenu,
   finishMeal,
   isSealed,
+  logMeal,
   markServed,
   planServing,
   proposeServing,
@@ -312,6 +313,117 @@ describe('plans change', () => {
     await removeServing(servingId)
     expect((await db.servings.get(servingId))?.deletedAt).not.toBeNull()
     expect((await db.reviews.get(await reviewIdFor(servingId, dish.id, leo)))?.deletedAt).toBeNull()
+  })
+})
+
+describe('a meal that is logged afterwards', () => {
+  const queued = async () => (await db.outbox.orderBy('seq').toArray()).map((op) => `${op.kind} ${op.table}`)
+  // Monday 9 November 2026, seven in the evening in Zurich.
+  const MONDAY_DINNER = '2026-11-09T18:00:00.000Z'
+
+  it('puts a new meal on the table on its own day, in one step', async () => {
+    const dish = await createDish({ name: 'Lasagne' })
+    await db.outbox.clear()
+    const serving = await logMeal({ dishId: dish.id, servedAt: MONDAY_DINNER, slot: 'dinner', cookedBy: mia })
+    expect(await db.servings.get(serving.id)).toMatchObject({ status: 'served', servedAt: MONDAY_DINNER, plannedDate: '2026-11-09', plannedSlot: 'dinner', cookedBy: mia, proposedBy: leo, eatenAt: null, craving: null, proofPhotos: [] })
+    expect(await queued()).toEqual(['put servings'])
+  })
+
+  it('files it under the day in the kitchen, not in Greenwich', async () => {
+    const dish = await createDish({ name: 'Midnight toast' })
+    // Half past midnight in Zurich is still the evening before in Greenwich.
+    const serving = await logMeal({ dishId: dish.id, servedAt: '2026-11-09T23:30:00.000Z', slot: 'dessert' })
+    expect(await db.servings.get(serving.id)).toMatchObject({ plannedDate: '2026-11-10', plannedSlot: 'dessert', cookedBy: leo })
+  })
+
+  it('never puts a meal on the table at a moment that is still ahead', async () => {
+    const dish = await createDish({ name: 'Rösti' })
+    const before = Date.now()
+    const serving = await logMeal({ dishId: dish.id, servedAt: '2099-01-01T12:00:00.000Z', slot: 'lunch' })
+    const at = Date.parse((await db.servings.get(serving.id))?.servedAt as string)
+    expect(at).toBeGreaterThanOrEqual(before)
+    expect(at).toBeLessThanOrEqual(Date.now())
+  })
+
+  it('needs a dish or a menu, like every meal', async () => {
+    await expect(logMeal({ servedAt: MONDAY_DINNER, slot: 'dinner' })).rejects.toThrow()
+    await expect(logMeal({ servingId: newId(), servedAt: MONDAY_DINNER, slot: 'dinner' })).rejects.toMatchObject({ code: 'serving_missing' })
+  })
+
+  it('takes a wish or a planned meal along instead of making a twin', async () => {
+    const dish = await createDish({ name: 'Rösti' })
+    const wish = await proposeServing({ dishId: dish.id, cookedBy: mia, note: 'With an egg' })
+    await setCraving(wish.id, 4)
+    await skipServing(wish.id, 'Ate out')
+    await reviveServing(wish.id)
+    await setCraving(wish.id, 4)
+
+    await logMeal({ servingId: wish.id, servedAt: MONDAY_DINNER, slot: 'lunch' })
+    expect(await db.servings.count()).toBe(1)
+    // Her meal stays hers, and his hearts stay with it.
+    expect(await db.servings.get(wish.id)).toMatchObject({ status: 'served', servedAt: MONDAY_DINNER, plannedDate: '2026-11-09', plannedSlot: 'lunch', cookedBy: mia, craving: 4, note: 'With an egg', skippedReason: null })
+
+    const planned = await proposeServing({ dishId: dish.id, cookedBy: mia, plan: { date: '2026-11-12', slot: 'dinner' } })
+    await logMeal({ servingId: planned.id, servedAt: MONDAY_DINNER, slot: 'dinner', cookedBy: mia })
+    expect(await db.servings.get(planned.id)).toMatchObject({ status: 'served', plannedDate: '2026-11-09', plannedSlot: 'dinner', cookedBy: mia })
+  })
+
+  it('puts the cook right while no verdict was started, and the hearts start over', async () => {
+    const dish = await createDish({ name: 'Rösti' })
+    const wish = await proposeServing({ dishId: dish.id, cookedBy: mia })
+    await setCraving(wish.id, 5)
+    await logMeal({ servingId: wish.id, servedAt: MONDAY_DINNER, slot: 'dinner', cookedBy: leo })
+    expect(await db.servings.get(wish.id)).toMatchObject({ status: 'served', cookedBy: leo, craving: null })
+  })
+
+  it('keeps the roles once a verdict has been started', async () => {
+    const dish = await createDish({ name: 'Rösti' })
+    const planned = await proposeServing({ dishId: dish.id, cookedBy: mia, plan: { date: '2026-11-09', slot: 'dinner' } })
+    await reactToMeal(planned.id, 5)
+    await logMeal({ servingId: planned.id, servedAt: MONDAY_DINNER, slot: 'dinner', cookedBy: leo })
+    expect(await db.servings.get(planned.id)).toMatchObject({ status: 'served', cookedBy: mia })
+  })
+
+  it('leaves a meal alone that has its day already', async () => {
+    const { servingId } = await served()
+    const before = await db.servings.get(servingId)
+    await db.outbox.clear()
+    await logMeal({ servingId, servedAt: MONDAY_DINNER, slot: 'breakfast', cookedBy: leo })
+    expect(await db.servings.get(servingId)).toEqual(before)
+    expect(await queued()).toEqual([])
+  })
+
+  it('counts for the day it was logged for when the proof comes later, and the time can still be corrected', async () => {
+    const dish = await createDish({ name: 'Lasagne' })
+    const serving = await logMeal({ dishId: dish.id, servedAt: MONDAY_DINNER, slot: 'dinner', cookedBy: mia })
+    // Wednesday morning: a photo of what is left, and the verdict.
+    await addProofPhoto(serving.id, { image: picture(), source: 'camera', takenAt: '2026-11-11T06:05:00.000Z' })
+    await reactToMeal(serving.id, 5)
+    await finishMeal(serving.id)
+    expect(await db.servings.get(serving.id)).toMatchObject({ status: 'eaten', servedAt: MONDAY_DINNER, eatenAt: MONDAY_DINNER })
+
+    await setEatenAt(serving.id, '2026-11-09T18:20:00.000Z')
+    expect((await db.servings.get(serving.id))?.eatenAt).toBe('2026-11-09T18:20:00.000Z')
+  })
+
+  it('believes a photo from the gallery that was taken on the evening itself', async () => {
+    const dish = await createDish({ name: 'Lasagne' })
+    const serving = await logMeal({ dishId: dish.id, servedAt: MONDAY_DINNER, slot: 'dinner', cookedBy: mia })
+    await addProofPhoto(serving.id, { image: picture(), source: 'gallery', takenAt: '2026-11-09T18:42:00.000Z' })
+    await reactToMeal(serving.id, 4)
+    await finishMeal(serving.id)
+    expect(await db.servings.get(serving.id)).toMatchObject({ status: 'eaten', servedAt: MONDAY_DINNER, eatenAt: '2026-11-09T18:42:00.000Z' })
+  })
+
+  it('can be taken out again while it waits on the table', async () => {
+    const dish = await createDish({ name: 'Lasagne' })
+    const serving = await logMeal({ dishId: dish.id, servedAt: MONDAY_DINNER, slot: 'dinner', cookedBy: mia })
+    const proof = await addProofPhoto(serving.id, { image: picture(), source: 'camera' })
+    await reactToMeal(serving.id, 3)
+    await removeServing(serving.id)
+    expect((await db.servings.get(serving.id))?.deletedAt).not.toBeNull()
+    expect((await db.photos.get(proof.photoId))?.deletedAt).not.toBeNull()
+    expect((await db.reviews.toArray()).every((review) => review.deletedAt !== null)).toBe(true)
   })
 })
 

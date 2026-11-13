@@ -88,6 +88,14 @@ config and the screenshot tool read the same variable).
   check is `src/features/basket/fork.ts` (the helper when it can, names when it cannot) and
   runs by itself from `watch.ts`, only on the phone that changed the plan. Fork only ever
   writes suggestions (`state: 'suggested'`): people put things on the list.
+- **A meal nobody entered:** `logMeal` (actions) puts a meal on the table at a moment that
+  may be over: `tableMoment` in `planning/logic.ts` is the usual time of that meal on that
+  day. From there it is a served meal on its own day. `eatenGuess` (`src/lib/meals.ts`,
+  used by the verdict flow and by `finishMeal`) keeps it there when the proof photo is
+  taken on a later day. The sheets are `LogPicker` (planning) and the plate sheet behind
+  `usePlate` (`review/PhotoFirst.tsx`: the camera first, then "What is on the plate?");
+  both list meals with `MealOptions`. `EarlyProof` opens the camera for a meal the cook has
+  not marked as served. "Served" is never pushed to the meal's own cook (`push/logic.ts`).
 - **Refused changes** (`deadLetters`) leave the list only through `sync.retryRefused` and
   `sync.discardRefused`; `src/data/refused.ts` puts them into words for the Sync page.
 - The real backend is Supabase (`supabaseBackend.ts`); rules live in `supabase/migrations`.

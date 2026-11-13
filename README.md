@@ -211,16 +211,28 @@ Nobody plans every meal a week ahead. These are the short ways:
   the recipe book, or type a name nobody has written down yet: it becomes a dish and today's
   meal in one tap. The Chef then finds **Served** on the meal, the Taster the proof photo.
 - **Eating it sooner.** A meal that is planned for another day, or is only a wish, has
-  **Serve it now** for the Chef and "Already on the table? Take the proof photo" for the
-  Taster. It counts for the day it was really eaten.
+  **Serve it now** for the Chef and **Take a photo and rate** for the Taster. It counts for
+  the day it was really eaten.
+- **The photo first.** Nothing was entered, and the plate is there: tap **+**, then
+  **Take a photo and rate**. The camera opens at once. Afterwards the app asks what is on
+  the plate: a meal that is on the table or planned, or anything from the recipe book
+  (then the other one cooked it). The verdict follows, with the photo already in. The same
+  button sits on the card of a meal planned for today and on an empty Today.
 - **The other one cooks after all.** Open the meal and tap **Change who cooks**. The hearts
   start over, because they belong to whoever eats. This works until a verdict has been started.
 - **It never made it.** A meal that is already marked as served can still be skipped by
   either of you, with a reason if you like ("The oven went on strike").
 - **Logged by mistake.** An eaten meal can be removed, with its photos and its verdict, for
   as long as the verdict can still be changed (24 hours). After the seal it is history.
-- **Forgot to log it.** Take the proof photo from the gallery: the app reads when the photo
-  was taken. Or correct the time under the photo.
+- **Forgot to enter it.** Tap **+**, then **Log a meal**: pick the day (today or any day
+  before), the meal of the day, who cooked, and the dish. Either of you can do that. Days
+  that are over have the same button in **Our week**, and a planned meal whose day has
+  passed has **Log it for** that day on its own page. The meal then sits on its day and
+  waits for the Taster's photo and verdict. It counts for that day even when the photo is
+  taken later; a photo from the gallery brings its own time, and **Change the time** under
+  the photo corrects it.
+- **Logged for the wrong day.** A meal that waits on the table can be removed, like an
+  eaten one. Then log it again.
 
 ## What gets rated
 

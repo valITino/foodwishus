@@ -19,21 +19,30 @@ import {
   eatenInWeek,
   groupByDayAndSlot,
   linkedDay,
+  logChoices,
   mealsOf,
   nextDays,
   onTheTable,
+  pastDay,
+  pastDays,
   placeAfterDrag,
   plannedFor,
+  plateChoices,
   roleIn,
   sameMonth,
   shiftMonth,
   skippedServings,
+  slippedDay,
+  SLOT_MINUTES,
   slotForHour,
+  slotToLog,
   STRIP_DAYS,
   suggestedFor,
+  tableMoment,
   tapDay,
   upcomingDays,
   upNext,
+  waitsSince,
   wishesForDay,
   wishlistCards,
 } from '../../src/features/planning/logic'
@@ -453,6 +462,140 @@ describe('planning', () => {
   })
 })
 
+describe('a meal that is logged afterwards', () => {
+  const dish = (id: string, name: string, archived = false) => ({ id, name, archived })
+  const menu = (id: string, name: string, courses: unknown[] = [1]) => ({ id, name, archived: false, courses })
+  const book = [dish('dish-rösti', 'Rösti'), dish('dish-pizza', 'Pizza'), dish('dish-fondue', 'Fondue'), dish('dish-old', 'An old one', true)]
+  const menus = [menu('menu-brunch', 'Brunch'), menu('menu-empty', 'No courses yet', [])]
+  const YESTERDAY = '2026-11-09'
+  /** Zurich wall-clock time in winter (UTC+1). */
+  const at = (day: string, time: string) => new Date(`${day}T${time}:00+01:00`).toISOString()
+  const served = (name: string, day: string, time: string, overrides: Partial<Serving> = {}) => wish(name, { status: 'served', servedAt: at(day, time), plannedDate: day, plannedSlot: 'dinner', ...overrides })
+
+  it('lands on its day at the usual time of that meal', () => {
+    const late = Date.parse(at(TODAY, '22:00'))
+    expect(tableMoment(YESTERDAY, 'breakfast', late)).toBe(at(YESTERDAY, '08:00'))
+    expect(tableMoment(YESTERDAY, 'lunch', late)).toBe(at(YESTERDAY, '12:30'))
+    expect(tableMoment(YESTERDAY, 'dessert', late)).toBe(at(YESTERDAY, '16:00'))
+    expect(tableMoment(YESTERDAY, 'dinner', late)).toBe(at(YESTERDAY, '19:00'))
+    // In summer the clock is two hours ahead of Greenwich, and dinner is still at seven.
+    expect(tableMoment('2026-07-01', 'dinner', late)).toBe('2026-07-01T17:00:00.000Z')
+  })
+
+  it('files each usual time under its own meal, so the calendar puts it where it was logged', () => {
+    for (const slot of ['breakfast', 'lunch', 'dinner', 'dessert'] as const) expect(slotForHour(Math.floor(SLOT_MINUTES[slot] / 60))).toBe(slot)
+  })
+
+  it('is never on the table later than now: today\'s dinner, logged at noon, is on the table now', () => {
+    const noon = Date.parse(at(TODAY, '12:00'))
+    expect(tableMoment(TODAY, 'dinner', noon)).toBe(at(TODAY, '12:00'))
+    expect(tableMoment(TODAY, 'breakfast', noon)).toBe(at(TODAY, '08:00'))
+  })
+
+  it('offers today and the days before it, the newest first', () => {
+    expect(pastDays(TODAY, 4)).toEqual(['2026-11-10', '2026-11-09', '2026-11-08', '2026-11-07'])
+    // Across a month and the change of the clock.
+    expect(pastDays('2026-11-01', 3)).toEqual(['2026-11-01', '2026-10-31', '2026-10-30'])
+    expect(pastDays('2026-10-26', 3)).toEqual(['2026-10-26', '2026-10-25', '2026-10-24'])
+  })
+
+  it('accepts a day from the date field only when it is a real day that is not still ahead', () => {
+    expect(pastDay(TODAY, TODAY)).toBe(TODAY)
+    expect(pastDay('2026-11-09', TODAY)).toBe('2026-11-09')
+    expect(pastDay('2025-12-24', TODAY)).toBe('2025-12-24')
+    expect(pastDay('2026-11-11', TODAY)).toBeNull()
+    expect(pastDay('2026-02-31', TODAY)).toBeNull()
+    expect(pastDay('last tuesday', TODAY)).toBeNull()
+    expect(pastDay('', TODAY)).toBeNull()
+    expect(pastDay(null, TODAY)).toBeNull()
+  })
+
+  it('guesses which meal was forgotten: the last main meal for today, dinner for a day that is over', () => {
+    expect(slotToLog(TODAY, TODAY, 7)).toBe('breakfast')
+    expect(slotToLog(TODAY, TODAY, 13)).toBe('lunch')
+    expect(slotToLog(TODAY, TODAY, 16)).toBe('lunch')
+    expect(slotToLog(TODAY, TODAY, 20)).toBe('dinner')
+    expect(slotToLog(YESTERDAY, TODAY, 7)).toBe('dinner')
+  })
+
+  it('knows when a meal has been waiting on the table since a day that is over', () => {
+    expect(waitsSince(served('lasagne', YESTERDAY, '19:00'), TODAY)).toBe(YESTERDAY)
+    expect(waitsSince(served('rösti', TODAY, '12:30'), TODAY)).toBeNull()
+    // The Zurich day counts: half past midnight belongs to the new day.
+    expect(waitsSince(served('snack', TODAY, '00:30'), TODAY)).toBeNull()
+    expect(waitsSince(planned('fondue', YESTERDAY), TODAY)).toBeNull()
+    expect(waitsSince(eaten('pizza', YESTERDAY), TODAY)).toBeNull()
+    expect(waitsSince(wish('odd', { status: 'served' }), TODAY)).toBeNull()
+  })
+
+  it('knows a planned meal whose day is over', () => {
+    expect(slippedDay(planned('fondue', YESTERDAY), TODAY)).toBe(YESTERDAY)
+    expect(slippedDay(planned('rösti', TODAY), TODAY)).toBeNull()
+    expect(slippedDay(planned('pizza', '2026-11-12'), TODAY)).toBeNull()
+    expect(slippedDay(wish('wish'), TODAY)).toBeNull()
+    expect(slippedDay(served('lasagne', YESTERDAY, '19:00'), TODAY)).toBeNull()
+  })
+
+  it('offers what was planned for that very day first, then the wishes, then the rest of the calendar', () => {
+    const servings = [
+      wish('pizza'),
+      wish('hoped for', { suggestedDays: [YESTERDAY] }),
+      planned('friday', '2026-11-13'),
+      planned('that dinner', YESTERDAY, 'dinner'),
+      planned('that lunch', YESTERDAY, 'lunch'),
+      served('on the table', YESTERDAY, '19:00'),
+      eaten('done', YESTERDAY),
+      wish('skipped', { status: 'skipped' }),
+    ]
+    expect(names(logChoices(servings, book, menus, YESTERDAY).open)).toEqual(['that lunch', 'that dinner', 'hoped for', 'pizza', 'friday'])
+  })
+
+  it('keeps a recipe in the book unless it is offered as that day\'s meal or as a wish', () => {
+    const servings = [wish('rösti'), planned('pizza', YESTERDAY), planned('fondue', '2026-11-13'), wish('brunch', { dishId: null, menuId: 'menu-brunch', status: 'eaten' })]
+    const choices = logChoices(servings, book, menus, YESTERDAY)
+    // Fondue is planned for Friday: it can still have been on the table yesterday, as a meal of its own.
+    expect(choices.dishes.map((d) => d.name)).toEqual(['Fondue'])
+    expect(choices.menus.map((m) => m.name)).toEqual(['Brunch'])
+    expect(logChoices(servings, book, menus, TODAY).dishes.map((d) => d.name)).toEqual(['Fondue', 'Pizza'])
+  })
+})
+
+describe('the photo first: what may be on the plate', () => {
+  const dish = (id: string, name: string, archived = false) => ({ id, name, archived })
+  const book = [dish('dish-rösti', 'Rösti'), dish('dish-pizza', 'Pizza'), dish('dish-fondue', 'Fondue'), dish('dish-soup', 'Soup')]
+  const at = (day: string, time: string) => new Date(`${day}T${time}:00+01:00`).toISOString()
+  const leo = { id: LEO, alone: false }
+
+  it('starts with what is on the table (the latest first), then today, the rest of the calendar, the wishes', () => {
+    const servings = [
+      wish('a wish'),
+      planned('friday', '2026-11-13'),
+      planned('tonight', TODAY, 'dinner'),
+      planned('this noon', TODAY, 'lunch'),
+      wish('since yesterday', { status: 'served', servedAt: at('2026-11-09', '19:00') }),
+      wish('just now', { status: 'served', servedAt: at(TODAY, '12:31') }),
+      eaten('done', TODAY),
+      wish('skipped', { status: 'skipped' }),
+    ]
+    expect(names(plateChoices(servings, book, [], leo, TODAY).open)).toEqual(['just now', 'since yesterday', 'this noon', 'tonight', 'friday', 'a wish'])
+  })
+
+  it('only offers meals this person eats: what they cook themselves is not theirs to judge', () => {
+    const servings = [planned('mia cooks', TODAY), planned('leo cooks', TODAY, 'lunch', { cookedBy: LEO }), wish('leo proposed, no cook set', { proposedBy: LEO, cookedBy: null })]
+    expect(names(plateChoices(servings, book, [], leo, TODAY).open)).toEqual(['mia cooks'])
+    expect(names(plateChoices(servings, book, [], { id: MIA, alone: false }, TODAY).open)).toEqual(['leo cooks', 'leo proposed, no cook set'])
+    // Alone in the kitchen you cook and judge.
+    expect(names(plateChoices(servings, book, [], { id: MIA, alone: true }, TODAY).open)).toEqual(['leo cooks', 'mia cooks', 'leo proposed, no cook set'])
+  })
+
+  it('leaves out of the book what is offered as a meal already', () => {
+    const servings = [planned('rösti', TODAY), wish('pizza'), planned('fondue', TODAY, 'lunch', { cookedBy: LEO }), wish('soup', { status: 'eaten' })]
+    const choices = plateChoices(servings, book, [], leo, TODAY)
+    // Fondue is Leo's own to cook: on his plate it would be a meal the other one made.
+    expect(choices.dishes.map((d) => d.name)).toEqual(['Fondue', 'Soup'])
+  })
+})
+
 describe('the calendar', () => {
   it('places planned meals on their day and slot', () => {
     expect(calendarPlace(planned('p', '2026-11-12', 'lunch'))).toEqual({ day: '2026-11-12', slot: 'lunch' })
@@ -467,6 +610,11 @@ describe('the calendar', () => {
   it('guesses the slot of an unplanned meal from the clock', () => {
     expect(calendarPlace(eaten('brunch', '2026-11-14', '09:10'))).toEqual({ day: '2026-11-14', slot: 'breakfast' })
     expect(calendarPlace(wish('served', { status: 'served', servedAt: new Date('2026-11-14T12:40:00+01:00').toISOString() }))).toEqual({ day: '2026-11-14', slot: 'lunch' })
+  })
+
+  it('places a meal that waits for its proof on the day it came to the table, however long ago', () => {
+    const logged = wish('lasagne', { status: 'served', servedAt: new Date('2026-11-07T19:00:00+01:00').toISOString(), plannedDate: '2026-11-07', plannedSlot: 'dinner' })
+    expect(calendarPlace(logged)).toEqual({ day: '2026-11-07', slot: 'dinner' })
   })
 
   it('has no place for wishes and skipped meals', () => {

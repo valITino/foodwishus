@@ -9,6 +9,9 @@ import { kit, useDemo } from './ship.helpers'
 
 test.use({ viewport: { width: 360, height: 740 } })
 
+/** The smallest picture there is: one pixel, as a PNG. Stands in for a photo from the camera. */
+const ONE_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+
 const CONTROLS = ['button', 'link', 'textbox', 'searchbox', 'switch', 'radio', 'checkbox', 'combobox', 'slider', 'spinbutton', 'tab', 'menuitem', 'option']
 
 /** Controls the accessibility tree lists without a name, as "role" or "role near 'text'". */
@@ -122,6 +125,26 @@ for (const lang of ['en', 'de'] as const) {
     await page.getByRole('dialog').getByRole('button', { name: lang === 'de' ? /Ein Essen für heute/ : /A meal for today/ }).click()
     await expect(page.getByRole('dialog').getByTestId('pick-when')).toBeVisible()
     await basics(page, `meal picker (${lang})`, { sheet: true })
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    // A meal that is logged afterwards: the days to tap, the date field, the meal and the cook.
+    await page.getByRole('button', { name: lang === 'de' ? 'Etwas hinzufügen' : 'Add something' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: lang === 'de' ? /Essen nachtragen/ : /Log a meal/ }).click()
+    await expect(page.getByRole('dialog').getByRole('group', { name: lang === 'de' ? 'Wann war es?' : 'When was it?' })).toBeVisible()
+    await page.getByRole('dialog').getByRole('button', { name: lang === 'de' ? 'Ein früherer Tag' : 'An earlier day' }).click()
+    await expect(page.getByRole('dialog').locator('input[type="date"]')).toBeVisible()
+    await basics(page, `log sheet (${lang})`, { sheet: true })
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    // The photo first: the camera, then "What is on the plate?".
+    await page.getByRole('button', { name: lang === 'de' ? 'Etwas hinzufügen' : 'Add something' }).click()
+    const camera = page.waitForEvent('filechooser')
+    await page.getByRole('dialog').getByRole('button', { name: lang === 'de' ? /Foto machen und bewerten/ : /Take a photo and rate/ }).click()
+    await (await camera).setFiles({ name: 'plate.png', mimeType: 'image/png', buffer: Buffer.from(ONE_PIXEL, 'base64') })
+    await expect(page.getByRole('dialog').getByTestId('plate-photo').getByRole('img')).toBeVisible()
+    await basics(page, `plate sheet (${lang})`, { sheet: true })
     await page.keyboard.press('Escape')
     await expect(page.getByRole('dialog')).toHaveCount(0)
 

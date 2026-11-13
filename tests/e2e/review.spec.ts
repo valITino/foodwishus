@@ -375,15 +375,24 @@ test.describe('proof and verdict', () => {
     const dishId = await addDish(page, 'Rösti')
     const servingId = await cook(page, people, { dishId }, { served: false })
 
-    // Today offers it quietly; so does the meal page.
-    await expect(page.getByTestId('today-meal').getByRole('button', { name: 'Already on the table? Take the proof photo' })).toBeVisible()
+    // Today offers it, and so does the meal page: a real button, and the camera behind it.
+    await expect(page.getByTestId('today-meal').getByText('Already on the table?')).toBeVisible()
+    await expect(page.getByTestId('today-meal').getByRole('button', { name: 'Take a photo and rate' })).toBeVisible()
     await page.goto(`/#/serving/${servingId}`)
     await expect(page.getByText('Mia taps Served when it is on the table.')).toBeVisible()
-    await page.getByRole('button', { name: 'Already on the table? Take the proof photo' }).click()
+
+    // The photo comes first: one tap opens the camera, and the verdict opens with the photo in it.
+    await shoot(page, 'Take a photo and rate', await plateJpeg(page, 800, 600))
     await expect(page).toHaveURL(new RegExp(`#/review/${servingId}$`))
     await expect(page.getByText('Not marked as served yet. No problem: your photo says it all.')).toBeVisible()
+    await expect(page.getByTestId('proof-photo')).toHaveCount(1)
+    expect(await serving(page, servingId)).toMatchObject({ status: 'planned', proofPhotos: [{ source: 'camera' }] })
 
-    await shoot(page, 'Take the proof photo', await plateJpeg(page, 800, 600))
+    // Put down in between: the same place leads back to the verdict, without a second photo.
+    await page.goto(`/#/serving/${servingId}`)
+    await expect(page.getByRole('button', { name: 'Take a photo and rate' })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Finish the verdict' }).click()
+    await expect(page).toHaveURL(new RegExp(`#/review/${servingId}$`))
     await expect(page.getByTestId('proof-photo')).toHaveCount(1)
     await faces(page).getByRole('radio', { name: 'Yummy' }).click()
     await handIn(page).click()

@@ -3,7 +3,6 @@
 
 import { useRef, useState, type ChangeEvent } from 'react'
 import { addProofPhoto, removeProofPhoto } from '../../data/actions'
-import { prepareImage } from '../../data/photos'
 import type { Day, ID, ISO, PhotoSource, ProofPhoto, Serving } from '../../data/types'
 import { useCopy, useLang, useT } from '../../i18n'
 import { formatDay, formatTime, toDay } from '../../lib/dates'
@@ -12,7 +11,8 @@ import { Mascot } from '../../ui/deco/Deco'
 import { Icon } from '../../ui/deco/Icon'
 import { TextAction, useWhen } from '../planning/shared'
 import { reviewCopy } from './copy'
-import { captureTime, fromLocalInput, readExifDate, sortProof, tiltOf, toLocalInput } from './logic'
+import { readShot } from './capture'
+import { fromLocalInput, sortProof, tiltOf, toLocalInput } from './logic'
 import { PhotoViewer, ProofPolaroid, type ViewedPhoto } from './parts'
 
 const TAPES = ['sage', 'butter', 'rose'] as const
@@ -78,11 +78,7 @@ export function ProofSection({ serving, mealName, dishIds, dishName, isMenu, tod
     if (!file) return
     setDeveloping((n) => n + 1)
     try {
-      // A gallery photo knows when it was taken; a live one was taken now.
-      const exif = source === 'gallery' ? readExifDate(new Uint8Array(await file.slice(0, 256 * 1024).arrayBuffer())) : null
-      const takenAt = captureTime({ source, exif, lastModified: file.lastModified })
-      const image = await prepareImage(file)
-      const entry = await addProofPhoto(serving.id, { image, source, takenAt, courseDishId })
+      const entry = await addProofPhoto(serving.id, { ...(await readShot(file, source)), courseDishId })
       setFresh((ids) => [...ids, entry.photoId])
       buzz(14)
       if (serving.proofPhotos.length === 0) onFirstPhoto?.()

@@ -1,6 +1,6 @@
 // What the meal page shows about proof and verdict:
 //   ProofCard     a served meal waits for its photo (the Taster's way into the flow)
-//   EarlyProof    the cook forgot to tap "Served": the Taster can prove it anyway
+//   (EarlyProof, for a meal the cook forgot to mark as served, lives in PhotoFirst.tsx)
 //   MealReview    an eaten meal: the polaroids, the verdict, the Chef's guess and answer
 
 import { motion, MotionConfig } from 'motion/react'
@@ -47,16 +47,6 @@ export function ProofCard({ serving, kitchen }: Props) {
         {started ? c.meal.continueAction : t.actions.takeProof}
       </Button>
     </Card>
-  )
-}
-
-/** The cook has not tapped "Served", but the plate is there: a quiet way to the camera. */
-export function EarlyProof({ servingId, className }: { servingId: ID; className?: string }) {
-  const c = useCopy(reviewCopy)
-  return (
-    <TextAction className={className} onClick={() => navigate(`/review/${servingId}`)}>
-      {c.today.early}
-    </TextAction>
   )
 }
 

@@ -303,7 +303,8 @@ export interface Kitchen {
 
 /**
  * From one event to the messages to send: none when the news is stale or nobody listens,
- * otherwise exactly one per device of the other person.
+ * otherwise exactly one per device of the other person. "Served" is never sent to the
+ * meal's own cook.
  */
 export function plan(event: PushEvent, kitchen: Kitchen, now: Date): Delivery[] {
   const actor = kitchen.people.find((person) => person.id === event.actorId)
@@ -312,7 +313,11 @@ export function plan(event: PushEvent, kitchen: Kitchen, now: Date): Delivery[] 
   const { meal, answer } = kitchen
   if (!meal || !worthTelling(event, meal, answer, now)) return []
 
-  return audience(event, kitchen.people, kitchen.devices).map(({ person, device }) => {
+  // "Proof needed!" is for whoever eats. When the eater put the meal on the table (a meal
+  // logged afterwards, a photo before anything else), the cook hears of it with the verdict.
+  const listeners = audience(event, kitchen.people, kitchen.devices).filter(({ person }) => !(event.type === 'served' && meal.cookId === person.id))
+
+  return listeners.map(({ person, device }) => {
     const readerCooks = meal.cookId === person.id
     const said = words(event.type, person.lang, {
       actor: actor.name,

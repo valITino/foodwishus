@@ -6,6 +6,8 @@ import { generateKeyBetween } from 'fractional-indexing'
 import { backend, db, isDemo, store } from './app'
 import { adding, intoPantry, sameThing, stocking, type Line } from './basket'
 import { exportKitchen, importBackup as importOpened, openBackup as openFile, type ExportOptions, type ExportResult, type ImportResult, type OpenedBackup } from './backupFile'
+import { toDay } from '../lib/dates'
+import { eatenGuess } from '../lib/meals'
 import { savePhoto, type PreparedImage } from './photos'
 import { byCriterionOrder, byPriority } from './queries'
 import { newId, nowIso, type BasketItem, type BasketSource, type Criterion, type Day, type Dish, type ID, type ISO, type Member, type Menu, type MenuCourse, type PantryItem, type PhotoSource, type ProofPhoto, type Reaction, type Review, type Score5, type Serving, type Slot } from './types'
@@ -194,6 +196,61 @@ export async function undoServed(id: ID, fallbackDay: Day): Promise<void> {
   await store.patch('servings', id, { status: 'planned', servedAt: null, plannedDate: serving.plannedDate ?? fallbackDay, plannedSlot: serving.plannedSlot ?? 'dinner' })
 }
 
+export interface LogInput {
+  /** A meal that is on its way already (a wish, a planned one). Without it a new meal is made from the dish or menu. */
+  servingId?: ID
+  dishId?: ID
+  menuId?: ID
+  /** When it came to the table. A moment that is still ahead counts as now. */
+  servedAt: ISO
+  slot: Slot
+  /** Who cooked. Defaults to the meal's own cook, and for a new meal to whoever logs it. */
+  cookedBy?: ID
+}
+
+/**
+ * A meal that was on the table without anybody saying so: log it for the moment it was
+ * served, today or on a day that is over. From there it is a served meal like any other
+ * and waits for the Taster's proof, on the day it belongs to. Whoever of the two noticed
+ * may log it. A cook can still be put right as long as no verdict has been started.
+ */
+export async function logMeal(input: LogInput): Promise<Serving> {
+  const { householdId, memberId } = await me()
+  const servedAt = new Date(Math.min(Date.parse(input.servedAt), Date.now())).toISOString()
+  const table = { status: 'served' as const, servedAt, plannedDate: toDay(servedAt), plannedSlot: input.slot, skippedReason: null }
+
+  if (input.servingId) {
+    const serving = await servingOrThrow(input.servingId)
+    // Only a meal that is still ahead can be logged: a served or eaten one has its day already.
+    if (serving.status !== 'wishlist' && serving.status !== 'planned') return serving
+    const cook = serving.cookedBy ?? serving.proposedBy
+    const swap = input.cookedBy !== undefined && input.cookedBy !== cook && (await reviewsOf(serving.id)).length === 0
+    const changes = { ...table, cookedBy: swap ? (input.cookedBy as ID) : (cook ?? memberId), ...(swap ? { craving: null } : {}) }
+    await store.patch('servings', serving.id, changes)
+    return { ...serving, ...changes }
+  }
+
+  if (!input.dishId && !input.menuId) throw new Error('Log a dish or a menu.')
+  const last = (await openServings()).at(-1)
+  const serving: Serving = {
+    ...fresh(householdId),
+    dishId: input.dishId ?? null,
+    menuId: input.menuId ?? null,
+    proposedBy: memberId,
+    cookedBy: input.cookedBy ?? memberId,
+    proposedAt: nowIso(),
+    note: null,
+    suggestedDays: [],
+    craving: null,
+    priority: keyBetween(last?.priority ?? null, null),
+    ...table,
+    eatenAt: null,
+    proofPhotos: [],
+  }
+  await store.put('servings', serving)
+  return serving
+}
+
 export async function updateServingNote(id: ID, note: string): Promise<void> {
   await store.patch('servings', id, { note: note.trim() || null })
 }
@@ -366,7 +423,9 @@ export async function reactToMeal(servingId: ID, reaction: Reaction): Promise<vo
 
 /**
  * Done: the meal counts as eaten. Needs at least one proof photo (for a menu: one of the
- * whole table), and a reaction or a rating for every dish. eatenAt defaults to when the first proof photo was taken.
+ * whole table), and a reaction or a rating for every dish. eatenAt defaults to when the
+ * first proof photo was taken, or to when the meal came to the table if that was on an
+ * earlier day (see eatenGuess).
  */
 export async function finishMeal(servingId: ID, eatenAt?: ISO): Promise<void> {
   const { memberId } = await me()
@@ -378,7 +437,7 @@ export async function finishMeal(servingId: ID, eatenAt?: ISO): Promise<void> {
     const review = await db.reviews.get(await reviewIdFor(servingId, dishId, memberId))
     if (!review || review.deletedAt || (review.reaction === null && review.overall === null)) throw new ActionError('reaction_missing')
   }
-  const at = eatenAt ?? [...serving.proofPhotos].sort((a, b) => a.takenAt.localeCompare(b.takenAt))[0].takenAt
+  const at = eatenAt ?? (eatenGuess(serving) as ISO)
   await store.patch('servings', servingId, { status: 'eaten', eatenAt: at, servedAt: serving.servedAt ?? at })
 }
 

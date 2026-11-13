@@ -11,7 +11,7 @@ import { diffDays, formatDay, today } from '../../lib/dates'
 import { Chip, cx, DishThumb, Field } from '../../ui/components'
 import { Heart } from '../../ui/deco/Deco'
 import { planningCopy } from './copy'
-import { daysBeyond, linkedDay, nextDays, SLOTS, STRIP_DAYS, tapDay } from './logic'
+import { daysBeyond, linkedDay, nextDays, pastDay, pastDays, SLOTS, STRIP_DAYS, tapDay } from './logic'
 
 // ----------------------------------------------------------------- kitchen --
 
@@ -310,6 +310,47 @@ export function DayChoice({ label, laterLabel, today: todayDay, chosen, onChange
           else if (!event.target.value) onChange([])
         }}
       />
+    </div>
+  )
+}
+
+interface PastDayChoiceProps {
+  label: string
+  /** The words that bring out the date field, and its label: for any day before the ones to tap. */
+  earlierLabel: string
+  today: Day
+  chosen: Day
+  onChange: (day: Day) => void
+}
+
+/**
+ * Today or any day before it: two weeks to tap, the newest first, and a date field for
+ * every day before them. The field stays put away until somebody asks for it.
+ */
+export function PastDayChoice({ label, earlierLabel, today: todayDay, chosen, onChange }: PastDayChoiceProps) {
+  const strip = pastDays(todayDay, STRIP_DAYS)
+  const [asked, setAsked] = useState(false)
+  const earlier = !strip.includes(chosen)
+  return (
+    <div>
+      <DayStrip label={label} days={strip} selected={[chosen]} today={todayDay} onToggle={onChange} />
+      {asked || earlier ? (
+        <Field
+          className="mt-2"
+          type="date"
+          label={earlierLabel}
+          max={todayDay}
+          value={earlier ? chosen : ''}
+          onChange={(event) => {
+            const picked = pastDay(event.target.value, todayDay)
+            if (picked) onChange(picked)
+          }}
+        />
+      ) : (
+        <TextAction aria-expanded={false} onClick={() => setAsked(true)}>
+          {earlierLabel}
+        </TextAction>
+      )}
     </div>
   )
 }

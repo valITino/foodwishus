@@ -6,7 +6,8 @@ import { matchPath, type Route } from '../../app/router'
 import { PhotoWallScreen } from './PhotoWall'
 import { ReviewFlowScreen } from './ReviewFlow'
 
-export { EarlyProof, MealReview, ProofCard } from './MealReview'
+export { MealReview, ProofCard } from './MealReview'
+export { EarlyProof, usePlate } from './PhotoFirst'
 export { EatenToday, PhotoWallCard } from './TodayParts'
 
 /** True for the addresses this feature answers: the flow and the photo wall. */

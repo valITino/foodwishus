@@ -3,8 +3,8 @@
 // in wishlist order, the way useServings() returns them.
 
 import { currentStreak, eatenDay } from '../../lib/stats'
-import type { Course, Day, ID, Member, Serving, Slot } from '../../data/types'
-import { addDays, toDay, weekOf, zurichHour } from '../../lib/dates'
+import type { Course, Day, ID, ISO, Member, Serving, Slot } from '../../data/types'
+import { addDays, toDay, weekOf, zurichHour, zurichMoment } from '../../lib/dates'
 import { normalize } from '../recipes/logic'
 
 export const SLOTS: readonly Slot[] = ['breakfast', 'lunch', 'dinner', 'dessert']
@@ -265,13 +265,87 @@ export function mealChoices<D extends { id: ID; name: string; archived: boolean 
   const open = [...wishesForDay(servings, target.day), ...elsewhere]
   const here = servings.filter((s) => s.status === 'planned' && s.plannedDate === target.day && s.plannedSlot === target.slot)
   const wishes = servings.filter((s) => s.status === 'wishlist')
-  const taken = new Set([...wishes, ...here].flatMap((s) => [s.dishId, s.menuId]))
+  return { open, ...bookWithout(dishes, menus, [...wishes, ...here]) }
+}
+
+type Listed = { id: ID; name: string; archived: boolean }
+
+/** The recipe book by name: no archived recipes, no empty menus, and nothing that is offered as a meal already. */
+function bookWithout<D extends Listed, M extends Listed & { courses: unknown[] }>(dishes: D[], menus: M[], offered: Serving[]): { dishes: D[]; menus: M[] } {
+  const taken = new Set(offered.flatMap((s) => [s.dishId, s.menuId]))
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
   return {
-    open,
     dishes: dishes.filter((dish) => !dish.archived && !taken.has(dish.id)).sort(byName),
     menus: menus.filter((menu) => !menu.archived && menu.courses.length > 0 && !taken.has(menu.id)).sort(byName),
   }
+}
+
+// ----------------------------------------------------------------- logging --
+
+/** The usual time of each meal, in minutes after midnight: where a meal that is logged afterwards lands on its day. */
+export const SLOT_MINUTES: Record<Slot, number> = { breakfast: 8 * 60, lunch: 12 * 60 + 30, dessert: 16 * 60, dinner: 19 * 60 }
+
+/**
+ * When a meal that is logged afterwards came to the table: the usual time of that meal
+ * on that day, and never later than now (today's dinner, logged at noon, is on the table now).
+ */
+export function tableMoment(day: Day, slot: Slot, now: number = Date.now()): ISO {
+  return new Date(Math.min(zurichMoment(day, SLOT_MINUTES[slot]).getTime(), now)).toISOString()
+}
+
+/** Today and the days before it, the newest first. */
+export function pastDays(from: Day, count: number): Day[] {
+  return Array.from({ length: count }, (_, i) => addDays(from, -i))
+}
+
+/** The meal that was most likely forgotten: the last main meal for today, dinner for a day that is over. */
+export function slotToLog(day: Day, todayDay: Day, hour: number): Slot {
+  if (day !== todayDay) return 'dinner'
+  if (hour < 11) return 'breakfast'
+  return hour < 17 ? 'lunch' : 'dinner'
+}
+
+/** The day a meal has been waiting on the table since, when that day is over. Null for today's meals and for anything not served. */
+export function waitsSince(serving: Pick<Serving, 'status' | 'servedAt'>, todayDay: Day): Day | null {
+  if (serving.status !== 'served' || !serving.servedAt) return null
+  const day = toDay(serving.servedAt)
+  return day < todayDay ? day : null
+}
+
+/** A planned meal whose day is over: maybe it slipped, maybe it was eaten and nobody said so. */
+export function slippedDay(serving: Pick<Serving, 'status' | 'plannedDate'>, todayDay: Day): Day | null {
+  return serving.status === 'planned' && serving.plannedDate !== null && serving.plannedDate < todayDay ? serving.plannedDate : null
+}
+
+/**
+ * What can be logged for a day. First the meals that were planned for that very day, then
+ * the wishes (those hoped for on that day on top), then what is planned for another day.
+ * The recipe book follows, without what is offered above as that day's meal or as a wish.
+ */
+export function logChoices<D extends Listed, M extends Listed & { courses: unknown[] }>(servings: Serving[], dishes: D[], menus: M[], day: Day): MealChoices<D, M> {
+  const thatDay = servings.filter((s) => s.status === 'planned' && s.plannedDate === day).sort(byWhen)
+  const elsewhere = servings.filter((s) => s.status === 'planned' && s.plannedDate !== day).sort(byWhen)
+  const wishes = wishesForDay(servings, day)
+  return { open: [...thatDay, ...wishes, ...elsewhere], ...bookWithout(dishes, menus, [...thatDay, ...wishes]) }
+}
+
+/**
+ * What may be on the plate in front of somebody who eats right now: what is on the table
+ * first (the latest first: that is the plate), then today's meals, then the rest of the
+ * calendar, then the wishes. Only meals this person eats: what they cook themselves is
+ * not theirs to judge. The recipe book follows, without what is offered above.
+ */
+export function plateChoices<D extends Listed, M extends Listed & { courses: unknown[] }>(
+  servings: Serving[],
+  dishes: D[],
+  menus: M[],
+  eater: { id: ID; alone: boolean },
+  todayDay: Day,
+): MealChoices<D, M> {
+  const mine = servings.filter((s) => eater.alone || cookOf(s) !== eater.id)
+  const planned = mine.filter((s) => s.status === 'planned').sort(byWhen)
+  const open = [...onTheTable(mine).reverse(), ...planned.filter((s) => s.plannedDate === todayDay), ...planned.filter((s) => s.plannedDate !== todayDay), ...mine.filter((s) => s.status === 'wishlist')]
+  return { open, ...bookWithout(dishes, menus, open) }
 }
 
 /** True when every word of the search appears in the name. An empty search finds everything. */
@@ -353,12 +427,23 @@ export function wishesForDay(servings: Serving[], day: Day): Serving[] {
   return [...suggestedFor(servings, day), ...others]
 }
 
-/** A day from a link ("2026-11-12"), if it is a real date that is not over yet. */
-export function linkedDay(value: string | null | undefined, todayDay: Day): Day | null {
+/** "2026-11-12", if that is a real date. */
+function realDay(value: string | null | undefined): Day | null {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
   const date = new Date(`${value}T12:00:00Z`)
-  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return null
-  return value >= todayDay ? value : null
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : value
+}
+
+/** A day from a link ("2026-11-12"), if it is a real date that is not over yet. */
+export function linkedDay(value: string | null | undefined, todayDay: Day): Day | null {
+  const day = realDay(value)
+  return day !== null && day >= todayDay ? day : null
+}
+
+/** A day from a date field, if it is a real date that is not still ahead: today or before. */
+export function pastDay(value: string | null | undefined, todayDay: Day): Day | null {
+  const day = realDay(value)
+  return day !== null && day <= todayDay ? day : null
 }
 
 /** The first day of the month before or after the month of the given day. */
