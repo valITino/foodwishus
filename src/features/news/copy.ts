@@ -8,6 +8,13 @@ const en = {
   fresh: 'New',
   emptyTitle: 'Nothing new',
   emptyBody: 'When the other one proposes, plans, serves or answers, it shows up here.',
+  // Tidying the list: pick lines, or all of them, and delete them from this phone.
+  select: 'Select',
+  selectAll: 'Select all',
+  selectNone: 'Select none',
+  picked: (n: number) => (n === 0 ? 'Tap the lines that can go.' : n === 1 ? '1 line selected' : `${n} lines selected`),
+  remove: (n: number) => (n <= 1 ? 'Delete' : `Delete ${n}`),
+  removed: 'Deleted',
   /** "Today, 18:40" */
   at: (day: string, time: string) => `${day}, ${time}`,
   lines: {
@@ -59,6 +66,12 @@ const de: NewsCopy = {
   fresh: 'Neu',
   emptyTitle: 'Nichts Neues',
   emptyBody: 'Wenn die andere Person etwas vorschlägt, plant, serviert oder antwortet, steht es hier.',
+  select: 'Auswählen',
+  selectAll: 'Alle auswählen',
+  selectNone: 'Keine auswählen',
+  picked: (n) => (n === 0 ? 'Tippe auf die Zeilen, die weg können.' : n === 1 ? '1 Zeile ausgewählt' : `${n} Zeilen ausgewählt`),
+  remove: (n) => (n <= 1 ? 'Löschen' : `${n} löschen`),
+  removed: 'Gelöscht',
   at: (day, time) => `${day}, ${time}`,
   lines: {
     proposedForCook: (who, dish) => `${who} wünscht sich ${dish}.`,

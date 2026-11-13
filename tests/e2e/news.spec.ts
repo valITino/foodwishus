@@ -136,6 +136,72 @@ test('the demo kitchen has a few lines to show what the bell is for', async ({ p
   await expect(bell(page)).toHaveAccessibleName('Kitchen news')
 })
 
+test('tidying the list: tick lines one by one or all at once, and delete them', async ({ page }) => {
+  await useDemo(page)
+  await page.goto('/#/news')
+  await expect(lines(page)).toHaveCount(5)
+  const header = page.locator('header')
+  const picked = page.getByTestId('news-picked')
+  const boxes = page.getByTestId('news').getByRole('checkbox')
+
+  await test.step('"Select" turns the lines into things to tick, and nothing is deleted by itself', async () => {
+    await header.getByRole('button', { name: 'Select' }).click()
+    await expect(picked).toHaveText('Tap the lines that can go.')
+    await expect(boxes).toHaveCount(5)
+    await expect(page.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled()
+    // A tap ticks, it does not open the meal.
+    await boxes.nth(0).click()
+    await expect(boxes.nth(0)).toBeChecked()
+    await expect(page).toHaveURL(/#\/news$/)
+    await expect(picked).toHaveText('1 line selected')
+    await boxes.nth(2).click()
+    await expect(picked).toHaveText('2 lines selected')
+    // Changed her mind about one: a second tap takes the tick away.
+    await boxes.nth(2).click()
+    await expect(boxes.nth(2)).not.toBeChecked()
+    await boxes.nth(3).click()
+    await expect(picked).toHaveText('2 lines selected')
+  })
+
+  await test.step('"Done" leaves without deleting', async () => {
+    await header.getByRole('button', { name: 'Done' }).click()
+    await expect(boxes).toHaveCount(0)
+    await expect(lines(page)).toHaveCount(5)
+  })
+
+  await test.step('the ticked lines go, the others stay', async () => {
+    const second = await lines(page).nth(1).innerText()
+    await header.getByRole('button', { name: 'Select' }).click()
+    // Nothing is ticked from the last time.
+    await expect(picked).toHaveText('Tap the lines that can go.')
+    await boxes.nth(0).click()
+    await boxes.nth(3).click()
+    await page.getByRole('button', { name: 'Delete 2' }).click()
+    await expect(page.getByText('Deleted', { exact: true }).last()).toBeVisible()
+    await expect(lines(page)).toHaveCount(3)
+    await expect(boxes).toHaveCount(0)
+    expect(await lines(page).nth(0).innerText()).toBe(second)
+    // They stay gone.
+    await page.reload()
+    await expect(lines(page)).toHaveCount(3)
+  })
+
+  await test.step('"Select all" ticks everything, "Select none" unticks it, and an empty list says so', async () => {
+    await header.getByRole('button', { name: 'Select' }).click()
+    await page.getByRole('button', { name: 'Select all' }).click()
+    await expect(picked).toHaveText('3 lines selected')
+    for (const box of await boxes.all()) await expect(box).toBeChecked()
+    await page.getByRole('button', { name: 'Select none' }).click()
+    await expect(picked).toHaveText('Tap the lines that can go.')
+    await page.getByRole('button', { name: 'Select all' }).click()
+    await page.getByRole('button', { name: 'Delete 3' }).click()
+    await expect(page.getByText('Nothing new')).toBeVisible()
+    await expect(header.getByRole('button', { name: 'Select' })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Back' }).click()
+    await expect(bell(page)).toHaveAccessibleName('Kitchen news')
+  })
+})
+
 test('an empty bell says what will show up, and reads in German', async ({ page }) => {
   await useDemo(page, { empty: true, lang: 'de' })
   await page.goto('/#/')
@@ -154,4 +220,13 @@ test('an empty bell says what will show up, and reads in German', async ({ page 
     await app.db.news.add({ kind: 'planned', at: new Date().toISOString(), actorId: mia?.id ?? null, servingId: serving.id, dishId: dish.id, facts: { day, slot: 'dinner' }, seenAt: null })
   }, today())
   await expect(page.getByTestId('news-line')).toHaveText(/Mia hat Rösti für heute, Abendessen eingeplant\.\s*Neu/)
+
+  // Tidying reads in German too.
+  await page.locator('header').getByRole('button', { name: 'Auswählen' }).click()
+  await expect(page.getByTestId('news-picked')).toHaveText('Tippe auf die Zeilen, die weg können.')
+  await page.getByRole('button', { name: 'Alle auswählen' }).click()
+  await expect(page.getByTestId('news-picked')).toHaveText('1 Zeile ausgewählt')
+  await page.getByRole('button', { name: 'Löschen', exact: true }).click()
+  await expect(page.getByText('Gelöscht', { exact: true }).last()).toBeVisible()
+  await expect(page.getByText('Nichts Neues')).toBeVisible()
 })
