@@ -198,6 +198,16 @@ import 'https://raw.githubusercontent.com/valITino/foodwishus/<commit>/supabase/
 To ship a change to the function: commit and push it, then deploy the loader again with the
 new commit in the address. Pasting the single file from `npm run build:push` works too.
 
+| Deployed (Zurich time) | Commit | What changed |
+| --- | --- | --- |
+| 10 Nov 2026 | `fbef5d0` | switched on |
+| 13 Nov 2026, 10:03 | `85f76da` | "Served" is no longer sent to the meal's own cook |
+
+Each deploy was made after the owner's go-ahead, and the files GitHub serves at that commit
+were compared, byte for byte, with the tested ones. The second one changes `logic.ts` only.
+It has not been called yet at the time of this note: the last message before it went out
+at 07:20 that morning, from the version before, and was answered with 200.
+
 ## What is in this folder
 
 | File | What it does |
