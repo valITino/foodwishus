@@ -16,7 +16,7 @@ import { BasketButton } from '../basket'
 import { Bell } from '../news'
 import { EarlyProof, EatenToday, PhotoWallCard, usePlate } from '../review'
 import { planningCopy } from './copy'
-import { cookOf, currentStreak, dayPart, eatenDay, eatenInWeek, isOpen, onTheTable, plannedFor, roleIn, upNext, waitsSince } from './logic'
+import { cookOf, currentStreak, dayPart, eatenDay, eatenInWeek, isOpen, plannedFor, roleIn, upNext, waitingForProof, waitsSince } from './logic'
 import { TodayPicker } from './MealPicker'
 import { MealThumb, nameOf, NoteBox, TextAction, useKitchen, useMealInfo, useWhen, type Kitchen } from './shared'
 
@@ -177,7 +177,7 @@ export function TodayScreen() {
   if (!kitchen) return <Screen tabs>{null}</Screen>
 
   const { servings, today, me, partner, meId } = kitchen
-  const served = onTheTable(servings)
+  const served = waitingForProof(servings, today)
   const planned = plannedFor(servings, today)
   const eaten = servings.filter((s) => eatenDay(s) === today)
   const queue = upNext(servings, today)

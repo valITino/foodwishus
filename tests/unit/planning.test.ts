@@ -42,6 +42,7 @@ import {
   tapDay,
   upcomingDays,
   upNext,
+  waitingForProof,
   waitsSince,
   wishesForDay,
   wishlistCards,
@@ -526,6 +527,20 @@ describe('a meal that is logged afterwards', () => {
     expect(waitsSince(planned('fondue', YESTERDAY), TODAY)).toBeNull()
     expect(waitsSince(eaten('pizza', YESTERDAY), TODAY)).toBeNull()
     expect(waitsSince(wish('odd', { status: 'served' }), TODAY)).toBeNull()
+  })
+
+  it('shows what came to the table today before what has waited since a day that is over', () => {
+    const servings = [
+      served('since sunday', '2026-11-08', '19:00'),
+      served('since yesterday', YESTERDAY, '19:00'),
+      served('lunch', TODAY, '12:30'),
+      served('breakfast', TODAY, '08:00'),
+      planned('tonight', TODAY),
+      eaten('done', TODAY),
+    ]
+    // The plate in front of them first, and with it the main button.
+    expect(names(waitingForProof(servings, TODAY))).toEqual(['breakfast', 'lunch', 'since sunday', 'since yesterday'])
+    expect(names(onTheTable(servings))).toEqual(['since sunday', 'since yesterday', 'breakfast', 'lunch'])
   })
 
   it('knows a planned meal whose day is over', () => {

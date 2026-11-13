@@ -290,6 +290,13 @@ test.describe('log a meal', () => {
     expect(Date.parse(moved.servedAt)).toBeGreaterThanOrEqual(Math.min(before, zurichMoment(today(), '16:00:00').getTime()))
     await expect(status(page)).toHaveText('On the table. Your proof is needed.')
     expect(await servings(page)).toHaveLength(2)
+
+    // On Today the plate in front of him comes first; what has waited since yesterday follows.
+    await page.goto('/#/')
+    await expect(page.getByTestId('served-card')).toHaveCount(2)
+    await expect(page.getByTestId('served-card').first()).toContainText('Pizza is on the table. Proof, please.')
+    await expect(page.getByTestId('served-card').last()).toContainText('The proof is still missing')
+    await expect(page.getByTestId('served-card').last()).toContainText('Rösti waits for a photo and your verdict.')
   })
 
   test('a day that is over takes a forgotten meal in Our Week, and in the month', async ({ page }) => {

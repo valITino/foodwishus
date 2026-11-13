@@ -312,6 +312,16 @@ export function waitsSince(serving: Pick<Serving, 'status' | 'servedAt'>, todayD
   return day < todayDay ? day : null
 }
 
+/**
+ * Today's cards for the meals that wait for their proof. What came to the table today is
+ * the plate in front of them and goes first; what has been waiting since a day that is
+ * over follows. Within each, the longest wait first.
+ */
+export function waitingForProof(servings: Serving[], todayDay: Day): Serving[] {
+  const table = onTheTable(servings)
+  return [...table.filter((s) => waitsSince(s, todayDay) === null), ...table.filter((s) => waitsSince(s, todayDay) !== null)]
+}
+
 /** A planned meal whose day is over: maybe it slipped, maybe it was eaten and nobody said so. */
 export function slippedDay(serving: Pick<Serving, 'status' | 'plannedDate'>, todayDay: Day): Day | null {
   return serving.status === 'planned' && serving.plannedDate !== null && serving.plannedDate < todayDay ? serving.plannedDate : null
